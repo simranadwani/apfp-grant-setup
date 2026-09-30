@@ -1,5 +1,5 @@
 'use strict';
-// A button click must only process the selected row; other queued rows (earlier failures keep their Action) stay untouched.
+// Every row with a pending Action runs when a workspace button is clicked; the message lists which rows were picked up.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadProject } = require('./harness');
@@ -22,21 +22,14 @@ function setup() {
   return { p, alerts, processed };
 }
 
-test('a button click for row 9 does not also run queued row 10', () => {
-  const { p, alerts, processed } = setup();
-  p.get('processRequestedActions')({ rowNumber: 9 });
-  assert.deepEqual(processed, [9]);
-  assert.match(alerts[0], /2 other row\(s\) still have a pending Action and were not touched/);
-});
-
-test('without a row filter every queued row runs (run-all behaviour is kept)', () => {
+test('all rows with a pending Action run, not only the clicked one', () => {
   const { p, processed } = setup();
   p.get('processRequestedActions')();
   assert.deepEqual(processed, [9, 10, 12]);
 });
 
-test('a trigger-style event object is not mistaken for a row filter', () => {
-  const { p, processed } = setup();
-  p.get('processRequestedActions')({ authMode: 'FULL' });
-  assert.deepEqual(processed, [9, 10, 12]);
+test('the end-of-run message lists the rows that were picked up', () => {
+  const { p, alerts } = setup();
+  p.get('processRequestedActions')();
+  assert.match(alerts[0], /Rows picked up: 9, 10, 12\./);
 });

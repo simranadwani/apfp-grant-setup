@@ -14,7 +14,7 @@ function showToast_(message) {
 function runWorkspaceAction_(action) {
   const selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW);
   selected.sheet.getRange(selected.rowNumber, APFP.INTAKE.ACTION_COLUMN).setValue(action);
-  processRequestedActions({ rowNumber: selected.rowNumber });
+  processRequestedActions();
 }
 function uiCreateWorkspace() { runWorkspaceAction_('Create Workspace'); }
 function uiRetryOrReshareWorkspace() {
@@ -25,7 +25,7 @@ function uiRetryOrReshareWorkspace() {
     ? 'Retry Sharing' : 'Retry Workspace';
   if (action === 'Retry Workspace') {
     selected.sheet.getRange(selected.rowNumber, APFP.INTAKE.ACTION_COLUMN).setValue(action);
-    processRequestedActions({ rowNumber: selected.rowNumber });
+    processRequestedActions();
     return;
   }
   const requestId = clean_(row['Request ID']), grantId = clean_(row['Grant ID']);

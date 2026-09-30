@@ -79,13 +79,9 @@ function refreshDuplicateFlagsForRows_(rowNumbers) {
    setByHeaders_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, rowNumber, { 'Duplicate?': next });
  });
 }
-// Runs every row that has a pending Action, or only options.rowNumber when a button was clicked for one row
-// (other queued rows, for example earlier failures that kept their Action, are then left untouched).
-function processRequestedActions(options) {
- const onlyRow = options && Number(options.rowNumber) || 0;
- const config = runtimeGuard_(), queued = intakeRowsWithActions_(),
-   rows = onlyRow ? queued.filter(row => row.rowNumber === onlyRow) : queued,
-   otherQueued = queued.length - rows.length;
+// Runs every row that has a pending Action (Create Workspace / Retry Workspace / Retry Sharing), whichever row was clicked.
+function processRequestedActions() {
+ const config = runtimeGuard_(), rows = intakeRowsWithActions_();
  if (!rows.length) {
    SpreadsheetApp.getUi().alert('No workspaces are waiting to be created or retried.');
    return;
@@ -131,7 +127,7 @@ function processRequestedActions(options) {
  } finally {
    lock.releaseLock();
  }
- const note = (otherQueued ? ` ${otherQueued} other row(s) still have a pending Action and were not touched; select each row and click its button, or clear their Action.` : '') + (stoppedForRuntime
+ const note = ` Rows picked up: ${batch.slice(0, processed).map(row => row.rowNumber).join(', ')}.` + (stoppedForRuntime
    ? ' The run stopped safely before the Apps Script time limit; remaining rows were left untouched. Run the workspace action again to continue.' : '');
  recordAutomationStatus_('Workspace Creation', needsAttention || stoppedForRuntime ? 'Needs attention' : 'Success',
    `${processed} processed; ${success} completed; ${needsAttention} need attention${stoppedForRuntime ? '; safely paused' : ''}`);

@@ -4,15 +4,14 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
-## Fix — a button click ran other queued rows too
+## Change — workspace buttons run every queued row; message lists the rows
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**
 
-- **Files:** `IntakeValidation.js` (`processRequestedActions(options)`), `UiActions.js` (`runWorkspaceAction_`, `uiRetryOrReshareWorkspace`), `tests/actions.test.js`.
-- **Why:** the Create Workspace / Retry Workspace buttons set the Action of the selected row and then processed *every* row with a pending Action. A row that had failed earlier
-  keeps its Action, so it was run again together with the row being fixed (seen on TEST: row 9 and row 10).
-- **Now:** the buttons process only the selected row. Other queued rows are left alone and the end-of-run message says how many are still pending. Calling
-  `processRequestedActions()` with no argument still runs all queued rows.
+- **Files:** `IntakeValidation.js` (`processRequestedActions`), `UiActions.js`, `tests/actions.test.js`.
+- **Decision (owner):** every row whose Action says Create Workspace / Retry Workspace / Retry Sharing must run when a workspace button is clicked. A short-lived
+  "selected row only" change was reverted for that reason.
+- **Added:** the end-of-run message now ends with `Rows picked up: 9, 10, …`, so an operator can see exactly which rows ran (a failed row keeps its Action and runs again on the next click).
 
 ## Phase 3b — Data safety: growing tables, stable Outcome IDs, backup, protection editors, failure reasons
 
