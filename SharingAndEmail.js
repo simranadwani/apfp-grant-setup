@@ -1,12 +1,12 @@
 // SharingAndEmail.gs — access control, archive access, and workspace email.
 function ensureWorkspaceSharingSafe_(...args) { return timed_('Share folder', () => ensureWorkspaceSharingSafeUntimed_(...args)); }
 function ensureWorkspaceSharingSafeUntimed_(requestId, workspaceFolderId, email, config) {
- const permissionSnapshot = permissionForUser_(workspaceFolderId, email);
- assertWorkspaceFilesSafeToShare_(requestId, config);
+ const permissionSnapshot = timed_('Share: read current access', () => permissionForUser_(workspaceFolderId, email));
+ timed_('Share: check files before sharing', () => assertWorkspaceFilesSafeToShare_(requestId, config));
  try {
-   ensureUserRole_(workspaceFolderId, email, 'writer', config);
-   removeWorkspaceGranteeProtectionAccess_(requestId, config, email);
-   assertWorkspaceFilesSafeToShare_(requestId, config, email);
+   timed_('Share: grant folder access', () => ensureUserRole_(workspaceFolderId, email, 'writer', config));
+   timed_('Share: remove grantee from protections', () => removeWorkspaceGranteeProtectionAccess_(requestId, config, email));
+   timed_('Share: check files after sharing', () => assertWorkspaceFilesSafeToShare_(requestId, config, email));
    return true;
  } catch (error) {
    try {

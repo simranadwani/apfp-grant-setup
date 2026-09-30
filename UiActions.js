@@ -17,7 +17,9 @@ function runWorkspaceAction_(action) {
   selected.sheet.getRange(selected.rowNumber, APFP.INTAKE.ACTION_COLUMN).setValue(action);
   processRequestedActions();
 }
-function uiCreateWorkspace() { runWorkspaceAction_('Create Workspace'); }
+// Runs every row whose Action a person has already set. This button never writes an Action into the selected row:
+// only Retry / Reshare (which acts on the row you explicitly select) marks a row itself.
+function uiCreateWorkspace() { processRequestedActions(); }
 function uiRetryOrReshareWorkspace() {
   const selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW);
   const row = rowObject_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, selected.rowNumber);

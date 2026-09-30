@@ -4,6 +4,19 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Fix + speed step 2 — Create Workspace button no longer marks the selected row; faster Setup workbook check
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**
+
+- **Bug fixed** (`UiActions.js`): the Create Workspace button used to write "Create Workspace" into whichever row was selected and then run every queued row, so pressing Enter after typing
+  the Action in row 11 (cursor now on row 12) and clicking the button ran rows 11 **and** 12. `uiCreateWorkspace` now only runs rows whose Action a person already set and never writes into the selection.
+  Retry / Reshare still act on the row you explicitly select (they choose the action from that row's status).
+- **Faster** (`TemplatePrefill.js`): from the measured run, "Configure Setup workbook" took 46.9 s. The final check read every Field Config range with its own call and re-verified links and protections that
+  had just been verified. It now reads all ranges in one Sheets call and does not repeat the verification (`finaliseSetupWorkbookIntegrity_` already ran it with nothing written since). The
+  invisible-placeholder check is unchanged.
+- **Finer timers** (`TemplatePrefill.js`, `SharingAndEmail.js`, `ProtectionIntegrity.js`) so the next run shows what is slow inside "Share folder" and the two workbook steps.
+- Tests: `tests/prefill.test.js` (one call, placeholder still caught, missing sheet still fails), button test in `tests/actions.test.js`. 79 tests pass.
+
 ## Speed step 1 — measure where the time goes (no behaviour change)
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes (reporting only) · **TEST only**

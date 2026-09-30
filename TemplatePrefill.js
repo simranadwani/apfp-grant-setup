@@ -39,12 +39,13 @@ function configureGeneratedWorkbookUntimed_(setupSpreadsheet, request, organisat
     }
   });
 
-  writeGeneratedLinks_(setupSpreadsheet, links);
-  prefillGeneratedWorkbook_(setupSpreadsheet, request, organisationRecord, fieldConfig);
-  SpreadsheetApp.flush();
-
-  finaliseSetupWorkbookIntegrity_(setupSpreadsheet, fieldConfig);
-  verifyConfiguredWorkbook_(setupSpreadsheet, fieldConfig);
+  timed_('Setup: write links and prefill', () => {
+    writeGeneratedLinks_(setupSpreadsheet, links);
+    prefillGeneratedWorkbook_(setupSpreadsheet, request, organisationRecord, fieldConfig);
+    SpreadsheetApp.flush();
+  });
+  timed_('Setup: protect and verify', () => finaliseSetupWorkbookIntegrity_(setupSpreadsheet, fieldConfig));
+  timed_('Setup: placeholder check', () => verifyConfiguredWorkbook_(setupSpreadsheet, fieldConfig));
 }
 
 function prefillGeneratedWorkbook_(spreadsheet, request, organisationRecord, fieldConfig) {
@@ -213,6 +214,9 @@ function writeGeneratedLinks_(spreadsheet, links) {
    });
  target.setValues(values);
 }
+// Structure, links and protections were just verified by finaliseSetupWorkbookIntegrity_ (nothing has been written since),
+// so this only checks that the sheets exist and that no invisible placeholder is left in a configured value range.
+// One Sheets API call reads every range (it used to be one call per Field Config row).
 function verifyConfiguredWorkbook_(spreadsheet, fieldConfig) {
  APFP.GENERATED_VISIBLE_SHEETS.forEach(
    name => {
@@ -220,21 +224,25 @@ function verifyConfiguredWorkbook_(spreadsheet, fieldConfig) {
        throw new Error(`Generated workbook sheet missing after configuration: ${name}`);
    }
  );
- fieldConfig.forEach(
-   row => {
-     const sheet = spreadsheet.getSheetByName(clean_(row['Sheet Name']));
-     if (!sheet)
-       throw new Error(`Field Config references missing generated sheet: ${row['Sheet Name']}`);
-     sheet.getRange(configValueRange_(row)).getDisplayValues().flat().forEach(
-       v => {
-         if (String(v).indexOf('\u00A0') >= 0)
-           throw new Error(`Invisible placeholder remained in ${row['Field Code']}.`);
-       }
-     );
-   }
- );
- verifyGeneratedLinks_(spreadsheet);
- verifyTemplateProtections_(spreadsheet, fieldConfig);
+ const checked = [];
+ fieldConfig.forEach(row => {
+   const sheetName = clean_(row['Sheet Name']);
+   if (!spreadsheet.getSheetByName(sheetName))
+     throw new Error(`Field Config references missing generated sheet: ${row['Sheet Name']}`);
+   const a1 = configValueRange_(row);
+   if (a1) checked.push({ row, range: quotedSheetA1_(sheetName, a1) });
+ });
+ if (!checked.length) return;
+ requireAdvancedSheetsService_();
+ const result = Sheets.Spreadsheets.Values.batchGet(spreadsheet.getId(), {
+   ranges: checked.map(item => item.range), valueRenderOption: 'FORMATTED_VALUE'
+ });
+ (result.valueRanges || []).forEach((valueRange, i) => {
+   [].concat(...(valueRange.values || [])).forEach(v => {
+     if (String(v).indexOf('\u00A0') >= 0)
+       throw new Error(`Invisible placeholder remained in ${checked[i].row['Field Code']}.`);
+   });
+ });
 }
 function verifyResourceLinks_(sheet, requiredResources, optionalResources) {
  const schema = APFP.PREFLIGHT_SCHEMA.LINKS,

@@ -33,3 +33,13 @@ test('the end-of-run message lists the rows that were picked up', () => {
   p.get('processRequestedActions')();
   assert.match(alerts[0], /Rows picked up: 9, 10, 12\./);
 });
+
+test('Create Workspace button never writes an Action into the selected row (only pre-marked rows run)', () => {
+  const { p, processed } = setup();
+  const writes = [];
+  p.override('selectedDataRow_', () => { throw new Error('the button must not depend on the selection'); });
+  p.override('sheet_', () => ({ getRange: () => ({ setValue: v => writes.push(v) }) }));
+  p.get('uiCreateWorkspace')();
+  assert.deepEqual(writes, []);
+  assert.deepEqual(processed, [9, 10, 12]);
+});

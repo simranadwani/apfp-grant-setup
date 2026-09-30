@@ -328,10 +328,12 @@ function finaliseSetupWorkbookIntegrity_(spreadsheet, fieldConfig) {
 function finaliseOutcomeWorkbookIntegrity_(spreadsheet) {
   removeGeneratedAdminSheet_(spreadsheet, APFP.OUTCOME_TEMPLATE_SHEETS.FIELD_CONFIG);
   ensureSpreadsheetTimeZone_(spreadsheet);
-  applyOutcomeWorkbookProtections_(spreadsheet);
+  timed_('Outcome: apply protections', () => applyOutcomeWorkbookProtections_(spreadsheet));
   SpreadsheetApp.flush();
-  verifyOutcomeWorkbookLinks_(spreadsheet);
-  verifyOutcomeWorkbookProtections_(spreadsheet);
+  timed_('Outcome: verify links and protections', () => {
+    verifyOutcomeWorkbookLinks_(spreadsheet);
+    verifyOutcomeWorkbookProtections_(spreadsheet);
+  });
   verifySpreadsheetTimeZone_(spreadsheet, 'Generated Outcome Progress workbook');
   return true;
 }
