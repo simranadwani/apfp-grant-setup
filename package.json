@@ -1,0 +1,8 @@
+{
+  "name": "apfp-grant-setup",
+  "private": true,
+  "description": "Local test harness for the APFP Apps Script project. Not pushed to Apps Script (see .claspignore).",
+  "scripts": {
+    "test": "node --test"
+  }
+}
