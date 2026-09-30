@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round O — organisations never share a folder
+
+`Utilities.js` `organisationFolderFor_`, used by `WorkspaceCreation.js`: when no folder URL is saved yet and the plain-named organisation folder already belongs to a different organisation (its URL is on another organisation's Technical Registry row), the new organisation gets its own folder named `<name> (<Organisation ID>)`; a retry finds that folder again. Folders created by hand or by an aborted run of the same request are still reused. One grant per organisation per financial year (all types) is kept as decided. `CODE_VERSION` → round O. Tests: `tests/org-folders.test.js` (137 pass).
+
 ## Round N — visible code version
 
 `Config.js` `APFP.CODE_VERSION`, shown as the first line of the preflight result and at the end of every workspace run summary, so the deployed code can be identified at a glance (bump it every round). `docs/PRODUCTION_ROLLOUT.md`: update with `git fetch` + `git reset --hard` (never `clasp pull` first).

@@ -454,6 +454,22 @@ function getOrCreateUniqueChildFolder_(parentFolder, name) {
  DRIVE_FOLDER_CACHE_[cacheKey] = folder;
  return folder;
 }
+// Organisation folders are found by name when no URL is saved yet. Two different organisations whose names reduce to the
+// same folder name must never share a folder: if the plain-named folder already belongs to another organisation
+// (its URL is recorded on another organisation's Technical Registry row), this one gets "<name> (<Organisation ID>)".
+function organisationFolderFor_(fyFolder, savedUrl, baseName, organisationId) {
+ if (clean_(savedUrl)) return folderFromSavedOrCreate_(fyFolder, savedUrl, baseName);
+ const matches = findExactChildFolders_(fyFolder, baseName);
+ if (matches.length) {
+   const takenByAnother = matches.every(folder => technicalRegistryRows_().some(item => {
+     const recorded = clean_(item.record['Organisation Folder URL'] || item.record['Grant Workspace URL']);
+     if (!recorded || key_(item.record['Organisation ID']) === key_(organisationId)) return false;
+     try { return urlId_(recorded) === folder.getId(); } catch (error) { return false; }
+   }));
+   if (takenByAnother && organisationId) return getOrCreateUniqueChildFolder_(fyFolder, `${baseName} (${organisationId})`);
+ }
+ return getOrCreateUniqueChildFolder_(fyFolder, baseName);
+}
 function folderFromSavedOrCreate_(parentFolder, savedUrl, name) {
  if (clean_(savedUrl)) {
    const id = urlId_(savedUrl), cacheKey = `id|${id}`;

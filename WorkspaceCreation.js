@@ -123,8 +123,8 @@ function processWorkspaceRequest_(row, config) {
      patternName_(config.FINANCIAL_YEAR_FOLDER_PATTERN, request));
  // Folder and workbook creation is find-or-create by name, so one checkpoint after several Drive steps is safe:
  // a run that stops in between finds the same folders / files again on retry instead of duplicating them.
- const orgFolder = folderFromSavedOrCreate_(fy, record['Organisation Folder URL'],
-   patternName_(config.ORGANISATION_FOLDER_PATTERN, request));
+ const orgFolder = organisationFolderFor_(fy, record['Organisation Folder URL'],
+   patternName_(config.ORGANISATION_FOLDER_PATTERN, request), organisationId);
  record = saveTech_(requestId, {
    'FY Folder URL': fy.getUrl(),
    'Organisation Folder URL': orgFolder.getUrl(), 'Grant Workspace URL': orgFolder.getUrl(),
