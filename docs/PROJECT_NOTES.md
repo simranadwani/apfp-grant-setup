@@ -73,3 +73,24 @@ changes the status; disbursement eligibility uses Record Status, not Grant Statu
 per-grant isolation and time guard. 3. "Last read" tracking + skip-unchanged workbooks for Active grants. 4. History protections + backup utility.
 5. TEST scenario matrix (two new grants; run every button twice → second run writes nothing; mark a grant Complete → its rows stay and still sync;
 fill a tracker → it grows; reorder outcomes on re-approval → progress stays with its indicator). 6. Production plan with backup first.
+
+## 8. Health and optimisation audit (2026-09-30, after Phase 3a)
+**Health:** 19 code files, ~5,300 lines, all pass a syntax check; 52 automated tests pass; no `V15` naming left; no unused internal functions left. Preflight PASS on TEST.
+**Nothing is on production yet.** Test coverage is strong for helpers, tracker upsert and disbursement push/sync; there is none for workspace creation, sharing, protection,
+approval, reopen or email (covered only by the manual TEST scenario).
+
+**Done (verified on TEST):** test harness; TEST copy + push safety; cleanup; four Upload Folder fixes; Push Status / Document Sync Status with per-grant isolation and time guard.
+
+**Not done — in priority order**
+- P0: production rollout (backup → confirm production == original clone → push → add the two columns → preflight → real push/sync); owner removes the "anyone – editor" link;
+  confirm real button bindings to retire unused aliases.
+- P1 (data safety): tracker tables are fixed size → auto-grow; Outcome IDs follow row position → keep them attached to the indicator; Backup button;
+  `PROTECTION_EDITORS` (team@goalkeep.net + Anagha are not kept as protection editors today); sharing hardening (reopen rollback, old-email revocation, approval tied to a version,
+  grantees are folder writers); "How will it be Measured?" never stored; Transactional Upload Folder has no destination; failure reasons only in hidden sheets; `recordAutomationStatus_`
+  is a no-op; Exceptions Log never closes; orphan registry row for blank intake rows.
+- P2 (column/dropdown changes without code): 27 positional `row[n]` reads (21 in `ReportingSupportDecisions.js`), `APFP.INTAKE.*_COLUMN` constants, ~34 fixed header widths,
+  exact-order preflight, hard-coded dropdown lists / FY list / time zone, 9 unused config keys, 2 columns unknown to `Config.js`, stale docs.
+- P3 (speed): per-cell API calls inside loops (`processDisbursementRow_` ~15–20 calls per tracker row, organisation-dropdown refresh, decision-document links, Prepare Disbursement Rows) can
+  approach the 6-minute limit at a few hundred rows → batch reads/writes; refreshes re-open every active workbook on every run → skip unchanged; Outcome/Support/Decision refresh lack
+  per-grant isolation and a time guard.
+**Proposed order:** A production rollout → B history + backup + protection editors → C batching / skip-unchanged / isolation → D column-tolerant + config lists → E hardening one by one.
