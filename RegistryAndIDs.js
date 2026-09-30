@@ -399,11 +399,17 @@ function ensureOrganisationMaturityRowsForGrant_(grantId) {
  const grant = grantById_(grantId);
  if (!grant) throw new Error(`Cannot create maturity rows because Grant ID was not found: ${grantId}`);
  const sheet = sheet_(APFP.SHEETS.MATURITY), headerRow = APFP.MATURITY.HEADER_ROW,
-   headers = APFP.MATURITY.HEADERS, map = headerMap_(sheet, headerRow),
+   required = APFP.MATURITY.HEADERS, width = sheet.getLastColumn(),
+   headers = sheet.getRange(headerRow, 1, 1, width).getDisplayValues()[0].map(clean_),
    catalogue = maturityCatalogue_(), existing = {}, lastRow = sheet.getLastRow();
+ // Columns are found by header name, so an added or moved column never garbles rows.
+ required.forEach(header => {
+   if (!headers.some(name => key_(name) === key_(header)))
+     throw new Error(`${APFP.SHEETS.MATURITY} is missing the column "${header}".`);
+ });
  if (lastRow >= APFP.MATURITY.START_ROW) {
    const values = sheet.getRange(APFP.MATURITY.START_ROW, 1,
-     lastRow - APFP.MATURITY.START_ROW + 1, headers.length).getValues();
+     lastRow - APFP.MATURITY.START_ROW + 1, width).getValues();
    values.forEach((row, offset) => {
      const record = rowObjectFromArrays_(headers, row);
      if (key_(record['Grant ID']) !== key_(grantId)) return;
@@ -434,8 +440,8 @@ function ensureOrganisationMaturityRowsForGrant_(grantId) {
    extendAdminTableRows_(APFP.SHEETS.MATURITY);
  }
  const output = missing.map(record => headers.map(header =>
-   Object.prototype.hasOwnProperty.call(record, header) ? record[header] : ''));
- sheet.getRange(startRow, 1, output.length, headers.length)
+   header && Object.prototype.hasOwnProperty.call(record, header) ? record[header] : ''));
+ sheet.getRange(startRow, 1, output.length, width)
    .setValues(output).setFontFamily(APFP.FONT_FAMILY);
  return missing.length;
 }

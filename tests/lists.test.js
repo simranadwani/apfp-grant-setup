@@ -33,15 +33,17 @@ test('KNOWN_CONFIG_KEYS lists every setting the code reads (keeps the "unused ro
 
 test('setupRegistryExportRecords_ reads by header name and tolerates old workbooks lacking the two newer fields', () => {
   const p = loadProject(), A = plain(p.get('APFP'));
-  const build = (orgHeaders, grantHeaders) => {
+  const build = (orgHeaders, grantHeaders, maxCols = 70) => {
     const grid = [[], orgHeaders, orgHeaders.map(h => 'v:' + h), [], [], grantHeaders, grantHeaders.map(h => 'g:' + h)];
     return {
       getSheetByName: () => ({
-        isSheetHidden: () => true, getLastColumn: () => 70,
-        getRange: (r, c, n, w) => ({
+        isSheetHidden: () => true, getLastColumn: () => maxCols,
+        getRange: (r, c, n, w) => {
+          if (c - 1 + w > maxCols) throw new Error('Range exceeds grid limits');
+          return {
           getDisplayValues: () => [(grid[r - 1] || []).slice(0, w)],
           getValues: () => [(grid[r - 1] || []).slice(0, w)]
-        })
+        }; }
       })
     };
   };
@@ -52,6 +54,6 @@ test('setupRegistryExportRecords_ reads by header name and tolerates old workboo
   assert.equal(out.grant['Foreign Funding — Percentage of Total Annual Funding'], 'g:Foreign Funding — Percentage of Total Annual Funding');
   // an older workbook without the two newer fields still reads (blank); a missing core header is an error
   const oldOrg = A.ORGANISATION_HEADERS.filter(h => h !== 'FCRA Registration Status'), oldGrant = A.GRANT_HEADERS.filter(h => !/^Foreign Funding/.test(h));
-  assert.equal(plain(p.get('setupRegistryExportRecords_')(build(oldOrg, oldGrant))).organisation['FCRA Registration Status'], '');
-  assert.throws(() => p.get('setupRegistryExportRecords_')(build(oldOrg.filter(h => h !== 'PAN Number'), oldGrant)), /missing the column "PAN Number"/);
+  assert.equal('FCRA Registration Status' in plain(p.get('setupRegistryExportRecords_')(build(oldOrg, oldGrant, 60))).organisation, false, 'a missing late field is omitted, never written as blank');
+  assert.throws(() => p.get('setupRegistryExportRecords_')(build(oldOrg.filter(h => h !== 'PAN Number'), oldGrant, 60)), /missing the column "PAN Number"/);
 });

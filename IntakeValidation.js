@@ -88,17 +88,25 @@ function refreshDuplicateFlagsForRows_(rowNumbers) {
  });
 }
 function processRequestedActions() {
- const config = runtimeGuard_(), rows = intakeRowsWithActions_();
- if (!rows.length) {
-   SpreadsheetApp.getUi().alert('No workspaces are waiting to be created or retried.');
-   return;
- }
- const maxBatch = Math.max(1, Number(config.MAX_BATCH_SIZE || 35)), batch = rows.slice(0, maxBatch),
-   lock = LockService.getScriptLock();
+ const config = runtimeGuard_(), lock = LockService.getScriptLock();
  if (!lock.tryLock(30000)) {
    SpreadsheetApp.getUi().alert('Another APFP automation run is already active. Run this action again after it finishes.');
    return;
  }
+ // The queue is read only AFTER the lock is held, so a second click cannot re-process rows the first run just finished.
+ let rows;
+ try {
+   rows = intakeRowsWithActions_();
+ } catch (error) {
+   lock.releaseLock();
+   throw error;
+ }
+ if (!rows.length) {
+   lock.releaseLock();
+   SpreadsheetApp.getUi().alert('No workspaces are waiting to be created or retried.');
+   return;
+ }
+ const maxBatch = Math.max(1, Number(config.MAX_BATCH_SIZE || 35)), batch = rows.slice(0, maxBatch);
  let success = 0, needsAttention = 0, processed = 0, stoppedForRuntime = false;
  const failures = [];
  const startedAt = Date.now();

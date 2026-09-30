@@ -328,17 +328,16 @@ function setupRegistryExportRecords_(source) {
   if (!sheet) return { organisation: {}, grant: {}, legacyFallback: true };
   if (!sheet.isSheetHidden()) throw new Error('System - Registry Export exists but is visible. Hide and protect it before migration.');
   // Read by header name: extra or reordered export columns are fine; a required header that is missing is an error.
-  // Workbooks generated before the FCRA Registration Status / Foreign Funding fields existed lack them; those read as blank.
+  // Workbooks generated before the FCRA Registration Status / Foreign Funding fields existed lack them; those are left out of the result, so an existing registry value is never blanked.
   const late = new Set(['fcra registration status', 'foreign funding — percentage of total annual funding']);
   const read = (headerRow, dataRow, headers) => {
-    const width = Math.max(sheet.getLastColumn(), headers.length);
+    const width = sheet.getLastColumn();
     const actual = sheet.getRange(headerRow, 1, 1, width).getDisplayValues()[0].map(clean_);
     const values = sheet.getRange(dataRow, 1, 1, width).getValues()[0], out = {};
     headers.forEach(header => {
       const index = actual.findIndex(name => key_(name) === key_(header));
       if (index < 0) {
         if (!late.has(key_(header))) throw new Error(`Registry Export is missing the column "${header}" (row ${headerRow}).`);
-        out[header] = '';
         return;
       }
       out[header] = values[index];

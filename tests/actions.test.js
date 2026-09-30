@@ -102,3 +102,30 @@ test('a partly filled row is still validated normally (and still gets a Request 
   p.get('processRequestedActions')();
   assert.deepEqual(created, [14]);
 });
+
+test('the queue is read only after the lock is held (a second click cannot re-run finished rows)', () => {
+  const order = [], alerts = [];
+  const lock = { tryLock: () => { order.push('lock'); return true; }, releaseLock() { order.push('release'); } };
+  const p = loadProject({
+    SpreadsheetApp: { getUi: () => ({ alert: m => alerts.push(m) }) },
+    LockService: { getScriptLock: () => lock }
+  });
+  p.override('runtimeGuard_', () => ({}));
+  p.override('intakeRowsWithActions_', () => { order.push('read'); return []; });
+  p.get('processRequestedActions')();
+  assert.deepEqual(order, ['lock', 'read', 'release']);
+  assert.match(alerts[0], /No workspaces are waiting/);
+});
+
+test('a busy lock stops the run before the queue is read', () => {
+  const order = [], alerts = [];
+  const p = loadProject({
+    SpreadsheetApp: { getUi: () => ({ alert: m => alerts.push(m) }) },
+    LockService: { getScriptLock: () => ({ tryLock: () => false, releaseLock() {} }) }
+  });
+  p.override('runtimeGuard_', () => ({}));
+  p.override('intakeRowsWithActions_', () => { order.push('read'); return []; });
+  p.get('processRequestedActions')();
+  assert.deepEqual(order, []);
+  assert.match(alerts[0], /already active/);
+});

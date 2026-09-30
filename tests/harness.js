@@ -115,6 +115,7 @@ class FakeSheet {
         }));
         return this;
       },
+      setFontFamily() { return this; },
       getRow: () => row,
       getColumn: () => col
     };
