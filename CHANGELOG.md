@@ -4,6 +4,21 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round B — column-tolerant reads and writes (adding or moving a column needs no code change)
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**
+
+- **Workspace Creator columns by name** (`Utilities.js` `intakeColumn_`, used in `ApprovalsAndAccess.js`, `IntakeValidation.js`, `MenuAndChecks.js`, `RegistryAndIDs.js`): the 30 fixed column numbers in `Config.js` (`INTAKE.*_COLUMN`, identity block start/count) are gone.
+  The grant-identity block is "Financial Year" through "Grant Title" as found in the header row; returning-organisation prefill writes Thematic Area / Sub-area / Proximity by header (no longer three adjacent cells).
+- **Outcome / Support / Decision trackers by name** (`ReportingSupportDecisions.js`): the ~19 positional `row[n]` reads are replaced. Grantee export blocks are read by header (`trackerExportObjects_`, order and extra columns free, a missing required header is named in the error);
+  central rows are built as objects and written to the live column positions (`upsertTrackerObjects_`); **columns the code does not know are never overwritten**; manual columns (Q1–Q4 Status / Notes, decision fields) are preserved by name.
+  `refreshDecisionDocumentLinks_` no longer assumes its three columns are adjacent and writes only changed cells in grouped ranges instead of one read per row.
+- **Widths** (`Disbursements.js`, `DisbursementHelpers.js`, `IntakeValidation.js`): the tracker, Workspace Creator and duplicate-flag scans read the live sheet width, not the length of a header list.
+- **Preflight** (`MenuAndChecks.js`, `Utilities.js`, `ReportingSupportDecisions.js`): "exact order and exact width" became "every required header present by name". Extra columns (for example `FCRA Registration Status`, `Foreign Funding — Percentage…`) pass and are listed as warnings;
+  a missing header or a wrong column type / dropdown is still a blocking error. Applies to central sheets, native Tables, template exports and the Transactional template.
+- Tests: `tests/trackers-by-header.test.js` (reordered export, new central column, unknown column preserved, missing header named), `tests/preflight-headers.test.js`. 102 tests pass.
+- **Still layout-driven by design:** the grantee templates' protected ranges (`F5:F14` …), export block rows (2 / 15 / 58 / 161) and the System - Configuration columns A / B / F are template layout, documented in `docs/OPERATING_MODEL.md`.
+
 ## Speed step 3 — table headroom, cheaper maturity rows, no repeat pre-share verification
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**

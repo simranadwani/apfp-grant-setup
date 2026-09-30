@@ -138,7 +138,7 @@ function applyWorkspaceOrganisationDropdown_() {
   const intake = sheet_(APFP.SHEETS.INTAKE), organisations = sheet_(APFP.SHEETS.ORGANISATIONS);
   const source = organisations.getRange(2, 2, Math.max(1, organisations.getMaxRows() - 1), 1);
   const target = intake.getRange(
-    APFP.INTAKE.START_ROW, APFP.INTAKE.ORGANISATION_NAME_COLUMN,
+    APFP.INTAKE.START_ROW, intakeColumn_('Organisation Name'),
     APFP.INTAKE.MAX_ROW - APFP.INTAKE.START_ROW + 1, 1
   );
   target.setDataValidation(
@@ -156,8 +156,8 @@ function returningOrganisationValidation_(options) {
 function applyOrganisationValidationForRow_(rowNumber) {
   if (rowNumber < APFP.INTAKE.START_ROW || rowNumber > APFP.INTAKE.MAX_ROW) return;
   const intake = sheet_(APFP.SHEETS.INTAKE);
-  const type = clean_(intake.getRange(rowNumber, APFP.INTAKE.ORGANISATION_TYPE_COLUMN).getDisplayValue());
-  const cell = intake.getRange(rowNumber, APFP.INTAKE.ORGANISATION_NAME_COLUMN);
+  const type = clean_(intake.getRange(rowNumber, intakeColumn_('Organisation Type')).getDisplayValue());
+  const cell = intake.getRange(rowNumber, intakeColumn_('Organisation Name'));
   const options = type === 'Returning Organisation' ? organisationNameOptions_() : [];
   const rule = returningOrganisationValidation_(options);
   rule ? cell.setDataValidation(rule) : cell.clearDataValidations();
@@ -187,12 +187,12 @@ function prefillReturningGrantClassificationForRow_(rowNumber) {
   if (rowNumber < APFP.INTAKE.START_ROW || rowNumber > APFP.INTAKE.MAX_ROW) return false;
   const intake = sheet_(APFP.SHEETS.INTAKE);
   const type = clean_(
-    intake.getRange(rowNumber, APFP.INTAKE.ORGANISATION_TYPE_COLUMN).getDisplayValue()
+    intake.getRange(rowNumber, intakeColumn_('Organisation Type')).getDisplayValue()
   );
   if (type !== 'Returning Organisation') return false;
 
   const organisationName = clean_(
-    intake.getRange(rowNumber, APFP.INTAKE.ORGANISATION_NAME_COLUMN).getDisplayValue()
+    intake.getRange(rowNumber, intakeColumn_('Organisation Name')).getDisplayValue()
   );
   const matches = activeOrganisationRecordsByName_(organisationName);
   if (matches.length !== 1) return false;
@@ -203,11 +203,11 @@ function prefillReturningGrantClassificationForRow_(rowNumber) {
   );
   if (!latest) return false;
 
-  intake.getRange(rowNumber, APFP.INTAKE.THEMATIC_AREA_COLUMN, 1, 3).setValues([[
-    clean_(latest.record['Thematic Area']),
-    clean_(latest.record['Thematic Sub-area']),
-    clean_(latest.record['Proximity to Children / Beneficiary'])
-  ]]);
+  setByHeaders_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, rowNumber, {
+    'Thematic Area': clean_(latest.record['Thematic Area']),
+    'Thematic Sub-area': clean_(latest.record['Thematic Sub-area']),
+    'Proximity to Children / Beneficiary': clean_(latest.record['Proximity to Children / Beneficiary'])
+  });
   return true;
 }
 

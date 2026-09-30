@@ -5,7 +5,7 @@ function validateDisbursementRows_() {
  const sheet = disbTracker_(), map = disbHeaderMap_(sheet), last = sheet.getLastRow(),
    errors = [], warnings = [], seenIds = new Set();
  if (last < disbFirstDataRow_()) return { errors, warnings };
- const rows = sheet.getRange(disbFirstDataRow_(), 1, last - disbFirstDataRow_() + 1, APFP.DISBURSEMENT_HEADERS.length).getValues();
+ const rows = sheet.getRange(disbFirstDataRow_(), 1, last - disbFirstDataRow_() + 1, disbWidth_(sheet)).getValues();
  rows.forEach((row, offset) => {
    const rowNumber = disbFirstDataRow_() + offset;
    if (!row.some(value => clean_(value))) return;
@@ -107,7 +107,7 @@ function disbNextId_(sheet, map, fy) {
  return `${prefix}${String(maximum + 1).padStart(4, '0')}`;
 }
 function processDisbursementRow_(sheet, rowNumber, map, identityEdited) {
- const read = () => sheet.getRange(rowNumber, 1, 1, APFP.DISBURSEMENT_HEADERS.length).getValues()[0];
+ const read = () => sheet.getRange(rowNumber, 1, 1, disbWidth_(sheet)).getValues()[0];
  let row = read(), get = header => row[disbColumn_(map, header) - 1],
    id = clean_(get('Disbursement ID')), grantId = clean_(get('Grant ID'));
  ['Financial Year', 'Organisation Name', 'Grant ID', 'Planned Date'].forEach(header =>
@@ -177,7 +177,7 @@ function completeDisbursementRows_() {
    totals = { resolved: 0, quarters: 0, ids: 0, locked: 0 };
  if (last < disbFirstDataRow_()) return totals;
  for (let rowNumber = disbFirstDataRow_(); rowNumber <= last; rowNumber++) {
-   const row = sheet.getRange(rowNumber, 1, 1, APFP.DISBURSEMENT_HEADERS.length).getValues()[0];
+   const row = sheet.getRange(rowNumber, 1, 1, disbWidth_(sheet)).getValues()[0];
    if (!row.some(value => clean_(value))) continue;
    const result = processDisbursementRow_(sheet, rowNumber, map, false);
    Object.keys(totals).forEach(key => totals[key] += result[key] || 0);

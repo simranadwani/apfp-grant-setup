@@ -114,6 +114,12 @@ function headerMap_(sheet, headerRow) {
  HEADER_CACHE_[cacheKey] = map;
  return map;
 }
+// 1-based column of a Workspace Creator header, looked up in the live header row (adding or moving columns needs no code change).
+function intakeColumn_(headerName) {
+ const index = headerMap_(sheet_(APFP.SHEETS.INTAKE), APFP.INTAKE.HEADER_ROW)[key_(headerName)];
+ if (index == null) throw new Error(`${APFP.SHEETS.INTAKE} is missing the column "${headerName}".`);
+ return index + 1;
+}
 function invalidateDataCachesForSheet_(sheetName, rowNumber, patch, isAppend) {
  if (typeof updateRegistryCacheForWrite_ === 'function') updateRegistryCacheForWrite_(sheetName, rowNumber, patch, !!isAppend);
  else if (typeof invalidateRegistryCacheForSheet_ === 'function') invalidateRegistryCacheForSheet_(sheetName);
@@ -218,6 +224,15 @@ function extendTableToSheetEnd_(sheetName, tableName) {
 }
 // Column positions of any sheet, found from its header row (first match wins, so repeated headers such as
 // "Upload Folder" are harmless). col(name) throws a clear error only for a column the caller actually uses.
+// Compares a live header row with the REQUIRED header names: order and extra columns are allowed (extras are only reported).
+function headerGaps_(actualRow, requiredHeaders) {
+ const actual = (actualRow || []).map(clean_).filter(Boolean), actualKeys = new Set(actual.map(key_)),
+   requiredKeys = new Set(requiredHeaders.map(key_));
+ return {
+   missing: requiredHeaders.filter(header => !actualKeys.has(key_(header))),
+   extra: actual.filter(header => !requiredKeys.has(key_(header)))
+ };
+}
 function columnsByHeader_(sheet, headerRow, label) {
  const width = sheet.getLastColumn(), positions = {};
  sheet.getRange(headerRow, 1, 1, width).getDisplayValues()[0].forEach((header, index) => {
@@ -226,9 +241,16 @@ function columnsByHeader_(sheet, headerRow, label) {
  });
  return {
    width,
+   has(name) { return positions[key_(name)] != null; },
    col(name) {
      if (positions[key_(name)] == null) throw new Error(`${label} is missing the column "${name}".`);
      return positions[key_(name)];
+   },
+   // A row as an object keyed by lower-cased header ("financial year"), so callers never depend on column order.
+   record(row) {
+     const out = {};
+     Object.keys(positions).forEach(name => { out[name] = row[positions[name]]; });
+     return out;
    }
  };
 }
@@ -237,14 +259,14 @@ function dropdownValuesFromTableColumn_(column) {
  if (!condition || condition.type !== 'ONE_OF_LIST') return [];
  return (condition.values || []).map(item => clean_(item.userEnteredValue));
 }
-function checkAdminTables_(errors) {
+function checkAdminTables_(errors, warnings, specs) {
  try {
    const snapshot = adminTablesSnapshot_(), bySheet = {};
    (snapshot.sheets || []).forEach(item => {
      const title = item.properties && item.properties.title;
      if (title) bySheet[title] = item;
    });
-   APFP.ADMIN_TABLES.forEach(spec => {
+   (specs || APFP.ADMIN_TABLES).forEach(spec => {
      const item = bySheet[spec.SHEET_NAME];
      if (!item) { errors.push(`Missing Admin table sheet: ${spec.SHEET_NAME}`); return; }
      const table = (item.tables || []).find(t => t.name === spec.TABLE_NAME);
@@ -252,15 +274,16 @@ function checkAdminTables_(errors) {
      const range = table.range || {};
      const expectedStartRow = Number(spec.HEADER_ROW ||
        (spec.SHEET_NAME === APFP.SHEETS.INTAKE ? APFP.INTAKE.HEADER_ROW : 1)) - 1;
-     if ((range.startRowIndex || 0) !== expectedStartRow || range.startColumnIndex !== 0 || range.endColumnIndex !== spec.COLUMNS.length ||
+     // The Table must start in column A and be at least as wide as the required columns; extra columns are allowed.
+     if ((range.startRowIndex || 0) !== expectedStartRow || range.startColumnIndex !== 0 || range.endColumnIndex < spec.COLUMNS.length ||
          (range.endRowIndex || 0) < (spec.MIN_ROWS || 500))
        errors.push(`${spec.TABLE_NAME} range does not match the expected ${spec.SHEET_NAME} table structure.`);
-     const columns = table.columnProperties || [], expectedColumns = tableColumnProperties_(spec);
+     const columns = table.columnProperties || [], expectedColumns = tableColumnProperties_(spec), requiredNames = new Set(spec.COLUMNS.map(c => key_(c.NAME)));
+     const extra = columns.map(c => clean_(c.columnName)).filter(name => name && !requiredNames.has(key_(name)));
+     if (extra.length && warnings) warnings.push(`${spec.TABLE_NAME} has extra column(s) the code leaves alone: ${extra.join(', ')}.`);
      spec.COLUMNS.forEach((expected, index) => {
-       const actual = columns.find(c => Number(c.columnIndex) === index) || columns[index];
-       if (!actual) { errors.push(`${spec.TABLE_NAME} is missing column ${index + 1} (${expected.NAME}).`); return; }
-       if (clean_(actual.columnName) !== expected.NAME)
-         errors.push(`${spec.TABLE_NAME} column ${index + 1} should be "${expected.NAME}"; found "${clean_(actual.columnName)}".`);
+       const actual = columns.find(c => key_(c.columnName) === key_(expected.NAME));
+       if (!actual) { errors.push(`${spec.TABLE_NAME} is missing required column "${expected.NAME}".`); return; }
        const reportedType = clean_(actual.columnType).toUpperCase(),
          actualType = !reportedType || reportedType === 'UNSPECIFIED'
            ? 'COLUMN_TYPE_UNSPECIFIED' : reportedType;

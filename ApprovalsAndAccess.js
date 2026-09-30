@@ -19,10 +19,9 @@ function handleOrganisationInputEdit_(e) {
   if (range.getRow() < APFP.INTAKE.START_ROW) return;
   const first = range.getColumn();
   const last = range.getLastColumn();
-  const touchesType = first <= APFP.INTAKE.ORGANISATION_TYPE_COLUMN &&
-    last >= APFP.INTAKE.ORGANISATION_TYPE_COLUMN;
-  const touchesName = first <= APFP.INTAKE.ORGANISATION_NAME_COLUMN &&
-    last >= APFP.INTAKE.ORGANISATION_NAME_COLUMN;
+  const typeColumn = intakeColumn_('Organisation Type'), nameColumn = intakeColumn_('Organisation Name');
+  const touchesType = first <= typeColumn && last >= typeColumn;
+  const touchesName = first <= nameColumn && last >= nameColumn;
   if (!touchesType && !touchesName) return;
 
   const sheet = range.getSheet();
@@ -38,7 +37,7 @@ function handleTrackerReviewEdit_(e) {
  const range = e.range;
  if (range.getRow() < APFP.INTAKE.START_ROW || range.getNumRows() !== 1 || range.getNumColumns() !== 1)
    return;
- const col = APFP.INTAKE.REVIEW_STATUS_COLUMN;
+ const col = intakeColumn_('Setup Review Status');
  if (col < range.getColumn() || col > range.getLastColumn())
    return;
  const status = clean_(range.getSheet().getRange(range.getRow(), col).getDisplayValue());

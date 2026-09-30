@@ -41,10 +41,8 @@ function checkDisbursementTrackerTable_(errors) {
     const sheet = ss_().getSheetByName(APFP.SHEETS.DISBURSEMENTS);
     if (!sheet) { errors.push(`Missing sheet: ${APFP.SHEETS.DISBURSEMENTS}`); return; }
     const headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS,
-      headers = sheet.getRange(headerRow, 1, 1, APFP.DISBURSEMENT_HEADERS.length).getDisplayValues()[0];
-    APFP.DISBURSEMENT_HEADERS.forEach((header, index) => {
-      if (clean_(headers[index]) !== header) errors.push(`Disbursement header ${index + 1} must be ${header}.`);
-    });
+      gaps = headerGaps_(sheet.getRange(headerRow, 1, 1, sheet.getLastColumn()).getDisplayValues()[0], APFP.DISBURSEMENT_HEADERS);
+    if (gaps.missing.length) errors.push(`Disbursement tracker is missing required header(s): ${gaps.missing.join(', ')}.`);
   } catch (error) { errors.push(`Disbursement check failed: ${error.message}`); }
 }
 function grantRegistryRecords_() {
@@ -226,7 +224,8 @@ function upsertTrackerRowsByKey_(sheet, width, desiredRows, keyIndexes, preserve
       if (!emptyIndexes.length) throw new Error(`${sheet.getName()} has no empty Table rows available.`);
       index = emptyIndexes.shift();
     }
-    finalRows[index] = row.slice();
+    // undefined = "not ours" (a column the code does not know): keep whatever is in the sheet.
+    finalRows[index] = row.map((value, i) => value === undefined ? existing[index][i] : value);
     assigned.add(index);
   });
   existing.forEach((row, index) => {
@@ -235,27 +234,41 @@ function upsertTrackerRowsByKey_(sheet, width, desiredRows, keyIndexes, preserve
   });
   return writeChangedMatrixRows_(sheet, headerRow + 1, 1, existing, finalRows);
 }
-function existingOutcomeManualMap_(sheet) {
-  const out = {}, headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.OUTCOMES,
-    count = sheet.getMaxRows() - headerRow, width = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.OUTCOMES.length;
+// Central tracker rows are built as objects keyed by header name and written by the sheet's live column positions, so
+// adding, moving or renaming-around columns in a central tracker (or in a grantee export block) needs no code change.
+// Columns the code does not know are never overwritten.
+function upsertTrackerObjects_(sheet, headerRow, label, desiredObjects, keyHeaders, requiredHeaders) {
+  const cols = columnsByHeader_(sheet, headerRow, label);
+  requiredHeaders.forEach(header => cols.col(header));
+  const keyIndexes = keyHeaders.map(header => cols.col(header));
+  const rows = desiredObjects.map(object => {
+    const row = new Array(cols.width).fill(undefined);
+    Object.keys(object).forEach(header => { if (cols.has(header)) row[cols.col(header)] = object[header] == null ? '' : object[header]; });
+    return row;
+  });
+  return upsertTrackerRowsByKey_(sheet, cols.width, rows, keyIndexes, true);
+}
+function trackerManualMap_(sheet, headerRow, label, keyHeaders, manualHeaders) {
+  const out = {}, cols = columnsByHeader_(sheet, headerRow, label), count = sheet.getMaxRows() - headerRow;
   if (count <= 0) return out;
-  sheet.getRange(headerRow + 1, 1, count, width).getValues().forEach(row => {
-    const stable = trackerKey_(row, [3, 4]);
-    if (stable) out[stable] = {
-      statuses: [row[9], row[13], row[17], row[21]],
-      notes: [row[10], row[14], row[18], row[22]]
-    };
+  const keyIndexes = keyHeaders.map(header => cols.col(header));
+  sheet.getRange(headerRow + 1, 1, count, cols.width).getValues().forEach(row => {
+    const stable = trackerKey_(row, keyIndexes);
+    if (!stable) return;
+    const manual = {};
+    manualHeaders.forEach(header => { manual[header] = cols.has(header) ? row[cols.col(header)] : ''; });
+    out[stable] = manual;
   });
   return out;
 }
-function trackerExportRows_(workbook, section, headers) {
+// A block of the hidden System - Tracker Export sheet as objects keyed by lower-cased header. Extra or reordered columns are fine;
+// a missing REQUIRED header stops the refresh with a message naming it.
+function trackerExportObjects_(workbook, section, requiredHeaders) {
   const sheet = workbook.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.TRACKER_EXPORT);
   if (!sheet || !sheet.isSheetHidden()) throw new Error('Protected System - Tracker Export is missing or visible.');
-  const actual = sheet.getRange(section.HEADER_ROW, 1, 1, headers.length).getDisplayValues()[0];
-  headers.forEach((header, index) => {
-    if (clean_(actual[index]) !== header) throw new Error(`Tracker Export ${section.LABEL} column ${index + 1} should be "${header}".`);
-  });
-  return sheet.getRange(section.DATA_START_ROW, 1, section.DATA_ROWS, headers.length).getValues();
+  const cols = columnsByHeader_(sheet, section.HEADER_ROW, `Tracker Export ${section.LABEL}`);
+  requiredHeaders.forEach(header => cols.col(header));
+  return sheet.getRange(section.DATA_START_ROW, 1, section.DATA_ROWS, cols.width).getValues().map(row => cols.record(row));
 }
 
 function activeReportingGrants_() {
@@ -263,61 +276,63 @@ function activeReportingGrants_() {
     key_(grant['Record Status']) === 'active' && key_(grant['Grant Status']) === 'active');
 }
 
+const OUTCOME_MANUAL_HEADERS_ = ['Q1', 'Q2', 'Q3', 'Q4'].reduce((list, quarter) => list.concat([`${quarter} Status`, `${quarter} Anagha Notes`]), []);
 function refreshOutcomeProgressTracker_() {
   const sheet = ss_().getSheetByName(APFP.SHEETS.OUTCOMES);
   if (!sheet) throw new Error('Outcome Progress tab is missing from Central Administration.');
-  const manualByOutcome = existingOutcomeManualMap_(sheet), desired = [], section = APFP.PREFLIGHT_SCHEMA.OUTCOME_EXPORT_SECTIONS[0];
+  const headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.OUTCOMES, required = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.OUTCOMES,
+    exportRequired = required.filter(header => !OUTCOME_MANUAL_HEADERS_.includes(header)),
+    manualByOutcome = trackerManualMap_(sheet, headerRow, 'Outcome Progress', ['Grant ID', 'Outcome ID'], OUTCOME_MANUAL_HEADERS_),
+    desired = [], section = APFP.PREFLIGHT_SCHEMA.OUTCOME_EXPORT_SECTIONS[0];
   activeReportingGrants_().forEach(grant => {
     if (isTransactionalGrantType_(grant['Grant Type']) || isDiscretionaryGrantType_(grant['Grant Type'])) return;
     const url = outcomeProgressWorkbookUrlForGrant_(grant['Grant ID']);
     if (!url) return;
-    trackerExportRows_(openSpreadsheetCached_(url), section, APFP.OUTCOME_EXPORT_HEADERS).forEach(row => {
-      const outcomeId = clean_(row[4]);
-      if (!outcomeId || !clean_(row[5])) return;
-      const stable = `${key_(grant['Grant ID'])}|${key_(outcomeId)}`,
-        manual = manualByOutcome[stable] || { statuses: ['', '', '', ''], notes: ['', '', '', ''] };
-      desired.push([
-        row[0] || grant['Financial Year'], row[1] || grant['Organisation Name'], row[2] || grant['Project Title'],
-        row[3] || grant['Grant ID'], outcomeId, row[5], row[6],
-        row[7], row[8], manual.statuses[0], manual.notes[0],
-        row[13], row[14], manual.statuses[1], manual.notes[1],
-        row[19], row[20], manual.statuses[2], manual.notes[2],
-        row[25], row[26], manual.statuses[3], manual.notes[3], row[31]
-      ]);
+    trackerExportObjects_(openSpreadsheetCached_(url), section, exportRequired).forEach(record => {
+      const outcomeId = clean_(record['outcome id']);
+      if (!outcomeId || !clean_(record['outcome / indicator'])) return;
+      const stable = `${key_(grant['Grant ID'])}|${key_(outcomeId)}`, manual = manualByOutcome[stable] || {}, object = {};
+      required.forEach(header => {
+        object[header] = OUTCOME_MANUAL_HEADERS_.includes(header) ? (manual[header] == null ? '' : manual[header]) : record[key_(header)];
+      });
+      object['Financial Year'] = record['financial year'] || grant['Financial Year'];
+      object['Organisation Name'] = record['organisation name'] || grant['Organisation Name'];
+      object['Grant Title'] = record['grant title'] || grant['Project Title'];
+      object['Grant ID'] = record['grant id'] || grant['Grant ID'];
+      object['Outcome ID'] = outcomeId;
+      desired.push(object);
     });
   });
-  upsertTrackerRowsByKey_(sheet, APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.OUTCOMES.length, desired, [3, 4], true);
+  upsertTrackerObjects_(sheet, headerRow, 'Outcome Progress', desired, ['Grant ID', 'Outcome ID'], required);
   return desired.length;
-}
-function existingSupportManualMap_(sheet) {
-  const out = {}, headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.SUPPORT, count = sheet.getMaxRows() - headerRow;
-  if (count <= 0) return out;
-  sheet.getRange(headerRow + 1, 1, count, APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.SUPPORT.length).getValues().forEach(row => {
-    const stable = trackerKey_(row, [3, 5, 6]);
-    if (stable) out[stable] = { status: row[10], notes: row[11] };
-  });
-  return out;
 }
 function refreshSupportTracker_() {
   const support = ss_().getSheetByName(APFP.SHEETS.SUPPORT);
   if (!support) throw new Error('Support tab is missing from Central Administration.');
-  const existing = existingSupportManualMap_(support), desired = [], section = APFP.PREFLIGHT_SCHEMA.OUTCOME_EXPORT_SECTIONS[1];
+  const headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.SUPPORT, required = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.SUPPORT,
+    keyHeaders = ['Grant ID', 'Outcome ID', 'Quarter'],
+    existing = trackerManualMap_(support, headerRow, 'Support', keyHeaders, ['Status', 'Anagha Notes']),
+    desired = [], section = APFP.PREFLIGHT_SCHEMA.OUTCOME_EXPORT_SECTIONS[1];
   activeReportingGrants_().forEach(grant => {
     if (isTransactionalGrantType_(grant['Grant Type']) || isDiscretionaryGrantType_(grant['Grant Type'])) return;
     const url = outcomeProgressWorkbookUrlForGrant_(grant['Grant ID']);
     if (!url) return;
-    trackerExportRows_(openSpreadsheetCached_(url), section, APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.SUPPORT).forEach(row => {
-      const grantId = clean_(row[3]) || clean_(grant['Grant ID']), outcomeId = clean_(row[5]), quarter = clean_(row[6]),
-        type = clean_(row[7]), required = clean_(row[8]);
-      if (!grantId || !outcomeId || !quarter || (!type && !required)) return;
+    trackerExportObjects_(openSpreadsheetCached_(url), section, required).forEach(record => {
+      const grantId = clean_(record['grant id']) || clean_(grant['Grant ID']), outcomeId = clean_(record['outcome id']), quarter = clean_(record['quarter']),
+        type = clean_(record['support type']), requiredText = clean_(record['support required']);
+      if (!grantId || !outcomeId || !quarter || (!type && !requiredText)) return;
       const stable = [key_(grantId), key_(outcomeId), key_(quarter)].join('|'), manual = existing[stable] || {};
-      desired.push([
-        row[0] || grant['Financial Year'], row[1] || grant['Organisation Name'], row[2] || grant['Project Title'], grantId,
-        row[4], outcomeId, quarter, type, required, row[9], manual.status || row[10] || 'Open', manual.notes || row[11] || ''
-      ]);
+      desired.push({
+        'Financial Year': record['financial year'] || grant['Financial Year'],
+        'Organisation Name': record['organisation name'] || grant['Organisation Name'],
+        'Grant Title': record['grant title'] || grant['Project Title'],
+        'Grant ID': grantId, 'Outcome Indicator': record['outcome indicator'], 'Outcome ID': outcomeId, 'Quarter': quarter,
+        'Support Type': type, 'Support Required': requiredText, 'Evidence Link': record['evidence link'],
+        'Status': manual['Status'] || record['status'] || 'Open', 'Anagha Notes': manual['Anagha Notes'] || record['anagha notes'] || ''
+      });
     });
   });
-  upsertTrackerRowsByKey_(support, APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.SUPPORT.length, desired, [3, 5, 6], true);
+  upsertTrackerObjects_(support, headerRow, 'Support', desired, keyHeaders, required);
   return desired.length;
 }
 function refreshReportingData() {
@@ -374,35 +389,39 @@ function outcomeSummaryForGrant_(grant) {
     throw new Error(`Could not build outcome summary for Grant ID ${clean_(grant['Grant ID']) || 'unknown'}: ${error.message}`);
   }
 }
+const DECISION_MANUAL_HEADERS_ = ['Decision Type', 'Decision Status', 'Decision Rationale', 'Proposed Amount', 'Decision Due Date',
+  'Annual Report Link', 'Fund Utilisation Link', '10BE Form Link', 'Maturity — Clarity RAG', 'Maturity — Capacity RAG', 'Maturity — Compliance RAG'];
 function refreshDecisionTracker_() {
   const tracker = openSpreadsheetCached_(ss_().getId()), sheet = tracker.getSheetByName(APFP.SHEETS.DECISIONS);
   if (!sheet) throw new Error('Decision Tracker is missing from Central Administration.');
-  const currentFy = financialYearFromDate_(now_()), decisionFy = nextFinancialYear_(currentFy), existing = {}, headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DECISIONS, count = sheet.getMaxRows() - headerRow;
-  if (count > 0) sheet.getRange(headerRow + 1, 1, count, APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.DECISIONS.length).getValues().forEach(row => {
-    if (clean_(row[5])) existing[key_(row[5])] = {
-      type: row[8], status: row[9], rationale: row[10], proposedAmount: row[11],
-      dueDate: row[12], annualReport: row[13], fundUtilisation: row[14], form10be: row[15],
-      clarity: row[16], capacity: row[17], compliance: row[18]
-    };
-  });
+  const currentFy = financialYearFromDate_(now_()), decisionFy = nextFinancialYear_(currentFy),
+    headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DECISIONS, required = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.DECISIONS,
+    existing = trackerManualMap_(sheet, headerRow, 'Decision Tracker', ['Grant ID'], DECISION_MANUAL_HEADERS_);
   const desired = grantRegistryRecords_().filter(item =>
     key_(item.record['Record Status']) === 'active' && key_(item.record['Grant Status']) === 'active' &&
     !isDiscretionaryGrantType_(item.record['Grant Type']) &&
     key_(item.record['Financial Year']) === key_(currentFy)
   ).map(item => {
-    const grant = item.record, manual = existing[key_(grant['Grant ID'])] || {}, transactional = isTransactionalGrantType_(grant['Grant Type']), discretionary = isDiscretionaryGrantType_(grant['Grant Type']),
-      noOutcomeWorkspace = transactional || discretionary,
+    const grant = item.record, manual = existing[key_(grant['Grant ID'])] || {},
+      noOutcomeWorkspace = isTransactionalGrantType_(grant['Grant Type']) || isDiscretionaryGrantType_(grant['Grant Type']),
       organisation = organisationById_(grant['Organisation ID']),
-      annualReport = manual.annualReport || (organisation ? clean_(organisation.record['Latest Annual Report Link']) : '');
-    return [
-      decisionFy, currentFy, clean_(grant['Organisation Name']), clean_(grant['Project Title']), clean_(grant['Grant Type']), clean_(grant['Grant ID']),
-      noOutcomeWorkspace ? '' : outcomeSummaryForGrant_(grant), noOutcomeWorkspace ? '' : outcomeProgressWorkbookUrlForGrant_(grant['Grant ID']),
-      manual.type || '', manual.status || '', manual.rationale || '', manual.proposedAmount || '',
-      manual.dueDate || grant['Grant End Date'] || '', annualReport, manual.fundUtilisation || '', manual.form10be || '',
-      manual.clarity || '', manual.capacity || '', manual.compliance || ''
-    ];
+      annualReport = manual['Annual Report Link'] || (organisation ? clean_(organisation.record['Latest Annual Report Link']) : '');
+    return {
+      'Decision For FY': decisionFy, 'Previous Grant FY': currentFy,
+      'Organisation Name': clean_(grant['Organisation Name']), 'Grant Title': clean_(grant['Project Title']),
+      'Grant Type': clean_(grant['Grant Type']), 'Grant ID': clean_(grant['Grant ID']),
+      'Outcome Summary': noOutcomeWorkspace ? '' : outcomeSummaryForGrant_(grant),
+      'Evidence / Workspace Link': noOutcomeWorkspace ? '' : outcomeProgressWorkbookUrlForGrant_(grant['Grant ID']),
+      'Decision Type': manual['Decision Type'] || '', 'Decision Status': manual['Decision Status'] || '',
+      'Decision Rationale': manual['Decision Rationale'] || '', 'Proposed Amount': manual['Proposed Amount'] || '',
+      'Decision Due Date': manual['Decision Due Date'] || grant['Grant End Date'] || '',
+      'Annual Report Link': annualReport, 'Fund Utilisation Link': manual['Fund Utilisation Link'] || '',
+      '10BE Form Link': manual['10BE Form Link'] || '',
+      'Maturity — Clarity RAG': manual['Maturity — Clarity RAG'] || '', 'Maturity — Capacity RAG': manual['Maturity — Capacity RAG'] || '',
+      'Maturity — Compliance RAG': manual['Maturity — Compliance RAG'] || ''
+    };
   });
-  upsertTrackerRowsByKey_(sheet, APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.DECISIONS.length, desired, [5], true);
+  upsertTrackerObjects_(sheet, headerRow, 'Decision Tracker', desired, ['Grant ID'], required);
   return desired.length;
 }
 function disbursementSheet_() {
@@ -419,42 +438,39 @@ function refreshDecisionDocumentLinks_() {
   const sheet = ss_().getSheetByName(APFP.SHEETS.DECISIONS);
   if (!sheet) throw new Error('Decision Tracker is missing from Central Administration.');
   const headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DECISIONS,
-    map = headerMap_(sheet, headerRow),
-    grantColumn = map[key_('Grant ID')] + 1,
-    annualColumn = map[key_('Annual Report Link')] + 1,
-    fundColumn = map[key_('Fund Utilisation Link')] + 1,
-    form10beColumn = map[key_('10BE Form Link')] + 1,
+    cols = columnsByHeader_(sheet, headerRow, 'Decision Tracker'),
+    grantColumn = cols.col('Grant ID'), annualColumn = cols.col('Annual Report Link'),
+    fundColumn = cols.col('Fund Utilisation Link'), form10beColumn = cols.col('10BE Form Link'),
     lastRow = Math.max(headerRow, sheet.getLastRow()),
     section = { HEADER_ROW: 161, DATA_START_ROW: 162, DATA_ROWS: 1, LABEL: 'Year-End Documents' };
-  if (!grantColumn || !annualColumn || !fundColumn || !form10beColumn ||
-      fundColumn !== annualColumn + 1 || form10beColumn !== fundColumn + 1)
-    throw new Error('Decision document-link columns are missing or out of order.');
-  let updated = 0;
-  for (let rowNumber = headerRow + 1; rowNumber <= lastRow; rowNumber++) {
-    const grantId = clean_(sheet.getRange(rowNumber, grantColumn).getValue());
-    if (!grantId) continue;
+  if (lastRow <= headerRow) return 0;
+  const values = sheet.getRange(headerRow + 1, 1, lastRow - headerRow, cols.width).getValues(), changes = [];
+  values.forEach((row, offset) => {
+    const grantId = clean_(row[grantColumn]);
+    if (!grantId) return;
     const grant = grantById_(grantId);
-    if (!grant || isTransactionalGrantType_(grant.record['Grant Type'])) continue;
-    const current = sheet.getRange(rowNumber, annualColumn, 1, 3).getValues()[0],
-      organisation = organisationById_(grant.record['Organisation ID']),
-      annualReport = organisation ? clean_(organisation.record['Latest Annual Report Link']) : current[0];
-    let utilisation = current[1], form10be = current[2];
+    if (!grant || isTransactionalGrantType_(grant.record['Grant Type'])) return;
+    const organisation = organisationById_(grant.record['Organisation ID']),
+      annualReport = organisation ? clean_(organisation.record['Latest Annual Report Link']) : row[annualColumn];
+    let utilisation = row[fundColumn], form10be = row[form10beColumn];
     const workbook = outcomeProgressWorkbookForGrant_(grantId);
     if (workbook) {
-      const exported = trackerExportRows_(workbook, section,
-        ['Grant ID', '10BE Form Link', 'Fund Utilisation Link'])[0] || [];
-      const exportedGrantId = clean_(exported[0]);
+      const exported = trackerExportObjects_(workbook, section, ['Grant ID', '10BE Form Link', 'Fund Utilisation Link'])[0] || {};
+      const exportedGrantId = clean_(exported['grant id']);
       if (exportedGrantId && key_(exportedGrantId) !== key_(grantId))
         throw new Error(`Year-end export Grant ID mismatch for ${grantId}.`);
-      form10be = clean_(exported[1]);
-      utilisation = clean_(exported[2]);
+      form10be = clean_(exported['10be form link']);
+      utilisation = clean_(exported['fund utilisation link']);
     }
-    if (comparable_(current[0]) === comparable_(annualReport) &&
-        comparable_(current[1]) === comparable_(utilisation) &&
-        comparable_(current[2]) === comparable_(form10be)) continue;
-    sheet.getRange(rowNumber, annualColumn, 1, 3)
-      .setValues([[annualReport, utilisation, form10be]]);
-    updated++;
-  }
-  return updated;
+    [[annualColumn, annualReport], [fundColumn, utilisation], [form10beColumn, form10be]].forEach(([column, value]) => {
+      if (comparable_(row[column]) !== comparable_(value)) changes.push({ column, rowNumber: headerRow + 1 + offset, value });
+    });
+  });
+  // Only the changed cells are written (consecutive rows of one column in one call).
+  [annualColumn, fundColumn, form10beColumn].forEach(column => {
+    const mine = changes.filter(change => change.column === column);
+    groupConsecutive_(mine, change => change.rowNumber).forEach(group =>
+      sheet.getRange(group[0].rowNumber, column + 1, group.length, 1).setValues(group.map(change => [change.value])));
+  });
+  return new Set(changes.map(change => change.rowNumber)).size;
 }

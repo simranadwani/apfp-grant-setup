@@ -14,8 +14,9 @@ function intakeRowsWithActions_() {
  const sheet = sheet_(APFP.SHEETS.INTAKE),
    lastRow = Math.min(APFP.INTAKE.MAX_ROW, Math.max(APFP.INTAKE.HEADER_ROW, sheet.getLastRow()));
  if (lastRow < APFP.INTAKE.START_ROW) return [];
- const headers = sheet.getRange(APFP.INTAKE.HEADER_ROW, 1, 1, APFP.INTAKE.HEADERS.length).getDisplayValues()[0],
-   rows = sheet.getRange(APFP.INTAKE.START_ROW, 1, lastRow - APFP.INTAKE.HEADER_ROW, APFP.INTAKE.HEADERS.length).getValues();
+ const width = sheet.getLastColumn(),
+   headers = sheet.getRange(APFP.INTAKE.HEADER_ROW, 1, 1, width).getDisplayValues()[0],
+   rows = sheet.getRange(APFP.INTAKE.START_ROW, 1, lastRow - APFP.INTAKE.HEADER_ROW, width).getValues();
  return rows.map((values, i) => {
    const object = rowObjectFromArrays_(headers, values), startDate = object['Grant Start Date'];
    return {
@@ -46,7 +47,7 @@ function setIntake_(rowNumber, patch) {
 }
 function setWorkspaceStatusNote_(rowNumber, message) {
  try {
-   sheet_(APFP.SHEETS.INTAKE).getRange(rowNumber, APFP.INTAKE.WORKSPACE_STATUS_COLUMN).clearNote();
+   sheet_(APFP.SHEETS.INTAKE).getRange(rowNumber, intakeColumn_('Workspace Status')).clearNote();
  } catch (error) {
    console.warn(`Could not clear Workspace Status note for row ${rowNumber}: ${error.message}`);
  }
@@ -61,9 +62,10 @@ function ensureRequestIdForRow_(row) {
 function intakeDuplicateState_() {
  const sheet = sheet_(APFP.SHEETS.INTAKE), last = Math.min(APFP.INTAKE.MAX_ROW, sheet.getLastRow()), counts = {};
  if (last < APFP.INTAKE.START_ROW) return { last, counts };
- const values = sheet.getRange(APFP.INTAKE.START_ROW, 1, last - APFP.INTAKE.START_ROW + 1, 5).getDisplayValues();
+ const fyIndex = intakeColumn_('Financial Year') - 1, orgIndex = intakeColumn_('Organisation Name') - 1,
+   values = sheet.getRange(APFP.INTAKE.START_ROW, 1, last - APFP.INTAKE.START_ROW + 1, Math.max(fyIndex, orgIndex) + 1).getDisplayValues();
  values.forEach(row => {
-   const fy = key_(row[0]), org = key_(row[4]);
+   const fy = key_(row[fyIndex]), org = key_(row[orgIndex]);
    if (fy && org) counts[`${org}|${fy}`] = (counts[`${org}|${fy}`] || 0) + 1;
  });
  return { last, counts };
@@ -71,15 +73,15 @@ function intakeDuplicateState_() {
 function refreshDuplicateFlagsForRows_(rowNumbers) {
  const uniqueRows = [...new Set((rowNumbers || []).filter(r => r >= APFP.INTAKE.START_ROW && r <= APFP.INTAKE.MAX_ROW))];
  if (!uniqueRows.length) return;
- const sheet = sheet_(APFP.SHEETS.INTAKE), state = intakeDuplicateState_();
+ const sheet = sheet_(APFP.SHEETS.INTAKE), state = intakeDuplicateState_(),
+   fyColumn = intakeColumn_('Financial Year'), orgColumn = intakeColumn_('Organisation Name');
  uniqueRows.forEach(rowNumber => {
    if (rowNumber > state.last) return;
-   const values = sheet.getRange(rowNumber, 1, 1, 5).getDisplayValues()[0], fy = key_(values[0]), org = key_(values[4]),
+   const fy = key_(sheet.getRange(rowNumber, fyColumn).getDisplayValue()), org = key_(sheet.getRange(rowNumber, orgColumn).getDisplayValue()),
      next = fy && org && state.counts[`${org}|${fy}`] > 1 ? 'Duplicate' : '';
    setByHeaders_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, rowNumber, { 'Duplicate?': next });
  });
 }
-// Runs every row that has a pending Action (Create Workspace / Retry Workspace / Retry Sharing), whichever row was clicked.
 function processRequestedActions() {
  const config = runtimeGuard_(), rows = intakeRowsWithActions_();
  if (!rows.length) {

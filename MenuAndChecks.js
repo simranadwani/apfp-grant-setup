@@ -45,11 +45,8 @@ function checkTransactionalDisbursementTemplate_(config) {
   const requiredLastRow = schema.DATA_START_ROW + schema.DATA_ROWS - 1;
   if (sheet.getMaxRows() < requiredLastRow || sheet.getMaxColumns() < schema.HEADERS.length)
     throw new Error(`Transactional template must provide ${schema.DATA_ROWS} data rows across ${schema.HEADERS.length} columns.`);
-  const actual = sheet.getRange(schema.HEADER_ROW, 1, 1, schema.HEADERS.length).getDisplayValues()[0];
-  schema.HEADERS.forEach((header, index) => {
-    if (clean_(actual[index]) !== header)
-      throw new Error(`Transactional template header ${index + 1} should be "${header}"; found "${actual[index]}".`);
-  });
+  const gaps = headerGaps_(sheet.getRange(schema.HEADER_ROW, 1, 1, sheet.getLastColumn()).getDisplayValues()[0], schema.HEADERS);
+  if (gaps.missing.length) throw new Error(`Transactional template is missing required header(s): ${gaps.missing.join(', ')}.`);
   return spreadsheet;
 }
 function checkExportFormulaCoverage_(sheet, section) {
@@ -72,11 +69,8 @@ function checkSetupRegistryExport_(spreadsheet) {
   APFP.PREFLIGHT_SCHEMA.SETUP_EXPORT_SECTIONS.forEach(section => {
     const headers = APFP[section.HEADERS_SOURCE];
     if (!headers) throw new Error(`Unknown Setup export header source: ${section.HEADERS_SOURCE}.`);
-    const actual = sheet.getRange(section.HEADER_ROW, 1, 1, headers.length).getDisplayValues()[0];
-    headers.forEach((header, index) => {
-      if (clean_(actual[index]) !== header)
-        throw new Error(`Setup Registry Export ${section.LABEL} column ${index + 1} should be "${header}".`);
-    });
+    const gaps = headerGaps_(sheet.getRange(section.HEADER_ROW, 1, 1, sheet.getLastColumn()).getDisplayValues()[0], headers);
+    if (gaps.missing.length) throw new Error(`Setup Registry Export ${section.LABEL} is missing required header(s): ${gaps.missing.join(', ')}.`);
     checkExportFormulaCoverage_(sheet, section);
   });
 }
@@ -89,18 +83,21 @@ function checkOutcomeTrackerExport_(spreadsheet) {
       section.HEADERS_SOURCE === 'DISBURSEMENT_HEADERS' ? APFP.DISBURSEMENT_HEADERS :
       APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS[section.HEADERS_SOURCE];
     if (!headers) throw new Error(`Unknown Outcome export header source: ${section.HEADERS_SOURCE}.`);
-    const actual = sheet.getRange(section.HEADER_ROW, 1, 1, headers.length).getDisplayValues()[0];
-    headers.forEach((header, index) => {
-      if (clean_(actual[index]) !== header)
-        throw new Error(`Outcome, Support and Disbursement Tracker Export ${section.LABEL} column ${index + 1} should be "${header}".`);
-    });
+    const gaps = headerGaps_(sheet.getRange(section.HEADER_ROW, 1, 1, sheet.getLastColumn()).getDisplayValues()[0], headers);
+    if (gaps.missing.length) throw new Error(`Outcome, Support and Disbursement Tracker Export ${section.LABEL} is missing required header(s): ${gaps.missing.join(', ')}.`);
     checkExportFormulaCoverage_(sheet, section);
   });
+}
+// The grant identity block of a Workspace Creator row: from "Financial Year" through "Grant Title".
+function intakeIdentityColumns_() {
+  const start = intakeColumn_('Financial Year');
+  return { start, count: intakeColumn_('Grant Title') - start + 1 };
 }
 function protectCompletedIntakeRow_(...args) { return timed_('Protect intake row', () => protectCompletedIntakeRowUntimed_(...args)); }
 function protectCompletedIntakeRowUntimed_(rowNumber) {
   const s = sheet_(APFP.SHEETS.INTAKE),
-    range = s.getRange(rowNumber, APFP.INTAKE.IDENTITY_START_COLUMN, 1, APFP.INTAKE.IDENTITY_COLUMN_COUNT);
+    identity = intakeIdentityColumns_(),
+    range = s.getRange(rowNumber, identity.start, 1, identity.count);
   s.getProtections(SpreadsheetApp.ProtectionType.RANGE)
     .filter(p => p.canEdit() && completedIntakeProtection_(p, rowNumber)).forEach(p => p.remove());
   range.clearNote();
@@ -110,21 +107,20 @@ function completedIntakeProtection_(protection, rowNumber) {
     const range = protection.getRange(), description = clean_(protection.getDescription());
     return protection.isWarningOnly() && range.getSheet().getName() === APFP.SHEETS.INTAKE &&
       range.getRow() === rowNumber && range.getNumRows() === 1 &&
-      range.getColumn() === APFP.INTAKE.IDENTITY_START_COLUMN &&
-      range.getNumColumns() === APFP.INTAKE.IDENTITY_COLUMN_COUNT &&
+      range.getColumn() === intakeIdentityColumns_().start &&
+      range.getNumColumns() === intakeIdentityColumns_().count &&
       /completed grant identity row/i.test(description);
   } catch (e) {
     return false;
   }
 }
-function checkHeaders_(errors, sheetName, headerRow, expected) {
+// Required headers must exist by name; their order and extra columns are allowed (extras are reported as warnings).
+function checkHeaders_(errors, sheetName, headerRow, expected, warnings) {
   const s = ss_().getSheetByName(sheetName);
   if (!s) { errors.push(`Missing sheet: ${sheetName}`); return; }
-  const actual = s.getRange(headerRow, 1, 1, expected.length).getDisplayValues()[0];
-  expected.forEach((h, i) => {
-    if (clean_(actual[i]) !== h)
-      errors.push(`${sheetName} header ${i + 1} should be "${h}"; found "${actual[i]}".`);
-  });
+  const gaps = headerGaps_(s.getRange(headerRow, 1, 1, s.getLastColumn()).getDisplayValues()[0], expected);
+  if (gaps.missing.length) errors.push(`${sheetName} is missing required header(s): ${gaps.missing.join(', ')}.`);
+  if (gaps.extra.length && warnings) warnings.push(`${sheetName} has extra column(s) the code leaves alone: ${gaps.extra.join(', ')}.`);
 }
 function preflightCentralHeaderSpecs_() {
   const rows = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS;
@@ -168,10 +164,10 @@ function runPreflightChecks() {
     });
     preflightCentralHeaderSpecs_().forEach(spec => {
       capture(`Header check — ${spec.sheetName}`, () =>
-        checkHeaders_(errors, spec.sheetName, spec.headerRow, spec.expected)
+        checkHeaders_(errors, spec.sheetName, spec.headerRow, spec.expected, warnings)
       );
     });
-    capture('Central Administration tables', () => checkAdminTables_(errors));
+    capture('Central Administration tables', () => checkAdminTables_(errors, warnings));
     capture('Phase 2 tracker tables', () => checkPhase2TrackerTables_(errors));
     capture('Disbursement tracker table', () => checkDisbursementTrackerTable_(errors));
     const setupContext = capture('Grant Setup template open/config', () => ({

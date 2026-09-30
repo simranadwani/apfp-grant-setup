@@ -57,8 +57,12 @@ function granteeDisbursementTable_(workbook, grantId) {
  const columns = columnsByHeader_(sheet, schema.HEADER_ROW, `Disbursement Documents for Grant ID ${grantId}`);
  return { sheet, width: columns.width, firstRow: schema.DATA_START_ROW, rows: schema.DATA_ROWS, col: columns.col };
 }
+// Live width of the Committed & Spent Tracker (extra columns such as the status columns are included).
+function disbWidth_(sheet) {
+ return Math.max(APFP.DISBURSEMENT_HEADERS.length, sheet.getLastColumn());
+}
 function disbHeaderMap_(sheet) {
- const width = Math.max(APFP.DISBURSEMENT_HEADERS.length, sheet.getLastColumn());
+ const width = disbWidth_(sheet);
  const headers = sheet.getRange(disbHeaderRow_(), 1, 1, width).getDisplayValues()[0];
  const map = {};
  headers.forEach((header, i) => { if (clean_(header)) map[key_(header)] = i; });
