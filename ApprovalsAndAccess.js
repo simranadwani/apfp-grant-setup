@@ -193,9 +193,11 @@ function guardCompletedIntakeIdentityEdit_(e) {
   });
   if (!touchesImmutable) return;
 
+  let reverted = false;
   for (let row = range.getRow(); row <= range.getLastRow(); row++) {
     const context = completedWorkspaceIntakeContext_(sheet, map, row);
     if (!context) continue;
+    reverted = true;
     const tech = context.tech.record;
     const grant = context.grant.record;
     setByHeaders_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, row, {
@@ -206,5 +208,9 @@ function guardCompletedIntakeIdentityEdit_(e) {
       'Grant Type': tech['Grant Type'] || grant['Grant Type'],
       'Primary Contact Email': tech['Primary Contact Email']
     });
+  }
+  if (reverted) {
+    try { ss_().toast('Locked on a completed grant. Use Correct Workspace Details for the grant details, or Retry/Reshare to change the Primary Contact Email.', 'APFP', 8); }
+    catch (error) { /* a toast is only a hint */ }
   }
 }

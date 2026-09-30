@@ -19,12 +19,12 @@ Stable IDs join everything: Grant ID, Organisation ID, Request ID, Workspace ID,
 `Disbursement Only` is a display label; the Technical Registry keeps `Workspace Created` for Transactional so no rule changes.
 
 ## 3. Buttons and what they do
-Buttons are drawings assigned to these functions. A workspace button **never writes an Action**; it runs every row whose Action a person (or the system after a failure) set to *Create Workspace*, *Retry Workspace* or *Retry Sharing*. The end-of-run message lists `Rows picked up`, the reason for every row that needs attention, and the slowest steps.
+Buttons are drawings assigned to these functions. A workspace button **never writes an Action**; it runs every row whose Action a person (or the system after a failure) set to *Create Workspace*, *Retry Workspace* or *Retry Sharing*. The end-of-run message lists `Rows picked up`, the reason for every row that needs attention, and nothing else.
 
 | Function | Purpose |
 |---|---|
 | `uiCreateWorkspace` | Create workspaces for all rows marked Create Workspace / Retry Workspace / Retry Sharing |
-| `uiRetryOrReshareWorkspace` | Opens the Retry / Reshare dialog for the selected row (change email, reshare); otherwise runs the marked rows |
+| `uiRetryOrReshareWorkspace` | Opens the Retry / Reshare dialog for the selected row that already has a workspace, even if its Action is set ("same email" reshares; "change email" moves access, updates the registries, the Setup workbook contact cell and — for the latest grant — the organisation contact, optionally emails the new address, and writes an audit line). With no such row selected it runs the marked rows |
 | `uiLockAndMigrateApprovedSetups`, `uiReopenSetupForChanges` | Approve → lock and archive a Setup; reopen it for changes |
 | `uiRefreshOutcomeProgress`, `uiRefreshSupport`, `uiRefreshDecisions`, `uiRefreshDecisionDocuments` | Refresh the central trackers from Active grants' workbooks. Unchanged workbooks are skipped; a broken one is reported and skipped |
 | `uiRefreshReportingForce` | Forget "unchanged" memory and re-read every Active workbook |

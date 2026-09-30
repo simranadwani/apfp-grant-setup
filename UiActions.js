@@ -21,9 +21,11 @@ function uiRetryOrReshareWorkspace() {
   const requestId = row ? clean_(row['Request ID']) : '', grantId = row ? clean_(row['Grant ID']) : '';
   const tech = requestId ? techByRequest_(requestId) : null;
   // The Technical Registry status decides (the Workspace Status shown on the row is display text and differs for Transactional).
-  const shareable = !!tech && ['completed', 'sharing pending', 'workspace created', 'disbursement only']
+  const shareable = !!tech && ['completed', 'sharing pending', 'workspace created', 'disbursement only', 'registry only']
     .includes(key_(tech.record['Workspace Status']));
-  if (!row || !shareable || APFP.INTAKE.PROCESS_ACTIONS.includes(clean_(row['Action']))) {
+  // A row that already has a workspace always opens the dialog, even if its Action is set (the dialog runs that row).
+  // Otherwise (no row selected, blank row, no workspace yet) the button runs the rows already marked.
+  if (!row || !shareable) {
     processRequestedActions();
     return;
   }
@@ -37,7 +39,8 @@ function uiRetryOrReshareWorkspace() {
     grantId,
     organisationName: clean_(row['Organisation Name']),
     financialYear: clean_(row['Financial Year']),
-    currentEmail: clean_(tech.record['Primary Contact Email'])
+    currentEmail: clean_(tech.record['Primary Contact Email']),
+    registryOnly: isRegistryOnlyRecord_(tech.record)
   };
   SpreadsheetApp.getUi().showModalDialog(
     template.evaluate().setWidth(470).setHeight(430),
@@ -63,11 +66,16 @@ function submitRetryReshareGrantFy(payload) {
      throw new Error('The selected Grant-FY record could not be verified.');
    const mode = key_(payload && payload.mode);
    const email = mode === 'change' ? clean_(payload.newEmail) : clean_(tech.record['Primary Contact Email']);
+   if (mode !== 'change' && isRegistryOnlyRecord_(tech.record))
+     throw new Error('This is a Registry Only grant: there is no workspace to reshare. Choose "Change the email" to update the contact.');
    const ok = mode === 'change'
-     ? transferGrantFyPrimaryEmail_(row, email, config_())
+     ? transferGrantFyPrimaryEmail_(row, email, config_(), { notify: !(payload && payload.notify === false) })
      : retrySharingForIntakeRow_(row, config_(), { email });
-   if (!ok) throw new Error('Retry/reshare needs attention. Review the selected row and try again.');
-   return `Grant-FY ${row.grantId} was shared successfully with ${email}.`;
+   if (!ok) throw new Error(row.failureReason || 'Retry/reshare needs attention. Review the selected row and try again.');
+   const done = isRegistryOnlyRecord_(tech.record)
+     ? `Primary Contact Email for Grant-FY ${row.grantId} is now ${email}.`
+     : `Grant-FY ${row.grantId} was shared successfully with ${email}.`;
+   return row.warning ? `${done}\n\nNeeds a follow-up: ${row.warning}` : done;
  } finally {
    lock.releaseLock();
  }

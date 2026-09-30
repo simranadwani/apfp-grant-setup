@@ -487,12 +487,12 @@ function hyperlinkFormula_(label, url) {
 function writeException_(data) {
  appendObject_(APFP.SHEETS.EXCEPTIONS, 2, {
    'Exception ID': id_('EXC'), 'Detected At': now_(), 'Exception Type': data.type || 'Automation Error',
-   'Severity': data.severity || 'Medium', 'Status': 'Open', 'Organisation ID': data.organisationId || '',
+   'Severity': data.severity || 'Medium', 'Status': data.status || 'Open', 'Organisation ID': data.organisationId || '',
    'Grant ID': data.grantId || '', 'Workspace ID': data.workspaceId || '',
    'Sheet or Folder': data.location || '', 'Field or File': data.field || '',
    'Issue Description': data.message || '',
    'Recommended Action': data.recommendedAction || 'Review the issue, correct it, and retry the relevant action.',
-   'Assigned To': '', 'Resolved At': '', 'Resolution Notes': '', 'Run ID': data.runId || ''
+   'Assigned To': '', 'Resolved At': data.status === 'Resolved' ? now_() : '', 'Resolution Notes': '', 'Run ID': data.runId || ''
  });
 }
 function friendlyErrorMessage_(code, error) {

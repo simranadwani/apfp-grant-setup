@@ -4,6 +4,20 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round L — production readiness (audit findings) and email change
+
+**Date:** 2026-09-30 · **TEST only, not yet in production**
+
+- **Old Setup workbooks** (`RegistrySync.js`): the Registry Export is read to the sheet's real width (a 60-column export no longer reads a 61st column) and a late field missing from an old export is left out instead of written as blank, so hand-keyed registry values are never erased.
+- **Double click / two operators** (`IntakeValidation.js`): `processRequestedActions` takes the lock before it reads the queue, so a second run cannot re-process rows the first one just finished (no second Request ID, no orphan registry record).
+- **Organisation Maturity** (`RegistryAndIDs.js`): rows are read and written by header name; an inserted column can no longer garble or duplicate rows.
+- **Push** (`DisbursementSync.js`): an edit made while a push runs keeps "Changed – push again"; a Disbursed row whose grant has no grantee workbook now shows `Failed: no grantee Disbursement Documents workbook…` instead of nothing.
+- **Time guard** 270 s → 210 s (`Config.js`): a row started near the limit can take a minute or more.
+- **Preflight** (`MenuAndChecks.js`): warns about invalid `PROTECTION_EDITORS` entries and an empty one; checks `CENTRAL_ADMIN_FOLDER_ID` is a reachable folder.
+- **Change Primary Contact Email** (`SharingAndEmail.js`, `UiActions.js`, `RetryReshareDialog.html`, `ApprovalsAndAccess.js`, `Utilities.js`): Retry/Reshare now always opens its dialog when the selected row has a workspace (even with an Action set). Changing the email also updates the Setup workbook's contact cell (so a later approval does not write the old address back), updates the organisation contact when this is its latest grant, handles Registry Only grants (records only), lists any folder that still has the old address, writes a resolved audit line to the Exceptions Log, and has a checkbox to skip the workspace email. Editing the locked email cell explains where to change it.
+- **Runbook** (`docs/PRODUCTION_ROLLOUT.md`): prerequisites, keep the DATA_SYNC_SCHEMA_VERSION row until sign-off, never delete whole config rows, Push before Sync, rollback notes.
+- **Tests:** `tests/email-change.test.js`, `tests/maturity-by-header.test.js`, additions to actions, disbursement-status and lists tests. 129 pass.
+
 ## Round K — extra columns are not warned about
 
 **Date:** 2026-09-30 · **TEST only** · `MenuAndChecks.js` `checkHeaders_` and `Utilities.js` `checkAdminTables_` no longer report "extra column(s) the code leaves alone" (adding a column such as Support Provided is normal). Missing required columns still fail. Tests and docs updated.
