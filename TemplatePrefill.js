@@ -30,8 +30,7 @@ function templateFieldConfigRows_(templateId) {
  FIELD_CONFIG_CACHE_[id] = rows;
  return rows;
 }
-function configureGeneratedWorkbook_(...args) { return timed_('Configure Setup workbook', () => configureGeneratedWorkbookUntimed_(...args)); }
-function configureGeneratedWorkbookUntimed_(setupSpreadsheet, request, organisationRecord, links, config) {
+function configureGeneratedWorkbook_(setupSpreadsheet, request, organisationRecord, links, config) {
   const fieldConfig = templateFieldConfigRows_(clean_(config.SETUP_TEMPLATE_ID));
   APFP.GENERATED_VISIBLE_SHEETS.forEach(sheetName => {
     if (!setupSpreadsheet.getSheetByName(sheetName)) {
@@ -39,13 +38,11 @@ function configureGeneratedWorkbookUntimed_(setupSpreadsheet, request, organisat
     }
   });
 
-  timed_('Setup: write links and prefill', () => {
-    writeGeneratedLinks_(setupSpreadsheet, links);
-    prefillGeneratedWorkbook_(setupSpreadsheet, request, organisationRecord, fieldConfig);
-    SpreadsheetApp.flush();
-  });
-  timed_('Setup: protect and verify', () => finaliseSetupWorkbookIntegrity_(setupSpreadsheet, fieldConfig));
-  timed_('Setup: placeholder check', () => verifyConfiguredWorkbook_(setupSpreadsheet, fieldConfig));
+  writeGeneratedLinks_(setupSpreadsheet, links);
+  prefillGeneratedWorkbook_(setupSpreadsheet, request, organisationRecord, fieldConfig);
+  SpreadsheetApp.flush();
+  finaliseSetupWorkbookIntegrity_(setupSpreadsheet, fieldConfig);
+  verifyConfiguredWorkbook_(setupSpreadsheet, fieldConfig);
 }
 
 function prefillGeneratedWorkbook_(spreadsheet, request, organisationRecord, fieldConfig) {

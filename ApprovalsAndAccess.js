@@ -183,8 +183,8 @@ function guardCompletedIntakeIdentityEdit_(e) {
   if (range.getRow() < APFP.INTAKE.START_ROW) return;
   const immutableHeaders = [
     'Financial Year', 'Grant Start Date', 'Grant End Date',
-    'Organisation Type', 'Organisation Name', 'Grant Type', 'Primary Contact Email'
-  ];
+    'Organisation Name', 'Grant Type', 'Primary Contact Email'
+  ]; // Organisation Type is correctable on a completed row (Correct Workspace Details).
   const sheet = range.getSheet();
   const map = headerMap_(sheet, APFP.INTAKE.HEADER_ROW);
   const touchesImmutable = immutableHeaders.some(header => {
@@ -202,7 +202,6 @@ function guardCompletedIntakeIdentityEdit_(e) {
       'Financial Year': tech['Financial Year'],
       'Grant Start Date': tech['Grant Start Date'],
       'Grant End Date': tech['Grant End Date'],
-      'Organisation Type': tech['Organisation Type'],
       'Organisation Name': tech['Organisation Name'],
       'Grant Type': tech['Grant Type'] || grant['Grant Type'],
       'Primary Contact Email': tech['Primary Contact Email']

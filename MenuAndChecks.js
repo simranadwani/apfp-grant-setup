@@ -93,8 +93,7 @@ function intakeIdentityColumns_() {
   const start = intakeColumn_('Financial Year');
   return { start, count: intakeColumn_('Grant Title') - start + 1 };
 }
-function protectCompletedIntakeRow_(...args) { return timed_('Protect intake row', () => protectCompletedIntakeRowUntimed_(...args)); }
-function protectCompletedIntakeRowUntimed_(rowNumber) {
+function protectCompletedIntakeRow_(rowNumber) {
   const s = sheet_(APFP.SHEETS.INTAKE),
     identity = intakeIdentityColumns_(),
     range = s.getRange(rowNumber, identity.start, 1, identity.count);

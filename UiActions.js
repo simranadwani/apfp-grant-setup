@@ -9,8 +9,7 @@ function selectedDataRow_(sheetName, headerRow) {
   return { sheet: sheet, rowNumber: range.getRow() };
 }
 function showToast_(message) {
-  const timing = slowestStepsSummary_(3);
-  SpreadsheetApp.getActive().toast(timing ? `${message} ${timing}` : message, 'APFP', timing ? 15 : 6);
+  SpreadsheetApp.getActive().toast(message, 'APFP', 6);
 }
 // Workspace buttons never write an Action. They run the rows a person (or the system, after a failure) has already marked.
 // Retry / Reshare additionally opens its dialog for the selected row when that row already has a workspace.
@@ -197,9 +196,7 @@ function uiRefreshDisbursementOptions() {
 function uiCorrectWorkspaceDetails() {
   const selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW);
   const result = correctWorkspaceDetailsForRow_(selected.rowNumber);
-  showToast_(
-    `Workspace details corrected for ${result.grantId}. No IDs, folders, sharing permissions or historical rows were changed.`
-  );
+  showToast_(`Workspace details corrected for ${result.grantId}.`);
   return result;
 }
 function uiPushDisbursements() {

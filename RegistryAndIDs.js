@@ -294,6 +294,9 @@ function correctWorkspaceDetailsForRow_(rowNumber) {
   if (amountApproved === '' || amountApproved == null || amountApproved < 0)
     throw new Error('Amount Approved must be a non-negative amount.');
 
+  const organisationType = clean_(row['Organisation Type']);
+  if (!['New Organisation', 'Returning Organisation'].includes(organisationType))
+    throw new Error('Organisation Type must be New Organisation or Returning Organisation.');
   const patch = {
     'Project Title': projectTitle,
     'Thematic Area': clean_(row['Thematic Area']),
@@ -308,6 +311,7 @@ function correctWorkspaceDetailsForRow_(rowNumber) {
   saveTech_(requestId, {
     'Project Title': projectTitle,
     'Amount Approved': amountApproved,
+    'Organisation Type': organisationType,
     'Last Error Code': '',
     'Last Error Message': ''
   });
@@ -320,6 +324,7 @@ function correctWorkspaceDetailsForRow_(rowNumber) {
     'Thematic Sub-area': patch['Thematic Sub-area'],
     'Proximity to Children / Beneficiary': patch['Proximity to Children / Beneficiary'],
     'Amount Approved': amountApproved,
+    'Organisation Type': organisationType,
     'Last Updated': now_()
   });
 
@@ -327,8 +332,7 @@ function correctWorkspaceDetailsForRow_(rowNumber) {
   return { grantId: grantId, projectTitle: projectTitle };
 }
 
-function upsertGrantShell_(...args) { return timed_('Save Grant Registry shell', () => upsertGrantShellUntimed_(...args)); }
-function upsertGrantShellUntimed_(grantId, organisationId, request, setupUrl, outcomeWorkbookUrl) {
+function upsertGrantShell_(grantId, organisationId, request, setupUrl, outcomeWorkbookUrl) {
  const existing = grantById_(grantId), timestamp = now_(), transactional = isTransactionalGrantType_(request.grantType),
    registryOnly = transactional || isDiscretionaryGrantType_(request.grantType),
    patch = {
@@ -349,11 +353,11 @@ function upsertGrantShellUntimed_(grantId, organisationId, request, setupUrl, ou
      'Setup Created At': registryOnly ? ((existing && existing.record['Setup Created At']) || '') : ((existing && existing.record['Setup Created At']) || timestamp),
      'Primary Contact Email': request.granteeEmail, 'Last Updated At': timestamp, 'Record Status': APFP.ACTIVE
    };
- const rowNumber = timed_('Grant Registry: write row', () => existing
+ const rowNumber = existing
    ? (setByHeaders_(APFP.SHEETS.GRANTS, 1, existing.rowNumber, patch), existing.rowNumber)
-   : appendObject_(APFP.SHEETS.GRANTS, 1, patch));
- timed_('Grant Registry: organisation entry', () => refreshOrganisationRegistryEntry_(organisationId, request.organisationName));
- timed_('Grant Registry: maturity rows', () => ensureOrganisationMaturityRowsForGrant_(grantId));
+   : appendObject_(APFP.SHEETS.GRANTS, 1, patch);
+ refreshOrganisationRegistryEntry_(organisationId, request.organisationName);
+ ensureOrganisationMaturityRowsForGrant_(grantId);
  return rowNumber;
 }
 function maturityCatalogue_() {
@@ -462,8 +466,7 @@ function patchDiffersFromRecord_(record, patch) {
    return comparable_(current) !== comparable_(next);
  });
 }
-function saveTech_(...args) { return timed_('Save Technical Registry', () => saveTechUntimed_(...args)); }
-function saveTechUntimed_(requestId, patch) {
+function saveTech_(requestId, patch) {
  const found = techByRequest_(requestId),
    base = Object.assign({ 'Request ID': requestId, 'Record Status': APFP.ACTIVE }, patch || {});
  if (!found) {

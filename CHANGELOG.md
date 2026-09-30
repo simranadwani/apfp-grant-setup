@@ -4,6 +4,14 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round I — clean messages; Organisation Type correctable
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**
+
+- **Timing output removed** (`Utilities.js`, `UiActions.js`, `IntakeValidation.js`, `ProtectionIntegrity.js`, `RegistryAndIDs.js`, `SharingAndEmail.js`, `TemplatePrefill.js`, `WorkspaceCreation.js`, `TrackerLinks.js`, `RegistrySync.js`, `MenuAndChecks.js`): `timed_`, `slowestStepsSummary_` and every timing wrapper are gone. Pop-ups and toasts show only the result; the run summary still lists "Rows picked up". Behaviour is otherwise identical.
+- **Correct Workspace Details also corrects Organisation Type** (`RegistryAndIDs.js`, `ApprovalsAndAccess.js`, `UiActions.js`): the cell may now be edited on a completed row (other identity cells stay locked). The button validates it (New / Returning Organisation), saves it to the Technical Registry and the row. No IDs, folders, sharing or workbooks change. Shorter success message.
+- **Tests:** `tests/correct-details.test.js`; timing test removed. 118 tests pass.
+
 ## Round H2 — unbound functions removed
 
 **Date:** 2026-09-30 · **TEST only** · Removed `uiCompleteSelectedSupport`, `uiRetryWorkspace`, `uiReshareWorkspace` (`UiActions.js`) and `uiResetDisbursementStatuses`: the owner confirmed no button uses them (Central Administration buttons: Create Workspace, Retry/Reshare, Lock & Migrate, Reopen Setup, Correct Workspace Details, Refresh Outcomes/Support/Decisions/Documents, Push Grant Status, Push to Grantee Workspaces, Refresh Organisations Options, Complete Rows).

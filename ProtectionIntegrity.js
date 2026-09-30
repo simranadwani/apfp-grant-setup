@@ -141,11 +141,11 @@ function applyWorkbookProtectionSpecs_(spreadsheet, specs) {
         'overlapping approved grantee-editable cells. Remove or adjust only those protections.'
       );
     }
-    timed_('Protection: set ranges', () => protection
+    protection
       .setDescription(spec.description || `APFP client protection - ${spec.sheetName}`)
       .setWarningOnly(false)
-      .setUnprotectedRanges(editableRanges));
-    timed_('Protection: restrict editors', () => hardenProtectionEditors_(protection, spreadsheet));
+      .setUnprotectedRanges(editableRanges);
+    hardenProtectionEditors_(protection, spreadsheet);
 
     if (spec.hidden === true && !sheet.isSheetHidden()) sheet.hideSheet();
     if (spec.hidden === false && sheet.isSheetHidden()) sheet.showSheet();
@@ -328,14 +328,12 @@ function markVerifiedThisRun_(spreadsheet) { VERIFIED_THIS_RUN_[spreadsheet.getI
 function verifiedThisRun_(spreadsheet) { return VERIFIED_THIS_RUN_[spreadsheet.getId()] === true; }
 function finaliseSetupWorkbookIntegrity_(spreadsheet, fieldConfig) {
   const specs = setupWorkbookProtectionSpecs_(fieldConfig);
-  timed_('Setup: remove admin sheets and set time zone', () => {
-    removeGeneratedAdminSheets_(spreadsheet);
-    ensureSpreadsheetTimeZone_(spreadsheet);
-  });
-  timed_('Setup: apply protections', () => applyWorkbookProtectionSpecs_(spreadsheet, specs));
-  timed_('Setup: flush', () => SpreadsheetApp.flush());
-  timed_('Setup: verify links', () => verifyGeneratedLinks_(spreadsheet));
-  timed_('Setup: verify protections', () => verifyWorkbookProtectionSpecs_(spreadsheet, specs));
+  removeGeneratedAdminSheets_(spreadsheet);
+  ensureSpreadsheetTimeZone_(spreadsheet);
+  applyWorkbookProtectionSpecs_(spreadsheet, specs);
+  SpreadsheetApp.flush();
+  verifyGeneratedLinks_(spreadsheet);
+  verifyWorkbookProtectionSpecs_(spreadsheet, specs);
   verifySpreadsheetTimeZone_(spreadsheet, 'Generated Grant Setup workbook');
   markVerifiedThisRun_(spreadsheet);
   return true;
@@ -344,19 +342,16 @@ function finaliseSetupWorkbookIntegrity_(spreadsheet, fieldConfig) {
 function finaliseOutcomeWorkbookIntegrity_(spreadsheet) {
   removeGeneratedAdminSheet_(spreadsheet, APFP.OUTCOME_TEMPLATE_SHEETS.FIELD_CONFIG);
   ensureSpreadsheetTimeZone_(spreadsheet);
-  timed_('Outcome: apply protections', () => applyOutcomeWorkbookProtections_(spreadsheet));
+  applyOutcomeWorkbookProtections_(spreadsheet);
   SpreadsheetApp.flush();
-  timed_('Outcome: verify links and protections', () => {
-    verifyOutcomeWorkbookLinks_(spreadsheet);
-    verifyOutcomeWorkbookProtections_(spreadsheet);
-  });
+  verifyOutcomeWorkbookLinks_(spreadsheet);
+  verifyOutcomeWorkbookProtections_(spreadsheet);
   verifySpreadsheetTimeZone_(spreadsheet, 'Generated Outcome Progress workbook');
   markVerifiedThisRun_(spreadsheet);
   return true;
 }
 
-function finaliseTransactionalWorkbookIntegrity_(...args) { return timed_('Protect Transactional workbook', () => finaliseTransactionalWorkbookIntegrityUntimed_(...args)); }
-function finaliseTransactionalWorkbookIntegrityUntimed_(spreadsheet) {
+function finaliseTransactionalWorkbookIntegrity_(spreadsheet) {
   ensureSpreadsheetTimeZone_(spreadsheet);
   applyTransactionalWorkbookProtections_(spreadsheet);
   SpreadsheetApp.flush();

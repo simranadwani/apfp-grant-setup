@@ -171,14 +171,3 @@ test('writeChangedSegments_ writes each contiguous run of changed cells once', (
   assert.equal(f('writeChangedSegments_')(sheet, 1, []), false);
 });
 
-test('timed_ returns the value, records time per label, and slowestStepsSummary_ lists only slow steps', () => {
-  const project = loadProject();
-  let now = 0;
-  project.ctx.Date = { now: () => now };
-  const timed = project.get('timed_');
-  assert.equal(timed('Copy template workbook', () => { now += 4000; return 'ok'; }), 'ok');
-  timed('Copy template workbook', () => { now += 6000; });
-  timed('Quick step', () => { now += 10; });
-  assert.throws(() => timed('Failing step', () => { now += 900; throw new Error('boom'); }), /boom/);
-  assert.equal(project.get('slowestStepsSummary_')(5), 'Slowest steps: Copy template workbook 10.0s (x2), Failing step 0.9s.');
-});
