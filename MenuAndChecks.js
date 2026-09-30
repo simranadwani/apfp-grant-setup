@@ -216,7 +216,7 @@ function runPreflightChecks() {
     if (key_(config.SEND_WORKSPACE_NOTIFICATION) !== 'yes')
       warnings.push('Workspace email notification is disabled.');
   }
-  const lines = [errors.length
+  const lines = [`Code version: ${APFP.CODE_VERSION}`, errors.length
     ? `FAIL — ${errors.length} blocking APFP issue(s).`
     : 'PASS — APFP preflight checks passed.'];
   errors.forEach((item, index) => lines.push(`${index + 1}. ${item}`));

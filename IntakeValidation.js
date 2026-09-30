@@ -255,5 +255,6 @@ function runSummaryMessage_(processed, success, needsAttention, failures, note) 
     failures.slice(0, 8).forEach(f => lines.push(`• Row ${f.rowNumber}${f.organisation ? ` (${f.organisation})` : ''}: ${f.reason}`));
     if (failures.length > 8) lines.push(`• …and ${failures.length - 8} more (see the Technical Registry).`);
   }
+  lines.push('', `Code version: ${APFP.CODE_VERSION}`);
   return lines.join('\n');
 }

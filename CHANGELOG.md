@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round N — visible code version
+
+`Config.js` `APFP.CODE_VERSION`, shown as the first line of the preflight result and at the end of every workspace run summary, so the deployed code can be identified at a glance (bump it every round). `docs/PRODUCTION_ROLLOUT.md`: update with `git fetch` + `git reset --hard` (never `clasp pull` first).
+
 ## Round M — Retry/Reshare explains itself
 
 **Date:** 2026-09-30 · **TEST only** · `UiActions.js`: `uiRetryOrReshareWorkspace` decides from facts (Request ID, workspace folder or Registry Only) instead of the Workspace Status text, and whenever it runs the marked rows instead of opening the dialog it says why in a toast (more than one row selected, no Request ID yet, no workspace folder yet). No message when nothing is selected on the sheet. Tests added (133 pass).

@@ -143,3 +143,9 @@ test('the after-sharing check (email given) always does the full verification, e
   assert.equal(warm.calls.filter(c => c === 'verifyTemplateProtections_').length, 1);
   assert.equal(warm.calls.filter(c => c === 'verifySpreadsheetTimeZone_').length, 2);
 });
+
+test('the run summary ends with the deployed code version', () => {
+  const p = loadProject();
+  const msg = p.get('runSummaryMessage_')(1, 1, 0, [], '');
+  assert.match(msg, /Code version: \d{4}-\d{2}-\d{2} round /);
+});
