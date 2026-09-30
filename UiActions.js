@@ -56,49 +56,6 @@ function refreshDropdownsFromConfig() {
   return plan.changed;
 }
 // One-time helper: adds the list / time-zone / financial-year settings to System - Configuration with today's values (never overwrites an existing row).
-// Clears (does not delete) System - Configuration rows whose key nothing reads, after asking. Clearing keeps the sheet's
-// layout and the catalogue columns to the right untouched; version history can restore anything.
-function removeUnusedConfigRows() {
-  const sheet = sheet_(APFP.SHEETS.CONFIG), last = sheet.getLastRow();
-  if (last < 3) return [];
-  const known = new Set(APFP.PREFLIGHT_SCHEMA.KNOWN_CONFIG_KEYS.map(key_)),
-    keys = sheet.getRange(3, 1, last - 2, 1).getValues().map(row => clean_(row[0])),
-    rows = [];
-  keys.forEach((name, index) => { if (name && !known.has(key_(name)) && !/^LIST_/i.test(name)) rows.push({ name, row: index + 3 }); });
-  if (!rows.length) { showToast_('System - Configuration has no unused rows.'); return []; }
-  const ui = SpreadsheetApp.getUi();
-  if (ui.alert('Clear unused settings?', `These rows are never read by the code and will be cleared:\n\n${rows.map(r => r.name).join('\n')}`, ui.ButtonSet.OK_CANCEL) !== ui.Button.OK) return [];
-  rows.forEach(item => sheet.getRange(item.row, 1, 1, Math.min(sheet.getLastColumn(), 8)).clearContent());
-  CONFIG_CACHE_ = null;
-  showToast_(`Cleared ${rows.length} unused setting row(s).`);
-  return rows.map(r => r.name);
-}
-function seedListsFromDefaults() {
-  const sheet = sheet_(APFP.SHEETS.CONFIG), last = sheet.getLastRow(),
-    existing = new Set(last >= 3 ? sheet.getRange(3, 1, last - 2, 1).getValues().map(row => key_(row[0])) : []),
-    wanted = [['FIRST_FY', '2026-27'], ['FY_YEARS_AHEAD', '3'], ['TIME_ZONE', APFP.TIME_ZONE]]
-      .concat(listNames_().filter(name => name !== 'FINANCIAL_YEARS').map(name => [`LIST_${name}`, APFP.LIST_DEFAULTS[name].join('|')]))
-      .filter(([name]) => !existing.has(key_(name)));
-  if (!wanted.length) { showToast_('System - Configuration already has every list setting.'); return []; }
-  const start = Math.max(3, last + 1), end = start + wanted.length - 1;
-  if (end > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), end - sheet.getMaxRows());
-  sheet.getRange(start, 1, wanted.length, 2).setValues(wanted);
-  // Fill the descriptive columns by header name so a moved column still gets the right values.
-  const headers = sheet.getRange(2, 1, 1, Math.max(sheet.getLastColumn(), 6)).getDisplayValues()[0].map(clean_);
-  const fill = (name, value) => {
-    const col = headers.findIndex(h => key_(h) === key_(name)) + 1;
-    if (col > 0) sheet.getRange(start, col, wanted.length, 1).setValues(wanted.map(() => [typeof value === 'function' ? value() : value]));
-  };
-  fill('Active', 'Yes');
-  fill('Editable', 'Yes');
-  fill('Value Type', 'Text');
-  fill('Description', 'Dropdown / setting seeded from defaults; edit the value and run refreshDropdownsFromConfig.');
-  fill('Last Updated', () => now_());
-  fill('Last Updated By', () => actorEmail_());
-  CONFIG_CACHE_ = null;
-  showToast_(`Added ${wanted.length} setting(s) to System - Configuration: ${wanted.map(item => item[0]).join(', ')}. Run "refreshDropdownsFromConfig" next if a list changed.`);
-  return wanted.map(item => item[0]);
-}
 function submitRetryReshareGrantFy(payload) {
  const lock = LockService.getScriptLock();
  if (!lock.tryLock(30000)) throw new Error('Another APFP automation run is active. Try again shortly.');

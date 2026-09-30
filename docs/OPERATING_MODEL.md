@@ -34,7 +34,7 @@ Buttons are drawings assigned to these functions. A workspace button **never wri
 | `uiCorrectWorkspaceDetails` | Correct a grant title / details everywhere, including old disbursement rows |
 | `uiBackupCentralAdministration` | Copy this sheet into `<CENTRAL_ADMIN_FOLDER_ID>/Backups` (do this before bulk operations) |
 | `runPreflightChecks` | Health check: settings, sheets, headers by name, Tables, dropdowns, templates, protections, time zones, email templates |
-| `seedListsFromDefaults`, `refreshDropdownsFromConfig` | One-time seeding of list settings; push edited lists into the dropdowns |
+| `refreshDropdownsFromConfig` | Push edited `LIST_…` settings into the Table dropdowns (lists fall back to built-in defaults when a row is missing) |
 
 Triggers (manual, installed by the operating account): `handleCentralAdminOpen` (on open) and `handleCentralAdminEdit` (on edit).
 

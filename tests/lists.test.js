@@ -56,30 +56,6 @@ test('time zone comes from config with the built-in fallback', () => {
   assert.equal(project({}).get('timeZone_')(), 'Asia/Kolkata');
 });
 
-test('seedListsFromDefaults adds only the missing settings, and is safe to run twice', () => {
-  const rows = [['Setting'], ['ROOT_FOLDER_ID', 'x', '', '', '', 'Yes'], ['LIST_THEMATIC_AREAS', 'Education', '', '', '', 'Yes']];
-  const writes = [];
-  const sheet = {
-    getLastRow: () => rows.length, getLastColumn: () => 6, getMaxRows: () => 500, insertRowsAfter() {},
-    getRange: (row, col, n, m) => ({
-      getDisplayValues: () => [['Setting', 'Value', 'Value Type', 'Description', 'Editable', 'Active', 'Last Updated']],
-      getValues: () => rows.slice(row - 1, row - 1 + n).map(r => r.slice(col - 1, col - 1 + m)),
-      setValues: values => { writes.push({ row, col, values }); values.forEach((v, i) => { rows[row - 1 + i] = rows[row - 1 + i] || []; v.forEach((cell, j) => { rows[row - 1 + i][col - 1 + j] = cell; }); }); }
-    })
-  };
-  // rows[0] is row 1 (title), rows[1] row 2 (headers) -> data starts at row 3
-  rows.splice(0, rows.length, ['TITLE'], ['Setting'], ['ROOT_FOLDER_ID', 'x', '', '', '', 'Yes'], ['LIST_THEMATIC_AREAS', 'Education', '', '', '', 'Yes']);
-  const p = loadProject();
-  p.override('sheet_', () => sheet);
-  p.override('showToast_', () => {});
-  const added = plain(p.get('seedListsFromDefaults')());
-  assert.deepEqual(added, ['FIRST_FY', 'FY_YEARS_AHEAD', 'TIME_ZONE', 'LIST_THEMATIC_SUBAREAS', 'LIST_PROXIMITY', 'LIST_PROGRAMME_STATUSES']);
-  assert.equal(rows.find(r => r[0] === 'LIST_THEMATIC_AREAS')[1], 'Education', 'existing row untouched');
-  assert.equal(rows.find(r => r[0] === 'TIME_ZONE')[1], 'Asia/Kolkata');
-  assert.equal(rows.find(r => r[0] === 'LIST_PROGRAMME_STATUSES')[5], 'Yes');
-  assert.deepEqual(plain(p.get('seedListsFromDefaults')()), []);
-});
-
 test('KNOWN_CONFIG_KEYS lists every setting the code reads (keeps the "unused row" warning honest)', () => {
   const known = new Set(plain(loadProject().get('APFP')).PREFLIGHT_SCHEMA.KNOWN_CONFIG_KEYS);
   const found = new Set();

@@ -10,7 +10,7 @@ everything else listed under "Repo only" stays in git (see `.claspignore`).
 
 - **Preflight dropdown check** (`Utilities.js` `checkAdminTables_`): a Table dropdown passes when every option the code relies on is present — order, blanks and extra options no longer matter; the error names the missing option(s).
 - **No blank option** (`Config.js`): the Setup Review Status dropdown no longer lists an empty first value.
-- **`removeUnusedConfigRows`** (`UiActions.js`): asks, then clears the System - Configuration rows nothing reads (the ones preflight warns about). Rows are cleared, not deleted, so the catalogue columns beside them are untouched.
+- **One-time setup functions removed** (`UiActions.js`): `seedListsFromDefaults` and `removeUnusedConfigRows` (added earlier in this round) are gone — one-time sheet setup (adding columns/settings rows, deleting unused rows) is done by hand; lists fall back to built-in defaults when a `LIST_…` row is missing. Docs updated.
 
 ## Round G — Transactional Upload Folder link, obsolete code removed
 
