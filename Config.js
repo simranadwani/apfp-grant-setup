@@ -415,6 +415,6 @@ const APFP = Object.freeze({
    BUDGET_UTILISATION: 'Budget Allocation & Fund Utilisation',
    DISBURSEMENT: 'Disbursement Documents', APPROVED_SETUPS: 'Approved Grant Setups'
  },
- EXECUTION_GUARD_MS: 270000,
+ EXECUTION_GUARD_MS: 210000,
  ACTIVE: 'Active'
 });

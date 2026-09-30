@@ -196,6 +196,17 @@ function runPreflightChecks() {
     }
     capture('Restricted/Unrestricted email template', () => workspaceEmailTemplateBlock_(config, 'RESTRICTED_UNRESTRICTED'));
     capture('Transactional email template', () => workspaceEmailTemplateBlock_(config, 'TRANSACTIONAL'));
+    capture('Protection editors setting', () => {
+      const raw = clean_(config.PROTECTION_EDITORS);
+      const bad = raw ? raw.split(/[\s,;|]+/).map(clean_).filter(token => token && !validEmail_(token)) : [];
+      if (bad.length) warnings.push(`PROTECTION_EDITORS has entries that are not valid e-mail addresses and are ignored: ${bad.join(', ')}.`);
+      if (!raw) warnings.push('PROTECTION_EDITORS is empty: only the file owner and the running account can change protections.');
+    });
+    capture('Backup folder setting', () => {
+      const id = clean_(config.CENTRAL_ADMIN_FOLDER_ID);
+      if (!id) { warnings.push('CENTRAL_ADMIN_FOLDER_ID is empty: the Backup button cannot save a copy.'); return; }
+      DriveApp.getFolderById(id).getName();
+    });
     capture('Configuration keys in use', () => {
       const sheet = sheet_(APFP.SHEETS.CONFIG), last = sheet.getLastRow(), known = new Set(APFP.PREFLIGHT_SCHEMA.KNOWN_CONFIG_KEYS.map(key_)),
         unused = last < 3 ? [] : sheet.getRange(3, 1, last - 2, 1).getValues().map(row => clean_(row[0]))

@@ -106,6 +106,12 @@ function pushDisbursements_() {
       const workbook = disbursementWorkbookForGrant_(grantId);
       if (!workbook) {
         if (disbursementIsCentralOnly_(grantId)) items.forEach(item => { pushState[item.rowNumber] = names.NOT_APPLICABLE; });
+        else {
+          // A grant that should have a grantee workbook but has none must be visible, not silently skipped.
+          const problem = new Error('no grantee Disbursement Documents workbook was found');
+          result.failures.push({ grantId, message: problem.message });
+          items.forEach(item => { pushState[item.rowNumber] = shortFailure_(problem); });
+        }
         return;
       }
       result.changedRows += pushItemsToWorkbook_(workbook, grantId, items);
@@ -116,7 +122,19 @@ function pushDisbursements_() {
       items.forEach(item => { pushState[item.rowNumber] = shortFailure_(error); });
     }
   });
-  if (status.push != null) writeColumnValues_(central.sheet, status.push, pushState);
+  if (status.push != null) {
+    // An operator edit made while this run was working marks the row "Changed – push again"; that must survive.
+    const rowNumbers = Object.keys(pushState).map(Number);
+    if (rowNumbers.length) {
+      const first = Math.min.apply(null, rowNumbers), last = Math.max.apply(null, rowNumbers),
+        current = central.sheet.getRange(first, status.push + 1, last - first + 1, 1).getValues();
+      rowNumbers.forEach(rowNumber => {
+        const before = key_(central.rows[rowNumber - central.firstRow][status.push]), now = key_(current[rowNumber - first][0]);
+        if (pushState[rowNumber] === names.PUSHED && now === key_(names.CHANGED) && before !== key_(names.CHANGED)) delete pushState[rowNumber];
+      });
+    }
+    writeColumnValues_(central.sheet, status.push, pushState);
+  }
   if (status.sync != null) {
     const syncUpdates = {};
     Object.keys(pushState).forEach(rowNumber => {

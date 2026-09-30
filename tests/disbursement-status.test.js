@@ -176,3 +176,27 @@ test('without the status columns push and sync behave as before (all rows checke
   assert.equal(opened.length, 3, 'every run opens the workbook when there is no status column');
   assert.equal(cellAt(c, 3, 'Donation Receipt Link'), RECEIPT);
 });
+
+test('an edit made while a push is running keeps "Changed – push again"', () => {
+  const p = loadProject();
+  const c = central(p, [disbursed(p, 'G1', 'DISB-2627-0001', 500000)], [PUSH, SYNC]);
+  wire(p, c, { G1: grantee() });
+  const base = p.get('disbursementWorkbookForGrant_');
+  p.override('disbursementWorkbookForGrant_', grantId => {
+    const workbook = base(grantId);
+    c.grid[2][col(c, PUSH)] = 'Changed – push again'; // the operator edits the row mid-run
+    return workbook;
+  });
+  p.get('pushDisbursements_')();
+  assert.equal(cellAt(c, 3, PUSH), 'Changed – push again');
+});
+
+test('a disbursed row whose grant has no grantee workbook shows a visible failure', () => {
+  const p = loadProject();
+  const c = central(p, [disbursed(p, 'G9', 'DISB-2627-0009', 100)], [PUSH, SYNC]);
+  wire(p, c, {});
+  p.override('disbursementIsCentralOnly_', () => false);
+  const result = p.get('pushDisbursements_')();
+  assert.equal(result.failures.length, 1);
+  assert.match(cellAt(c, 3, PUSH), /^Failed: no grantee Disbursement Documents workbook/);
+});
