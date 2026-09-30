@@ -335,6 +335,7 @@ function checkAdminTables_(errors, warnings, specs) {
      spec.COLUMNS.forEach((expected, index) => {
        const actual = columns.find(c => key_(c.columnName) === key_(expected.NAME));
        if (!actual) { errors.push(`${spec.TABLE_NAME} is missing required column "${expected.NAME}".`); return; }
+       if (expected.ANY_TYPE) return;
        const reportedType = clean_(actual.columnType).toUpperCase(),
          actualType = !reportedType || reportedType === 'UNSPECIFIED'
            ? 'COLUMN_TYPE_UNSPECIFIED' : reportedType;

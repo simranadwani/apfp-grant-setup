@@ -4,6 +4,17 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round F — FCRA Registration Status and Foreign Funding % are required fields
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes (small) · **TEST only**
+
+- **Why:** the owner confirmed `FCRA Registration Status` (Organisation Registry) and `Foreign Funding — Percentage of Total Annual Funding` (Grant Registry) are required, not optional extras.
+- **Schema** (`Config.js`): both added to `ORGANISATION_HEADERS` (now 43, position 43) / `GRANT_HEADERS` (now 61, position 61) and to the `ADMIN_TABLES` columns. Their Table type/dropdown is not checked (`ANY_TYPE`), only that the column exists, because the live Table types are set by the owner.
+- **Preflight** (`Utilities.js`): honours `ANY_TYPE`; a missing column is now an error, never an "extra column" warning.
+- **Registry Export read** (`RegistrySync.js`): `setupRegistryExportRecords_` reads the org and grant blocks by header name (extra/reordered columns fine, missing core header named in the error). Older workbooks lacking the two new fields read them as blank instead of failing.
+- **Seed function** (`UiActions.js`): `seedListsFromDefaults` fills Active / Editable / Value Type / Description / Last Updated columns by header name.
+- **Tests:** schema snapshot (43/61, Table columns equal the header lists), export read by header incl. old workbooks. 117 tests pass.
+
 ## Round D — empty rows, documentation and the production runbook
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes (small) · **TEST only**

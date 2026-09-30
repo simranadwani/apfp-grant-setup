@@ -66,7 +66,18 @@ function seedListsFromDefaults() {
   const start = Math.max(3, last + 1), end = start + wanted.length - 1;
   if (end > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), end - sheet.getMaxRows());
   sheet.getRange(start, 1, wanted.length, 2).setValues(wanted);
-  sheet.getRange(start, 6, wanted.length, 1).setValues(wanted.map(() => ['Yes']));
+  // Fill the descriptive columns by header name so a moved column still gets the right values.
+  const headers = sheet.getRange(2, 1, 1, Math.max(sheet.getLastColumn(), 6)).getDisplayValues()[0].map(clean_);
+  const fill = (name, value) => {
+    const col = headers.findIndex(h => key_(h) === key_(name)) + 1;
+    if (col > 0) sheet.getRange(start, col, wanted.length, 1).setValues(wanted.map(() => [typeof value === 'function' ? value() : value]));
+  };
+  fill('Active', 'Yes');
+  fill('Editable', 'Yes');
+  fill('Value Type', 'Text');
+  fill('Description', 'Dropdown / setting seeded from defaults; edit the value and run refreshDropdownsFromConfig.');
+  fill('Last Updated', () => now_());
+  fill('Last Updated By', () => actorEmail_());
   CONFIG_CACHE_ = null;
   showToast_(`Added ${wanted.length} setting(s) to System - Configuration: ${wanted.map(item => item[0]).join(', ')}. Run "refreshDropdownsFromConfig" next if a list changed.`);
   return wanted.map(item => item[0]);

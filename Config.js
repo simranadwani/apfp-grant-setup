@@ -219,7 +219,8 @@ const APFP = Object.freeze({
    'PAN Card Link', 'TAN Card Link', 'Latest Annual Report Link',
    'Financial Audit Report Link', 'CSR Registration Link', 'Registration Certificate Link',
    'Record Status', 'Source Setup Workbook URL', 'Master Data Synced At', 'Template Schema Version',
-   'FCRA Registration Expiry Date', 'Section 12A Registration Expiry Date', 'Section 80G Expiry Date'
+   'FCRA Registration Expiry Date', 'Section 12A Registration Expiry Date', 'Section 80G Expiry Date',
+   'FCRA Registration Status'
  ],
  GRANT_HEADERS: [
    'Grant ID', 'Financial Year', 'Grant Start Quarter', 'Organisation ID', 'Organisation Name',
@@ -239,7 +240,8 @@ const APFP = Object.freeze({
    'Setup Created At', 'Last Updated At', 'Source Setup Workbook URL', 'Master Data Synced At',
    'Template Schema Version', 'Team Size — Previous FY', 'Employee Attrition — Previous Snapshot',
    'Attrition Context / Notes — Previous Snapshot',
-   'Primary Beneficiary Group', 'Primary Beneficiary Count'
+   'Primary Beneficiary Group', 'Primary Beneficiary Count',
+   'Foreign Funding — Percentage of Total Annual Funding'
  ],
  LEADERSHIP_HEADERS: [
    'Organisation ID', 'Role', 'Name', 'Designation', 'Email', 'Contact', 'LinkedIn Profile',
@@ -343,7 +345,9 @@ const APFP = Object.freeze({
        { NAME: 'Template Schema Version', TYPE: 'TEXT' },
        { NAME: 'FCRA Registration Expiry Date', TYPE: 'DATE' },
        { NAME: 'Section 12A Registration Expiry Date', TYPE: 'DATE' },
-       { NAME: 'Section 80G Expiry Date', TYPE: 'DATE' }
+       { NAME: 'Section 80G Expiry Date', TYPE: 'DATE' },
+       // Required. Live Table type/dropdown may differ from TEXT, so the preflight only checks the column exists.
+       { NAME: 'FCRA Registration Status', TYPE: 'TEXT', ANY_TYPE: true }
      ]
    },
    {
@@ -391,7 +395,8 @@ const APFP = Object.freeze({
        { NAME: 'Employee Attrition — Previous Snapshot', TYPE: 'DOUBLE' },
        { NAME: 'Attrition Context / Notes — Previous Snapshot', TYPE: 'TEXT' },
        { NAME: 'Primary Beneficiary Group', TYPE: 'TEXT' },
-       { NAME: 'Primary Beneficiary Count', TYPE: 'DOUBLE' }
+       { NAME: 'Primary Beneficiary Count', TYPE: 'DOUBLE' },
+       { NAME: 'Foreign Funding — Percentage of Total Annual Funding', TYPE: 'TEXT', ANY_TYPE: true }
      ]
    }
  ],

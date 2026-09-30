@@ -60,8 +60,9 @@ test('seedListsFromDefaults adds only the missing settings, and is safe to run t
   const rows = [['Setting'], ['ROOT_FOLDER_ID', 'x', '', '', '', 'Yes'], ['LIST_THEMATIC_AREAS', 'Education', '', '', '', 'Yes']];
   const writes = [];
   const sheet = {
-    getLastRow: () => rows.length, getMaxRows: () => 500, insertRowsAfter() {},
+    getLastRow: () => rows.length, getLastColumn: () => 6, getMaxRows: () => 500, insertRowsAfter() {},
     getRange: (row, col, n, m) => ({
+      getDisplayValues: () => [['Setting', 'Value', 'Value Type', 'Description', 'Editable', 'Active', 'Last Updated']],
       getValues: () => rows.slice(row - 1, row - 1 + n).map(r => r.slice(col - 1, col - 1 + m)),
       setValues: values => { writes.push({ row, col, values }); values.forEach((v, i) => { rows[row - 1 + i] = rows[row - 1 + i] || []; v.forEach((cell, j) => { rows[row - 1 + i][col - 1 + j] = cell; }); }); }
     })
@@ -90,4 +91,29 @@ test('KNOWN_CONFIG_KEYS lists every setting the code reads (keeps the "unused ro
   });
   const missing = [...found].filter(k => !known.has(k));
   assert.deepEqual(missing, [], `add to APFP.PREFLIGHT_SCHEMA.KNOWN_CONFIG_KEYS: ${missing.join(', ')}`);
+});
+
+test('setupRegistryExportRecords_ reads by header name and tolerates old workbooks lacking the two newer fields', () => {
+  const p = loadProject(), A = plain(p.get('APFP'));
+  const build = (orgHeaders, grantHeaders) => {
+    const grid = [[], orgHeaders, orgHeaders.map(h => 'v:' + h), [], [], grantHeaders, grantHeaders.map(h => 'g:' + h)];
+    return {
+      getSheetByName: () => ({
+        isSheetHidden: () => true, getLastColumn: () => 70,
+        getRange: (r, c, n, w) => ({
+          getDisplayValues: () => [(grid[r - 1] || []).slice(0, w)],
+          getValues: () => [(grid[r - 1] || []).slice(0, w)]
+        })
+      })
+    };
+  };
+  // extra + reordered columns are fine
+  const org = ['Extra'].concat(A.ORGANISATION_HEADERS.slice().reverse()), grant = A.GRANT_HEADERS.slice().reverse();
+  const out = plain(p.get('setupRegistryExportRecords_')(build(org, grant)));
+  assert.equal(out.organisation['FCRA Registration Status'], 'v:FCRA Registration Status');
+  assert.equal(out.grant['Foreign Funding — Percentage of Total Annual Funding'], 'g:Foreign Funding — Percentage of Total Annual Funding');
+  // an older workbook without the two newer fields still reads (blank); a missing core header is an error
+  const oldOrg = A.ORGANISATION_HEADERS.filter(h => h !== 'FCRA Registration Status'), oldGrant = A.GRANT_HEADERS.filter(h => !/^Foreign Funding/.test(h));
+  assert.equal(plain(p.get('setupRegistryExportRecords_')(build(oldOrg, oldGrant))).organisation['FCRA Registration Status'], '');
+  assert.throws(() => p.get('setupRegistryExportRecords_')(build(oldOrg.filter(h => h !== 'PAN Number'), oldGrant)), /missing the column "PAN Number"/);
 });

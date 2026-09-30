@@ -56,6 +56,14 @@ test('schema contract snapshot (intentionally updated when a phase changes the s
   assert.equal(apfp.INTAKE.HEADERS.length, 32);
   assert.equal(apfp.TECH_HEADERS.length, 53);
   assert.equal(apfp.DISBURSEMENT_HEADERS.length, 16);
+  // FCRA Registration Status and Foreign Funding are REQUIRED fields (not extras).
+  assert.equal(apfp.ORGANISATION_HEADERS.length, 43);
+  assert.equal(apfp.GRANT_HEADERS.length, 61);
+  assert.ok(apfp.ORGANISATION_HEADERS.includes('FCRA Registration Status'));
+  assert.ok(apfp.GRANT_HEADERS.includes('Foreign Funding — Percentage of Total Annual Funding'));
+  const tableNames = name => apfp.ADMIN_TABLES.find(t => t.TABLE_NAME === name).COLUMNS.map(c => c.NAME);
+  assert.deepEqual(tableNames('OrganisationRegistry'), apfp.ORGANISATION_HEADERS);
+  assert.deepEqual(tableNames('GrantRegistry'), apfp.GRANT_HEADERS);
   assert.equal(apfp.PREFLIGHT_SCHEMA.OUTCOME_TEMPLATE.TOTAL_COLUMNS, 26);
   assert.deepEqual(apfp.PREFLIGHT_SCHEMA.OUTCOME_TEMPLATE.EDITABLE_RANGES,
     ['F5:F14', 'H5:K14', 'M5:P14', 'R5:U14', 'W5:Z14']);
