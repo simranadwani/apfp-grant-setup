@@ -40,7 +40,10 @@ Owner adds two columns at the END of `6. Committed & Spent Tracker` (TEST first)
 1. `Push Status`: blank/`Pending`, `Pushed`, `Changed – push again`, `Failed: <reason>`.
 2. `Document Sync Status`: `Waiting for push`, `Awaiting documents`, `Partial (1 of 2 links)`, `Synced`.
 Rules: Push visits only Disbursed rows not yet Pushed; Sync visits only rows not yet Synced; grants with nothing to do are not opened.
-Editing Actual Date / Actual Amount / Status / Organisation on a Pushed row resets it. The owner can type `Pending` to force a redo.
+Editing Actual Date / Actual Amount / Status / Organisation on a Pushed row resets it automatically.
+**These two columns are system-controlled: Anagha (and other operators) never fill them.** Only the script writes them; a redo is a button action
+("Reset statuses for selected rows"), not typing. Protect the columns with *warning-only* protection (grey shading), never a hard lock: buttons run as the
+person who clicks them, so a hard lock would stop the script writing as well.
 Failure reasons go into the status text (visible feedback; there are no cell notes by design). A full-check variant re-verifies Synced rows.
 Without the columns the code behaves as today. Outcome/Support get **no** per-row processed column (data changes all year); instead unchanged
 workbooks are skipped using a per-grant "last read" time stored in `System - Technical Registry`. Nothing is added to Support.
