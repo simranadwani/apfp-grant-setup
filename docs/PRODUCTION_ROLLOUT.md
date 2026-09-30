@@ -36,7 +36,7 @@ git pull origin claude/gifted-allen-0a626q
 npm test
 clasp push -P .clasp.prod.json
 ```
-`npm test` must show all tests passing. `clasp push` asks nothing else; the script is replaced with this version (the old `V15Actions.js` is removed automatically).
+`npm test` must show all tests passing. The manifest now also lists the `script.container.ui` scope (needed to open the Retry/Reshare dialog): after the push, open the Apps Script editor once, run any function (for example `runPreflightChecks`) and click **Allow** so the new permission is granted; other users are asked once on their next button click. `clasp push` asks nothing else; the script is replaced with this version (the old `V15Actions.js` is removed automatically).
 Leave the `DATA_SYNC_SCHEMA_VERSION` row in place for now (see step 0b); nothing reads it in the new code, and preflight only warns about it. Delete it after sign-off, together with any V14.1 / V15.0 description text.
 
 ## 4. One-time sheet changes in production (in this order)

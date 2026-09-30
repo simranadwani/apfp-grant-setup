@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round L2 — dialog permission
+
+`appsscript.json`: added the `https://www.googleapis.com/auth/script.container.ui` scope. Without it the manifest's explicit scope list blocked `Ui.showModalDialog`, so the Retry/Reshare dialog failed with "Specified permissions are not sufficient". After `clasp push`, run any function once from the editor and click Allow (a one-time consent; production needs the same step).
+
 ## Round L — production readiness (audit findings) and email change
 
 **Date:** 2026-09-30 · **TEST only, not yet in production**
