@@ -480,7 +480,8 @@ function saveTechUntimed_(requestId, patch) {
  if (!patchDiffersFromRecord_(found.record, base)) return found;
  const payload = Object.assign({}, base, { 'Last Updated At': now_() }),
    record = Object.assign({}, found.record, payload);
- setByHeaders_(APFP.SHEETS.TECHNICAL, 2, found.rowNumber, payload);
+ // The cached record is current (every write in this run updates it), so the row is not re-read from the sheet.
+ setByHeaders_(APFP.SHEETS.TECHNICAL, 2, found.rowNumber, payload, found.record);
  return { rowNumber: found.rowNumber, record };
 }
 function updateGrantStatus_(grantId, status) {

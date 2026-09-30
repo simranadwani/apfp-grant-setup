@@ -243,7 +243,8 @@ function upsertTrackerObjects_(sheet, headerRow, label, desiredObjects, keyHeade
   const keyIndexes = keyHeaders.map(header => cols.col(header));
   const rows = desiredObjects.map(object => {
     const row = new Array(cols.width).fill(undefined);
-    Object.keys(object).forEach(header => { if (cols.has(header)) row[cols.col(header)] = object[header] == null ? '' : object[header]; });
+    // undefined leaves the cell as it is (used when a source could not be read this time); null / '' clear it.
+    Object.keys(object).forEach(header => { if (cols.has(header) && object[header] !== undefined) row[cols.col(header)] = object[header] === null ? '' : object[header]; });
     return row;
   });
   return upsertTrackerRowsByKey_(sheet, cols.width, rows, keyIndexes, true);
@@ -276,6 +277,66 @@ function activeReportingGrants_() {
     key_(grant['Record Status']) === 'active' && key_(grant['Grant Status']) === 'active');
 }
 
+// ---- Refresh safety: one broken workbook never stops the others, and unchanged workbooks are not re-read ----
+// Per grant and per kind of read, the workbook's Drive "last updated" time from the last successful read is kept in Script Properties
+// (no sheet column needed). A workbook that has not changed since is skipped; its central rows simply stay as they are.
+// uiRefreshReportingForce clears the memory so everything is read again.
+let REFRESH_ISSUES_ = [];
+let REFRESH_SKIPPED_ = 0;
+let READ_STATE_CACHE_ = null;
+let FORCE_FULL_REFRESH_ = false;
+function beginRefresh_() { REFRESH_ISSUES_ = []; REFRESH_SKIPPED_ = 0; return Date.now(); }
+function refreshNote_() {
+  const parts = [];
+  if (REFRESH_SKIPPED_) parts.push(`${REFRESH_SKIPPED_} unchanged workbook(s) skipped.`);
+  if (REFRESH_ISSUES_.length) parts.push(`${REFRESH_ISSUES_.length} grant(s) skipped because of a problem: ` +
+    REFRESH_ISSUES_.slice(0, 3).map(item => `${item.grantId} — ${item.message}`).join('; ') + (REFRESH_ISSUES_.length > 3 ? '; …' : ''));
+  return parts.length ? ` ${parts.join(' ')}` : '';
+}
+function readState_() {
+  if (!READ_STATE_CACHE_) {
+    try { READ_STATE_CACHE_ = PropertiesService.getScriptProperties().getProperties() || {}; } catch (error) { READ_STATE_CACHE_ = {}; }
+  }
+  return READ_STATE_CACHE_;
+}
+function readStateKey_(kind, grantId) { return `rd|${kind}|${key_(grantId)}`; }
+// { changed, stamp } for one grant's workbook; anything unknown counts as changed (never skips by mistake).
+function workbookChanged_(kind, grantId, url) {
+  if (FORCE_FULL_REFRESH_) return { changed: true, stamp: 0 };
+  try {
+    const stamp = DriveApp.getFileById(urlId_(url)).getLastUpdated().getTime(), last = Number(readState_()[readStateKey_(kind, grantId)] || 0);
+    return { changed: !last || stamp > last, stamp };
+  } catch (error) {
+    return { changed: true, stamp: 0 };
+  }
+}
+function commitReadMarks_(marks) {
+  const keys = Object.keys(marks).filter(key => marks[key]);
+  if (!keys.length) return;
+  const values = {};
+  keys.forEach(key => { values[key] = String(marks[key]); readState_()[key] = String(marks[key]); });
+  try { PropertiesService.getScriptProperties().setProperties(values); } catch (error) { console.warn(`Could not remember read times: ${error.message}`); }
+}
+function forgetReadMarks_() {
+  READ_STATE_CACHE_ = {};
+  try {
+    const store = PropertiesService.getScriptProperties();
+    Object.keys(store.getProperties()).filter(key => /^rd\|/.test(key)).forEach(key => store.deleteProperty(key));
+  } catch (error) { console.warn(`Could not clear read times: ${error.message}`); }
+}
+// Runs one grant's read; a failure or a paused run is remembered for the message and returns null (nothing is marked as read).
+function guardedGrantRead_(grantId, startedAt, read) {
+  if (overRuntimeGuard_(startedAt)) {
+    REFRESH_ISSUES_.push({ grantId, message: 'not read yet: the run paused before the time limit — run the refresh again' });
+    return null;
+  }
+  try {
+    return read();
+  } catch (error) {
+    REFRESH_ISSUES_.push({ grantId, message: clean_(error.message).replace(/\s+/g, ' ').slice(0, 140) });
+    return null;
+  }
+}
 const OUTCOME_MANUAL_HEADERS_ = ['Q1', 'Q2', 'Q3', 'Q4'].reduce((list, quarter) => list.concat([`${quarter} Status`, `${quarter} Anagha Notes`]), []);
 function refreshOutcomeProgressTracker_() {
   const sheet = ss_().getSheetByName(APFP.SHEETS.OUTCOMES);
@@ -283,12 +344,17 @@ function refreshOutcomeProgressTracker_() {
   const headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.OUTCOMES, required = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.OUTCOMES,
     exportRequired = required.filter(header => !OUTCOME_MANUAL_HEADERS_.includes(header)),
     manualByOutcome = trackerManualMap_(sheet, headerRow, 'Outcome Progress', ['Grant ID', 'Outcome ID'], OUTCOME_MANUAL_HEADERS_),
-    desired = [], section = APFP.PREFLIGHT_SCHEMA.OUTCOME_EXPORT_SECTIONS[0];
+    desired = [], marks = {}, startedAt = beginRefresh_(), section = APFP.PREFLIGHT_SCHEMA.OUTCOME_EXPORT_SECTIONS[0];
   activeReportingGrants_().forEach(grant => {
     if (isTransactionalGrantType_(grant['Grant Type']) || isDiscretionaryGrantType_(grant['Grant Type'])) return;
     const url = outcomeProgressWorkbookUrlForGrant_(grant['Grant ID']);
     if (!url) return;
-    trackerExportObjects_(openSpreadsheetCached_(url), section, exportRequired).forEach(record => {
+    const check = workbookChanged_('outcome', grant['Grant ID'], url);
+    if (!check.changed) { REFRESH_SKIPPED_++; return; }
+    const records = guardedGrantRead_(grant['Grant ID'], startedAt, () => trackerExportObjects_(openSpreadsheetCached_(url), section, exportRequired));
+    if (!records) return;
+    marks[readStateKey_('outcome', grant['Grant ID'])] = check.stamp;
+    records.forEach(record => {
       const outcomeId = clean_(record['outcome id']);
       if (!outcomeId || !clean_(record['outcome / indicator'])) return;
       const stable = `${key_(grant['Grant ID'])}|${key_(outcomeId)}`, manual = manualByOutcome[stable] || {}, object = {};
@@ -304,6 +370,7 @@ function refreshOutcomeProgressTracker_() {
     });
   });
   upsertTrackerObjects_(sheet, headerRow, 'Outcome Progress', desired, ['Grant ID', 'Outcome ID'], required);
+  commitReadMarks_(marks);
   return desired.length;
 }
 function refreshSupportTracker_() {
@@ -312,12 +379,17 @@ function refreshSupportTracker_() {
   const headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.SUPPORT, required = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.SUPPORT,
     keyHeaders = ['Grant ID', 'Outcome ID', 'Quarter'],
     existing = trackerManualMap_(support, headerRow, 'Support', keyHeaders, ['Status', 'Anagha Notes']),
-    desired = [], section = APFP.PREFLIGHT_SCHEMA.OUTCOME_EXPORT_SECTIONS[1];
+    desired = [], marks = {}, startedAt = beginRefresh_(), section = APFP.PREFLIGHT_SCHEMA.OUTCOME_EXPORT_SECTIONS[1];
   activeReportingGrants_().forEach(grant => {
     if (isTransactionalGrantType_(grant['Grant Type']) || isDiscretionaryGrantType_(grant['Grant Type'])) return;
     const url = outcomeProgressWorkbookUrlForGrant_(grant['Grant ID']);
     if (!url) return;
-    trackerExportObjects_(openSpreadsheetCached_(url), section, required).forEach(record => {
+    const check = workbookChanged_('support', grant['Grant ID'], url);
+    if (!check.changed) { REFRESH_SKIPPED_++; return; }
+    const records = guardedGrantRead_(grant['Grant ID'], startedAt, () => trackerExportObjects_(openSpreadsheetCached_(url), section, required));
+    if (!records) return;
+    marks[readStateKey_('support', grant['Grant ID'])] = check.stamp;
+    records.forEach(record => {
       const grantId = clean_(record['grant id']) || clean_(grant['Grant ID']), outcomeId = clean_(record['outcome id']), quarter = clean_(record['quarter']),
         type = clean_(record['support type']), requiredText = clean_(record['support required']);
       if (!grantId || !outcomeId || !quarter || (!type && !requiredText)) return;
@@ -333,6 +405,7 @@ function refreshSupportTracker_() {
     });
   });
   upsertTrackerObjects_(support, headerRow, 'Support', desired, keyHeaders, required);
+  commitReadMarks_(marks);
   return desired.length;
 }
 function refreshReportingData() {
@@ -396,7 +469,8 @@ function refreshDecisionTracker_() {
   if (!sheet) throw new Error('Decision Tracker is missing from Central Administration.');
   const currentFy = financialYearFromDate_(now_()), decisionFy = nextFinancialYear_(currentFy),
     headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DECISIONS, required = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.DECISIONS,
-    existing = trackerManualMap_(sheet, headerRow, 'Decision Tracker', ['Grant ID'], DECISION_MANUAL_HEADERS_);
+    existing = trackerManualMap_(sheet, headerRow, 'Decision Tracker', ['Grant ID'], DECISION_MANUAL_HEADERS_),
+    marks = {}, startedAt = beginRefresh_();
   const desired = grantRegistryRecords_().filter(item =>
     key_(item.record['Record Status']) === 'active' && key_(item.record['Grant Status']) === 'active' &&
     !isDiscretionaryGrantType_(item.record['Grant Type']) &&
@@ -410,7 +484,7 @@ function refreshDecisionTracker_() {
       'Decision For FY': decisionFy, 'Previous Grant FY': currentFy,
       'Organisation Name': clean_(grant['Organisation Name']), 'Grant Title': clean_(grant['Project Title']),
       'Grant Type': clean_(grant['Grant Type']), 'Grant ID': clean_(grant['Grant ID']),
-      'Outcome Summary': noOutcomeWorkspace ? '' : outcomeSummaryForGrant_(grant),
+      'Outcome Summary': noOutcomeWorkspace ? '' : decisionOutcomeSummary_(grant, startedAt, marks),
       'Evidence / Workspace Link': noOutcomeWorkspace ? '' : outcomeProgressWorkbookUrlForGrant_(grant['Grant ID']),
       'Decision Type': manual['Decision Type'] || '', 'Decision Status': manual['Decision Status'] || '',
       'Decision Rationale': manual['Decision Rationale'] || '', 'Proposed Amount': manual['Proposed Amount'] || '',
@@ -422,7 +496,18 @@ function refreshDecisionTracker_() {
     };
   });
   upsertTrackerObjects_(sheet, headerRow, 'Decision Tracker', desired, ['Grant ID'], required);
+  commitReadMarks_(marks);
   return desired.length;
+}
+// The outcome summary for one decision row. undefined = keep what the sheet already has (workbook unchanged, or it could not be read now).
+function decisionOutcomeSummary_(grant, startedAt, marks) {
+  const url = outcomeProgressWorkbookUrlForGrant_(grant['Grant ID']);
+  const check = url ? workbookChanged_('decision', grant['Grant ID'], url) : { changed: true, stamp: 0 };
+  if (!check.changed) { REFRESH_SKIPPED_++; return undefined; }
+  const summary = guardedGrantRead_(grant['Grant ID'], startedAt, () => outcomeSummaryForGrant_(grant));
+  if (summary === null) return undefined;
+  if (url) marks[readStateKey_('decision', grant['Grant ID'])] = check.stamp;
+  return summary;
 }
 function disbursementSheet_() {
   const tracker = openSpreadsheetCached_(ss_().getId()), sheet = tracker.getSheetByName(APFP.DISBURSEMENT_TRACKER_SHEET);

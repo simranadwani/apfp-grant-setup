@@ -109,14 +109,21 @@ function uiReopenSetupForChanges() {
 function uiRefreshOutcomeProgress() {
   const count = refreshOutcomeProgressTracker_();
   recordAutomationStatus_('Outcome Progress', 'Success', `${count} rows refreshed`);
-  showToast_(`${count} outcome rows refreshed.`);
+  showToast_(`${count} outcome rows refreshed.${refreshNote_()}`);
   return count;
 }
 function uiRefreshSupport() {
   const count = refreshSupportTracker_();
   recordAutomationStatus_('Support', 'Success', `${count} rows refreshed`);
-  showToast_(`${count} support rows refreshed.`);
+  showToast_(`${count} support rows refreshed.${refreshNote_()}`);
   return count;
+}
+// Reads every Active workbook again (forgets which ones were unchanged) — use after fixing a workbook by hand or restoring central rows.
+function uiRefreshReportingForce() {
+  forgetReadMarks_();
+  const outcomes = refreshOutcomeProgressTracker_(), support = refreshSupportTracker_(), decisions = refreshDecisionTracker_();
+  showToast_(`Full re-read done: ${outcomes} outcome, ${support} support, ${decisions} decision row(s).${refreshNote_()}`);
+  return { outcomes, support, decisions };
 }
 function uiCompleteSelectedSupport() {
   throw new Error('Support closure is manual. Update Status directly in 3. Support.');
@@ -124,7 +131,7 @@ function uiCompleteSelectedSupport() {
 function uiRefreshDecisions() {
   const count = refreshDecisionTracker_();
   recordAutomationStatus_('Decisions', 'Success', `${count} rows refreshed`);
-  showToast_(`${count} decision rows refreshed.`);
+  showToast_(`${count} decision rows refreshed.${refreshNote_()}`);
   return count;
 }
 function uiRefreshDecisionDocuments() {
@@ -175,19 +182,36 @@ function refreshDisbursementOrganisationOptionsForRow_(sheet, rowNumber, map) {
   if (current && !options.some(value => key_(value) === key_(current))) organisationCell.clearContent();
   return options.length;
 }
+// Whole tracker in a few calls: two column reads, the option list once per financial year, and one write per run of consecutive rows
+// that share a financial year (it used to be ~6 calls per row).
 function refreshDisbursementOrganisationOptions_() {
-  const sheet = disbTracker_();
-  const headerRow = disbHeaderRow_();
-  const map = disbHeaderMap_(sheet);
-  const lastRow = Math.max(headerRow + 1, sheet.getLastRow());
-  let updated = 0;
-  for (let row = headerRow + 1; row <= lastRow; row++) {
-    const fy = clean_(sheet.getRange(row, disbColumn_(map, 'Financial Year')).getValue());
-    if (!fy) continue;
-    refreshDisbursementOrganisationOptionsForRow_(sheet, row, map);
-    updated++;
-  }
-  return updated;
+  const sheet = disbTracker_(), headerRow = disbHeaderRow_(), map = disbHeaderMap_(sheet),
+    fyColumn = disbColumn_(map, 'Financial Year'), organisationColumn = disbColumn_(map, 'Organisation Name'),
+    lastRow = Math.max(headerRow + 1, sheet.getLastRow()), count = lastRow - headerRow;
+  const fys = sheet.getRange(headerRow + 1, fyColumn, count, 1).getDisplayValues().map(row => clean_(row[0])),
+    organisations = sheet.getRange(headerRow + 1, organisationColumn, count, 1).getValues().map(row => clean_(row[0])),
+    optionsByFy = {};
+  const optionsFor = fy => optionsByFy[key_(fy)] || (optionsByFy[key_(fy)] = disbursementOrganisationsForFy_(fy));
+  const rowNumbers = fys.map((fy, i) => (fy ? headerRow + 1 + i : 0)).filter(Boolean);
+  // consecutive rows with the same financial year form one group
+  const groups = [];
+  rowNumbers.forEach(rowNumber => {
+    const fy = key_(disbCanonicalFy_(fys[rowNumber - headerRow - 1])), last = groups[groups.length - 1];
+    if (last && last.fy === fy && last.rows[last.rows.length - 1] === rowNumber - 1) last.rows.push(rowNumber);
+    else groups.push({ fy, rows: [rowNumber] });
+  });
+  groups.forEach(group => {
+    const first = group.rows[0], range = sheet.getRange(first, organisationColumn, group.rows.length, 1),
+      options = optionsFor(fys[first - headerRow - 1]);
+    range.clearNote();
+    if (!options.length) { range.clearDataValidations(); return; }
+    range.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(options, true).setAllowInvalid(true).build());
+    group.rows.forEach(rowNumber => {
+      const current = organisations[rowNumber - headerRow - 1];
+      if (current && !options.some(value => key_(value) === key_(current))) sheet.getRange(rowNumber, organisationColumn).clearContent();
+    });
+  });
+  return rowNumbers.length;
 }
 function uiRefreshDisbursementOptions() {
   const count = refreshDisbursementOrganisationOptions_();

@@ -4,6 +4,20 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round A — fewer saves, isolated and skippable refreshes, batched dropdown refresh
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**
+
+- **Fewer Technical Registry saves per workspace** (`WorkspaceCreation.js`, `RegistryAndIDs.js`, `Utilities.js`): the financial-year and organisation-folder saves are one checkpoint, and the sub-folder / Setup workbook / Outcome workbook saves are one checkpoint
+  (10 → 7 saves for a Restricted grant). Folder and workbook creation is find-or-create by name, so a run that stops in between finds the same items on retry. Each remaining save also no longer re-reads the row: `setByHeaders_` accepts the cached record (`setByHeadersKnown_`).
+- **Reporting refreshes are isolated** (`ReportingSupportDecisions.js`): Outcome, Support and Decision refreshes read each grantee workbook inside a guard. A workbook that cannot be read is reported ("N grant(s) skipped because of a problem: G1 — …") and skipped
+  while the others are refreshed and that grant's central rows are kept; a run stops cleanly before the time limit and says so. A missing required export header now skips that grant with the header named instead of stopping everything.
+- **Unchanged workbooks are skipped**: after a successful read the workbook's Drive "last updated" time is remembered per grant and kind in Script Properties (no sheet column, nothing to add to production). A workbook not changed since is not opened;
+  its central rows stay as they are. New button function `uiRefreshReportingForce` forgets those times and re-reads everything (use it after fixing a workbook by hand or restoring central rows).
+- **Batched loops** (`UiActions.js`, `Disbursements.js`, `ReportingSupportDecisions.js`): the organisation dropdown refresh in the Committed & Spent Tracker makes a few calls instead of ~6 per row (two column reads, option list once per year, one write per run of rows);
+  Prepare Disbursement Rows reads the sheet once and stops cleanly before the time limit; Decision document links read once and write only changed cells.
+- Tests: `tests/trackers-by-header.test.js` (skip unchanged, isolate a broken workbook, force re-read), `tests/disbursement-options.test.js`, known-record save in `tests/tracker.test.js`. 114 tests pass.
+
 ## Round C — dropdown lists, financial years and time zone from System - Configuration
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only** · **Nothing breaks before you seed the new rows (defaults are kept in `Config.js`).**

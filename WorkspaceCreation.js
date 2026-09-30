@@ -123,13 +123,12 @@ function processWorkspaceRequest_(row, config) {
  const root = DriveApp.getFolderById(config.ROOT_FOLDER_ID),
    fy = folderFromSavedOrCreate_(root, record['FY Folder URL'],
      patternName_(config.FINANCIAL_YEAR_FOLDER_PATTERN, request));
- record = saveTech_(requestId, {
-   'FY Folder URL': fy.getUrl(), 'Current Step': APFP.STEP.FY_FOLDER_READY,
-   'Last Completed Step': APFP.STEP.FY_FOLDER_READY
- }).record;
+ // Folder and workbook creation is find-or-create by name, so one checkpoint after several Drive steps is safe:
+ // a run that stops in between finds the same folders / files again on retry instead of duplicating them.
  const orgFolder = folderFromSavedOrCreate_(fy, record['Organisation Folder URL'],
    patternName_(config.ORGANISATION_FOLDER_PATTERN, request));
  record = saveTech_(requestId, {
+   'FY Folder URL': fy.getUrl(),
    'Organisation Folder URL': orgFolder.getUrl(), 'Grant Workspace URL': orgFolder.getUrl(),
    'Current Step': APFP.STEP.ORGANISATION_FOLDER_READY,
    'Last Completed Step': APFP.STEP.ORGANISATION_FOLDER_READY
@@ -177,23 +176,8 @@ function processWorkspaceRequest_(row, config) {
    q4 = folderFromSavedOrCreate_(orgFolder, record['Q4 Folder URL'], APFP.FOLDERS.Q4),
    budget = folderFromSavedOrCreate_(orgFolder,
      record['Budget Allocation & Fund Utilisation Folder URL'], config.BUDGET_UTILISATION_FOLDER_NAME);
- record = saveTech_(requestId, {
-   'Setup Folder URL': '',
-   'Q1 Folder URL': q1.getUrl(), 'Q2 Folder URL': q2.getUrl(),
-   'Q3 Folder URL': q3.getUrl(), 'Q4 Folder URL': q4.getUrl(),
-   'Supporting Documents Folder URL': supporting.getUrl(),
-   'Budget Allocation & Fund Utilisation Folder URL': budget.getUrl(),
-   'Disbursement Folder URL': disbursement.getUrl(),
-   'Disbursement Workbook URL': '',
-   'Current Step': APFP.STEP.SUBFOLDERS_READY,
-   'Last Completed Step': APFP.STEP.SUBFOLDERS_READY
- }).record;
  const setup = openOrCopySpreadsheet_(orgFolder, record['Setup Workbook URL'],
    patternName_(config.SETUP_WORKBOOK_PATTERN, request), config.SETUP_TEMPLATE_ID);
- record = saveTech_(requestId, {
-   'Setup Workbook URL': setup.getUrl(), 'Current Step': APFP.STEP.WORKBOOK_READY,
-   'Last Completed Step': APFP.STEP.WORKBOOK_READY
- }).record;
  const outcomeWorkbook = openOrCopySpreadsheet_(orgFolder, record['Outcome Progress Workbook URL'],
    patternName_(config.OUTCOME_PROGRESS_WORKBOOK_PATTERN, request), config.OUTCOME_PROGRESS_TEMPLATE_ID),
    generatedLinks = {
@@ -204,6 +188,14 @@ function processWorkspaceRequest_(row, config) {
    };
  configureOutcomeProgressWorkbookBase_(outcomeWorkbook.getId(), request, grantId, generatedLinks);
  record = saveTech_(requestId, {
+   'Setup Folder URL': '',
+   'Q1 Folder URL': q1.getUrl(), 'Q2 Folder URL': q2.getUrl(),
+   'Q3 Folder URL': q3.getUrl(), 'Q4 Folder URL': q4.getUrl(),
+   'Supporting Documents Folder URL': supporting.getUrl(),
+   'Budget Allocation & Fund Utilisation Folder URL': budget.getUrl(),
+   'Disbursement Folder URL': disbursement.getUrl(),
+   'Disbursement Workbook URL': '',
+   'Setup Workbook URL': setup.getUrl(),
    'Outcome Progress Workbook URL': outcomeWorkbook.getUrl(),
    'Current Step': APFP.STEP.OUTCOME_WORKBOOK_READY,
    'Last Completed Step': APFP.STEP.OUTCOME_WORKBOOK_READY

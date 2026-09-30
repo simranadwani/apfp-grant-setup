@@ -173,20 +173,23 @@ function handleDisbursementTrackerEdit_(e) {
 }
 
 function completeDisbursementRows_() {
- const sheet = disbTracker_(), map = disbHeaderMap_(sheet), last = sheet.getLastRow(),
-   totals = { resolved: 0, quarters: 0, ids: 0, locked: 0 };
+ const sheet = disbTracker_(), map = disbHeaderMap_(sheet), last = sheet.getLastRow(), startedAt = Date.now(),
+   totals = { resolved: 0, quarters: 0, ids: 0, locked: 0, stoppedEarly: false };
  if (last < disbFirstDataRow_()) return totals;
- for (let rowNumber = disbFirstDataRow_(); rowNumber <= last; rowNumber++) {
-   const row = sheet.getRange(rowNumber, 1, 1, disbWidth_(sheet)).getValues()[0];
-   if (!row.some(value => clean_(value))) continue;
-   const result = processDisbursementRow_(sheet, rowNumber, map, false);
-   Object.keys(totals).forEach(key => totals[key] += result[key] || 0);
+ // One read for the whole tracker instead of one per row (empty rows are skipped without a further call).
+ const rows = sheet.getRange(disbFirstDataRow_(), 1, last - disbFirstDataRow_() + 1, disbWidth_(sheet)).getValues();
+ for (let offset = 0; offset < rows.length; offset++) {
+   if (!rows[offset].some(value => clean_(value))) continue;
+   if (overRuntimeGuard_(startedAt)) { totals.stoppedEarly = true; break; }
+   const result = processDisbursementRow_(sheet, disbFirstDataRow_() + offset, map, false);
+   Object.keys(totals).forEach(key => { if (key !== 'stoppedEarly') totals[key] += result[key] || 0; });
  }
  return totals;
 }
 function completeDisbursementRows() {
  const result = completeDisbursementRows_();
- notifyAdmin_(`Disbursement rows completed.\n\nGrant rows resolved: ${result.resolved}\nQuarters updated: ${result.quarters}\nDisbursement IDs created: ${result.ids}`);
+ notifyAdmin_(`Disbursement rows completed.\n\nGrant rows resolved: ${result.resolved}\nQuarters updated: ${result.quarters}\nDisbursement IDs created: ${result.ids}` +
+   (result.stoppedEarly ? '\n\nThe run paused before the Apps Script time limit. Run it again to continue.' : ''));
  return result;
 }
 function validateDisbursementTracker() {

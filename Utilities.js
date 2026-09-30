@@ -402,10 +402,13 @@ function writeChangedSegments_(sheet, rowNumber, changes) {
  });
  return true;
 }
-function setByHeaders_(sheetName, headerRow, rowNumber, patch) {
+// knownRecord (optional): the row's current values by header, from the registry cache. When given, the row is not re-read from the sheet.
+function setByHeaders_(sheetName, headerRow, rowNumber, patch, knownRecord) {
  const headers = Object.keys(patch || {});
  if (!headers.length) return false;
- const sheet = sheet_(sheetName), map = headerMap_(sheet, headerRow), width = sheet.getLastColumn(),
+ const sheet = sheet_(sheetName), map = headerMap_(sheet, headerRow);
+ if (knownRecord) return setByHeadersKnown_(sheet, sheetName, map, rowNumber, patch, knownRecord);
+ const width = sheet.getLastColumn(),
    range = sheet.getRange(rowNumber, 1, 1, width), current = range.getValues()[0],
    needsFormulaRead = headers.some(header => typeof patch[header] === 'string' && patch[header].charAt(0) === '='),
    formulas = needsFormulaRead ? range.getFormulas()[0] : null, changes = [];
@@ -422,6 +425,20 @@ function setByHeaders_(sheetName, headerRow, rowNumber, patch) {
  return changed;
 }
 const ADMIN_TABLE_GROWTH_ROWS_ = 100;
+function setByHeadersKnown_(sheet, sheetName, map, rowNumber, patch, knownRecord) {
+ const known = {};
+ Object.keys(knownRecord).forEach(name => { known[key_(name)] = knownRecord[name]; });
+ const changes = [];
+ Object.keys(patch).forEach(header => {
+   const index = map[key_(header)];
+   if (index == null) throw new Error(`Header ${header} not found on ${sheetName}`);
+   const next = isAdminTableSheet_(sheetName) ? coerceAdminTableValue_(sheetName, header, patch[header]) : patch[header];
+   if (comparable_(known[key_(header)]) !== comparable_(next)) changes.push({ index, value: next });
+ });
+ const changed = writeChangedSegments_(sheet, rowNumber, changes);
+ if (changed) invalidateDataCachesForSheet_(sheetName, rowNumber, patch, false);
+ return changed;
+}
 function appendObject_(sheetName, headerRow, object) {
  const sheet = sheet_(sheetName), headers = sheet.getRange(headerRow, 1, 1, sheet.getLastColumn()).getDisplayValues()[0],
    target = Math.max(headerRow + 1, sheet.getLastRow() + 1);

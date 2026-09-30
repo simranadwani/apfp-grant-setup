@@ -98,3 +98,19 @@ test('appendObject_ grows a full admin table with headroom, so the slow Table ex
   assert.equal(inserted, 1 + 100, 'one row needed plus 100 rows of headroom');
   assert.deepEqual(extended, ['9. Grant Registry']);
 });
+
+test('setByHeaders_ with a known record writes only changed cells and never re-reads the row', () => {
+  const project = loadProject();
+  const sheet = new FakeSheet('Plain', [['A', 'B', 'C', 'D'], ['a1', 'b1', 'c1', 'd1']]);
+  let reads = 0;
+  const realGetRange = sheet.getRange.bind(sheet);
+  sheet.getRange = (...args) => { const range = realGetRange(...args); const original = range.getValues; range.getValues = () => { reads++; return original(); }; return range; };
+  sheet.getSheetId = () => 'plain';
+  project.override('sheet_', () => sheet);
+  project.override('isAdminTableSheet_', () => false);
+  const changed = project.get('setByHeaders_')('Plain', 1, 2, { B: 'b1', C: 'NEW', D: 'd1' }, { A: 'a1', B: 'b1', C: 'c1', D: 'd1' });
+  assert.equal(changed, true);
+  assert.equal(reads, 0, 'no getValues');
+  assert.deepEqual(sheet.writes.map(w => [w.col, w.values[0][0]]), [[3, 'NEW']]);
+  assert.equal(project.get('setByHeaders_')('Plain', 1, 2, { C: 'NEW' }, { C: 'NEW' }), false);
+});
