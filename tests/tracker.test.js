@@ -55,10 +55,26 @@ test('upsertTrackerRowsByKey_ preserves unmatched rows only when asked to', () =
   assert.equal(drop.cell(4, 1), '');
 });
 
-test('upsertTrackerRowsByKey_ rejects duplicate keys and overflow', () => {
+test('upsertTrackerRowsByKey_ rejects duplicate keys', () => {
   assert.throws(() => p.get('upsertTrackerRowsByKey_')(trackerSheet([]), 4,
     [['G1', 'O1', 'x', ''], ['G1', 'O1', 'y', '']], [0, 1], true), /Duplicate desired key/);
-  // Only one data row fits (maxRows 3, header on row 2): two desired rows overflow the Table.
-  assert.throws(() => p.get('upsertTrackerRowsByKey_')(trackerSheet([], 3), 4,
-    [['G1', 'O1', 'x', ''], ['G2', 'O1', 'y', '']], [0, 1], true), /Table capacity is 1; 2 rows are required/);
+});
+
+test('upsertTrackerRowsByKey_ grows the sheet and its Table when full, instead of failing (history is never dropped)', () => {
+  const project = loadProject(), grown = [];
+  project.override('extendTableToSheetEnd_', name => grown.push(name));
+  // maxRows 3 with the header on row 2: room for exactly one data row, and it is already used.
+  const sheet = trackerSheet([['G0', 'O1', 'old', 'keep me']], 3);
+  project.get('upsertTrackerRowsByKey_')(sheet, 4, [['G1', 'O1', 'x', ''], ['G2', 'O1', 'y', '']], [0, 1], true);
+  assert.deepEqual(grown, ['2. Outcome Progress']);
+  assert.ok(sheet.getMaxRows() >= 100, 'the sheet gained headroom');
+  assert.deepEqual([sheet.cell(3, 1), sheet.cell(4, 1), sheet.cell(5, 1)], ['G0', 'G1', 'G2']);
+  assert.equal(sheet.cell(3, 4), 'keep me');
+});
+
+test('upsertTrackerRowsByKey_ does not grow the table while there is room', () => {
+  const project = loadProject(), grown = [];
+  project.override('extendTableToSheetEnd_', name => grown.push(name));
+  project.get('upsertTrackerRowsByKey_')(trackerSheet([]), 4, [['G1', 'O1', 'x', '']], [0, 1], true);
+  assert.deepEqual(grown, []);
 });

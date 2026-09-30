@@ -4,6 +4,26 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Phase 3b — Data safety: growing tables, stable Outcome IDs, backup, protection editors, failure reasons
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only, not on production**
+
+### Added
+- **Auto-growing tracker tables** (`Utilities.js`: `extendTableToSheetEnd_`, `upsertTrackerRowsByKey_`). When Outcome Progress, Support or Decision Tracker is full, the sheet
+  and its native Table gain rows instead of stopping with `Table capacity is N`. Why: history is kept forever, so a fixed size would eventually block every refresh.
+- **Stable Outcome IDs** (`ReportingSupportDecisions.js`: `planOutcomeRows_`, `writeOutcomeSystemColumns_`). On re-approval an indicator keeps its row and Outcome ID
+  (matched by text, then same-position edit, then a never-used row). Reordering the Setup no longer moves quarterly progress to another indicator. Retired rows are never reused.
+  If no free row exists the error names the indicator. Writes go by header name and only to changed cells; the Upload Folder column is never touched.
+- **Backup button** `uiBackupCentralAdministration` (`UiActions.js`, `MenuAndChecks.js`): copies Central Administration into `<CENTRAL_ADMIN_FOLDER_ID>/Backups` with a timestamp.
+  Uses the previously unused `CENTRAL_ADMIN_FOLDER_ID` key.
+- **`PROTECTION_EDITORS`** config key (`ProtectionIntegrity.js`): comma, semicolon, space or pipe separated emails kept as protection editors in addition to the owner and the
+  running account (owner decision: team@goalkeep.net and Anagha). An editor with no access to a workbook is skipped, not fatal.
+- **Failure reasons in the end-of-run message** (`WorkspaceCreation.js`, `IntakeValidation.js`, `SharingAndEmail.js`): each row that needs attention is listed with its reason
+  (first 8, then "…and N more"), so operators no longer need the hidden sheets.
+
+### Tests (repo only)
+- `tests/outcomes.test.js`, `tests/safety.test.js` (new), growth tests in `tests/tracker.test.js`, `uiBackupCentralAdministration` added to the frozen API list, `FakeSheet.insertRowsAfter`. 72 tests pass.
+
 ## Phase 3a — Push Status / Document Sync Status (requirement R1)
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **Works with or without the new columns**

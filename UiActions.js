@@ -215,3 +215,9 @@ function uiResetDisbursementStatuses() {
   showToast_(`${count} row(s) will be pushed and synced again.`);
   return count;
 }
+function uiBackupCentralAdministration() {
+  const url = backupCentralAdministration_();
+  showToast_('Backup saved in the Central Administration Backups folder.');
+  notifyAdmin_(`Backup created:\n${url}`);
+  return url;
+}

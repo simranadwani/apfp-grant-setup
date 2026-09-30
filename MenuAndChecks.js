@@ -215,3 +215,14 @@ function runPreflightChecks() {
   notifyAdmin_(lines.join('\n'));
   return { ok: !errors.length, errors, warnings };
 }
+
+// Copies the whole Central Administration workbook into <CENTRAL_ADMIN_FOLDER_ID>/Backups with a timestamp.
+// Central sheets mirror the grantee workbooks (including blanks), so take a copy before any bulk operation.
+function backupCentralAdministration_() {
+  const config = config_();
+  requireConfig_(config, ['CENTRAL_ADMIN_FOLDER_ID']);
+  const folder = getOrCreateUniqueChildFolder_(DriveApp.getFolderById(clean_(config.CENTRAL_ADMIN_FOLDER_ID)), 'Backups'),
+    stamp = Utilities.formatDate(now_(), APFP.TIME_ZONE, 'yyyy-MM-dd HHmm'),
+    copy = DriveApp.getFileById(ss_().getId()).makeCopy(`${ss_().getName()} — backup ${stamp}`, folder);
+  return copy.getUrl();
+}

@@ -22,14 +22,26 @@ function workbookOwnerEmail_(spreadsheet) {
   }
 }
 
+// Extra people who must stay able to change protections (System - Configuration key PROTECTION_EDITORS:
+// e-mail addresses separated by commas, semicolons, spaces or |). Empty by default.
+function configuredProtectionEditors_() {
+  const raw = clean_(config_().PROTECTION_EDITORS);
+  return raw ? raw.split(/[\s,;|]+/).map(clean_).filter(validEmail_) : [];
+}
 function hardenProtectionEditors_(protection, spreadsheet) {
   const owner = workbookOwnerEmail_(spreadsheet);
   const actor = clean_(Session.getEffectiveUser().getEmail());
-  const allowed = Array.from(new Set([owner, actor].filter(validEmail_)));
-  if (!allowed.length) {
+  const required = [owner, actor].filter(validEmail_), extra = configuredProtectionEditors_();
+  if (!required.length) {
     throw new Error('The workbook owner or current user could not be identified for sheet protection.');
   }
-  protection.addEditors(allowed);
+  const allowed = [];
+  required.concat(extra).forEach(email => { if (!allowed.some(value => key_(value) === key_(email))) allowed.push(email); });
+  protection.addEditors(required);
+  // A configured editor without access to this workbook cannot be added; skip it rather than fail the whole run.
+  extra.forEach(email => {
+    try { protection.addEditor(email); } catch (error) { console.warn(`Protection editor ${email} was not added: ${error.message}`); }
+  });
   protection.getEditors().forEach(user => {
     const email = clean_(user.getEmail());
     if (email && !allowed.some(value => key_(value) === key_(email))) {
@@ -39,9 +51,6 @@ function hardenProtectionEditors_(protection, spreadsheet) {
   if (protection.canDomainEdit()) protection.setDomainEdit(false);
   return protection;
 }
-
-
-
 function verifyGranteeProtectionAccess_(spreadsheet, specs, granteeEmail) {
   const email = clean_(granteeEmail).toLowerCase();
   if (!email) return true;

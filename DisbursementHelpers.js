@@ -54,21 +54,9 @@ function granteeDisbursementTable_(workbook, grantId) {
  const schema = APFP.PREFLIGHT_SCHEMA.TRANSACTIONAL_TEMPLATE,
    sheet = workbook.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.DISBURSEMENTS);
  if (!sheet) throw new Error(`Disbursement Documents sheet is missing for Grant ID ${grantId}.`);
- const width = sheet.getLastColumn(), positions = {};
- sheet.getRange(schema.HEADER_ROW, 1, 1, width).getDisplayValues()[0].forEach((header, index) => {
-   const name = key_(header);
-   if (name && positions[name] == null) positions[name] = index;
- });
- return {
-   sheet, width, firstRow: schema.DATA_START_ROW, rows: schema.DATA_ROWS,
-   col(name) {
-     if (positions[key_(name)] == null)
-       throw new Error(`Disbursement Documents for Grant ID ${grantId} is missing the column "${name}".`);
-     return positions[key_(name)];
-   }
- };
+ const columns = columnsByHeader_(sheet, schema.HEADER_ROW, `Disbursement Documents for Grant ID ${grantId}`);
+ return { sheet, width: columns.width, firstRow: schema.DATA_START_ROW, rows: schema.DATA_ROWS, col: columns.col };
 }
-
 function disbHeaderMap_(sheet) {
  const width = Math.max(APFP.DISBURSEMENT_HEADERS.length, sheet.getLastColumn());
  const headers = sheet.getRange(disbHeaderRow_(), 1, 1, width).getDisplayValues()[0];

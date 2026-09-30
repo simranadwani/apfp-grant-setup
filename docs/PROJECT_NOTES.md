@@ -20,14 +20,15 @@ Read this first when picking the project up again. Keep it current. Every code c
 
 ## 2. Status
 Done and verified on TEST: test harness (Phase 0), TEST copy + push safety (0b), V15 cleanup / dead code (1),
-Upload Folder layout fixes for disbursement push, link sync and outcome summary (2b). 52 tests passing. R1 built (Phase 3a, `DisbursementSync.js`): waiting for the two columns to be added in TEST and tested.
+Upload Folder layout fixes for disbursement push, link sync and outcome summary (2b). R1 verified on TEST. Phase 3b (growing tables, stable Outcome IDs, Backup button, `PROTECTION_EDITORS`, failure reasons) built, 72 tests passing, awaiting TEST run by owner.
+TEST steps for 3b: add a `PROTECTION_EDITORS` row to System - Configuration; set `CENTRAL_ADMIN_FOLDER_ID` to the TEST folder `1woVxClKRApzFqaW1zGyrd3Ygc_HlHc6L` (the copied value points at PRODUCTION Admin); then force a failed Create Workspace row, reorder indicators on a re-approval, run Backup.
 Next: R1/R2 below, then column-tolerant reading everywhere (plan Phase 2), config-driven lists (Phase 3), hardening (Phase 5).
 
 ## 3. Owner decisions (do not re-litigate without asking)
 - No hard-coded dropdown values or column positions in the long run; adding a column must not need a code change. Lists will live in
   `System - Configuration` (no new system sheet). Behaviour-driving values (Transactional, Discretionary, Approved …) stay in code.
 - No functionality may be lost; all public function names stay until the real button bindings are confirmed.
-- "Approved editors" for protections = team@goalkeep.net and Anagha's account (config key `PROTECTION_EDITORS` still to build).
+- "Approved editors" for protections = team@goalkeep.net and Anagha's account (config key `PROTECTION_EDITORS`, built in 3b).
 - Mixed file ownership (apfp.rda vs team@goalkeep.net): parked.
 - Central Administration must not stay link-shared "anyone – editor" (owner will restrict it).
 - **Completed grants:** Outcome / Support / Decision refresh covers **Active grants only**; a Complete/Discontinued grant is frozen at completion.

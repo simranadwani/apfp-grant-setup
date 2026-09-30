@@ -195,12 +195,20 @@ function tableColumnProperties_(spec) {
  });
 }
 function extendAdminTableRows_(sheetName) {
- const spec = adminTableSpecBySheet_(sheetName), sheet = sheet_(sheetName);
+ const spec = adminTableSpecBySheet_(sheetName);
  if (!spec) return;
- const snapshot = adminTablesSnapshot_(), item = (snapshot.sheets || []).find(entry =>
-   entry.properties && entry.properties.title === sheetName),
-   tables = item && item.tables || [], table = tables.find(entry => entry.name === spec.TABLE_NAME);
- if (!table) throw new Error(`${sheetName} is missing Google Sheets Table ${spec.TABLE_NAME}.`);
+ extendTableToSheetEnd_(sheetName, spec.TABLE_NAME);
+}
+// Grows a native Google Sheets Table so it covers every row of its sheet (used after rows were inserted at the bottom).
+// Without tableName the sheet must contain exactly one Table.
+function extendTableToSheetEnd_(sheetName, tableName) {
+ const sheet = sheet_(sheetName), snapshot = adminTablesSnapshot_(),
+   item = (snapshot.sheets || []).find(entry => entry.properties && entry.properties.title === sheetName),
+   tables = item && item.tables || [],
+   table = tableName ? tables.find(entry => entry.name === tableName) : (tables.length === 1 ? tables[0] : null);
+ if (!table) throw new Error(tableName
+   ? `${sheetName} is missing Google Sheets Table ${tableName}.`
+   : `${sheetName} must contain exactly one Google Sheets Table to grow it; found ${tables.length}.`);
  const range = Object.assign({}, table.range || {});
  if ((range.endRowIndex || 0) >= sheet.getMaxRows()) return;
  range.endRowIndex = sheet.getMaxRows();
@@ -208,7 +216,22 @@ function extendAdminTableRows_(sheetName) {
    updateTable: { table: { tableId: table.tableId, range }, fields: 'range' }
  }] }, ss_().getId());
 }
-
+// Column positions of any sheet, found from its header row (first match wins, so repeated headers such as
+// "Upload Folder" are harmless). col(name) throws a clear error only for a column the caller actually uses.
+function columnsByHeader_(sheet, headerRow, label) {
+ const width = sheet.getLastColumn(), positions = {};
+ sheet.getRange(headerRow, 1, 1, width).getDisplayValues()[0].forEach((header, index) => {
+   const name = key_(header);
+   if (name && positions[name] == null) positions[name] = index;
+ });
+ return {
+   width,
+   col(name) {
+     if (positions[key_(name)] == null) throw new Error(`${label} is missing the column "${name}".`);
+     return positions[key_(name)];
+   }
+ };
+}
 function dropdownValuesFromTableColumn_(column) {
  const condition = column && column.dataValidationRule && column.dataValidationRule.condition;
  if (!condition || condition.type !== 'ONE_OF_LIST') return [];

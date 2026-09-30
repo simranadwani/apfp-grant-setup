@@ -174,6 +174,7 @@ function retrySharingForIntakeRow_(row, config, options) {
        'Last Updated': now_()
      }
    );
+   row.failureReason = friendly;
    return false;
  }
 }

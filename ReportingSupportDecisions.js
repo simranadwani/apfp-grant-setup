@@ -87,6 +87,77 @@ function writeChangedMatrixRows_(sheet, startRow, startColumn, current, desired)
   });
   return changed.length;
 }
+// Decides which sheet row each approved indicator lives in, so an outcome keeps its row (where the grantee types the
+// quarterly progress) and its Outcome ID even when the Setup lists the indicators in a different order.
+//   1. an indicator whose text already exists keeps that row;
+//   2. an edited indicator (text changed) at the same position keeps the row of the outcome it replaces;
+//   3. a new indicator takes a row that has never held an outcome (retired outcomes keep their row and ID).
+function planOutcomeRows_(existingRows, indicators) {
+  const norm = value => key_(String(value == null ? '' : value).replace(/\s+/g, ' ')),
+    wanted = indicators.map(norm), claimedBy = existingRows.map(() => -1), rowOf = indicators.map(() => -1);
+  wanted.forEach((text, s) => {
+    if (!text) return;
+    const row = existingRows.findIndex((r, i) => claimedBy[i] < 0 && r.id && norm(r.indicator) === text);
+    if (row >= 0) { claimedBy[row] = s; rowOf[s] = row; }
+  });
+  wanted.forEach((text, s) => {
+    if (!text || rowOf[s] >= 0 || s >= existingRows.length) return;
+    if (claimedBy[s] < 0 && existingRows[s].id && norm(existingRows[s].indicator)) { claimedBy[s] = s; rowOf[s] = s; }
+  });
+  wanted.forEach((text, s) => {
+    if (!text || rowOf[s] >= 0) return;
+    const row = existingRows.findIndex((r, i) => claimedBy[i] < 0 && !r.id);
+    if (row < 0) throw new Error(`Outcome Progress has no free row for the indicator "${clean_(indicators[s])}". ` +
+      'Retired outcomes keep their rows and IDs; ask an administrator to review the Outcome Progress sheet.');
+    claimedBy[row] = s;
+    rowOf[s] = row;
+  });
+  return claimedBy;
+}
+// Writes the five system columns of a grantee Outcome Progress sheet (by header name, changed cells only).
+function writeOutcomeSystemColumns_(table, grantId, projectTitle, indicators, targets) {
+  const cols = {
+    grantId: table.col('Grant ID'), title: table.col('Grant Title'), id: table.col('Outcome ID'),
+    indicator: table.col('Outcome / Indicator'), target: table.col('End-of-Program Cycle Target')
+  };
+  const existing = table.sheet.getRange(table.firstRow, 1, table.rows, table.width).getValues(), usedIds = new Set();
+  existing.forEach((row, i) => {
+    const id = clean_(row[cols.id]);
+    if (!id) return;
+    if (usedIds.has(key_(id))) throw new Error(`Duplicate Outcome ID ${id} found in Outcome Progress row ${table.firstRow + i}.`);
+    usedIds.add(key_(id));
+  });
+  const claimedBy = planOutcomeRows_(existing.map(row => ({ id: clean_(row[cols.id]), indicator: clean_(row[cols.indicator]) })), indicators);
+  let seq = 1, count = 0;
+  const desired = existing.map((row, i) => {
+    const out = row.slice(), s = claimedBy[i];
+    let outcomeId = clean_(row[cols.id]);
+    out[cols.grantId] = grantId;
+    out[cols.title] = projectTitle;
+    if (s >= 0) {
+      if (!outcomeId) {
+        const made = nextOutcomeId_(grantId, usedIds, seq);
+        outcomeId = made.id;
+        seq = made.next;
+      }
+      out[cols.indicator] = clean_(indicators[s]);
+      out[cols.target] = targets[s] == null ? '' : targets[s];
+      count++;
+    } else {
+      out[cols.indicator] = '';
+      out[cols.target] = '';
+    }
+    out[cols.id] = outcomeId;
+    return out;
+  });
+  Object.keys(cols).forEach(name => {
+    const column = cols[name], changed = [];
+    desired.forEach((row, i) => { if (comparable_(row[column]) !== comparable_(existing[i][column])) changed.push(i); });
+    groupConsecutive_(changed).forEach(run => table.sheet.getRange(table.firstRow + run[0], column + 1, run.length, 1)
+      .setValues(run.map(i => [desired[i][column]])));
+  });
+  return count;
+}
 function syncApprovedOutcomesToGranteeWorkbook_(grantId, sourceSetupId, deferCentralRefresh) {
   const grant = grantById_(grantId);
   if (!grant || isTransactionalGrantType_(grant.record['Grant Type'])) return 0;
@@ -100,47 +171,23 @@ function syncApprovedOutcomesToGranteeWorkbook_(grantId, sourceSetupId, deferCen
     throw new Error('Setup Field Config is missing outcome_indicator or outcome_target.');
   const indicators = readTableConfigured_(source, byCode.outcome_indicator).flat(),
     targets = readTableConfigured_(source, byCode.outcome_target).flat(),
-    targetSheet = target.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.OUTCOMES);
-  if (!targetSheet) throw new Error(`Outcome Progress sheet is missing for Grant ID ${grantId}.`);
+    sheet = target.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.OUTCOMES);
+  if (!sheet) throw new Error(`Outcome Progress sheet is missing for Grant ID ${grantId}.`);
   const schema = APFP.PREFLIGHT_SCHEMA.OUTCOME_TEMPLATE,
-    existing = targetSheet.getRange(schema.DATA_START_ROW, 1, schema.DATA_ROWS, schema.SYSTEM_COLUMNS).getValues(),
-    usedIds = new Set();
-  existing.forEach((row, i) => {
-    const id = clean_(row[2]);
-    if (!id) return;
-    const idKey = key_(id);
-    if (usedIds.has(idKey)) throw new Error(`Duplicate Outcome ID ${id} found in Outcome Progress row ${i + 5}.`);
-    usedIds.add(idKey);
-  });
-  let seq = 1;
-  const output = [];
-  for (let i = 0; i < schema.DATA_ROWS; i++) {
-    const indicator = clean_(indicators[i]), old = existing[i] || Array(schema.SYSTEM_COLUMNS).fill('');
-    let outcomeId = clean_(old[2]);
-    if (indicator && !outcomeId) {
-      const made = nextOutcomeId_(grantId, usedIds, seq);
-      outcomeId = made.id;
-      seq = made.next;
-    }
-    if (!indicator) {
-      output.push([grantId, clean_(grant.record['Project Title']), outcomeId, '', '']);
-      continue;
-    }
-    output.push([
-      grantId, clean_(grant.record['Project Title']), outcomeId, indicator, targets[i] == null ? '' : targets[i]
-    ]);
-  }
-  writeChangedMatrixRows_(targetSheet, schema.DATA_START_ROW, 1, existing, output);
+    columns = columnsByHeader_(sheet, schema.DATA_START_ROW - 1, `Outcome Progress for Grant ID ${grantId}`),
+    table = { sheet, width: columns.width, col: columns.col, firstRow: schema.DATA_START_ROW, rows: schema.DATA_ROWS };
+  const count = writeOutcomeSystemColumns_(table, grantId, clean_(grant.record['Project Title']), indicators, targets);
   if (!deferCentralRefresh) refreshOutcomeProgressTracker_();
-  return output.filter(row => clean_(row[2]) && clean_(row[3])).length;
+  return count;
 }
 function trackerKey_(row, indexes) {
   const parts = indexes.map(index => key_(row[index]));
   return parts.every(Boolean) ? parts.join('|') : '';
 }
+// Extra rows added whenever a tracker table is full (history is never deleted, so tables must be able to grow).
+const TRACKER_GROWTH_ROWS_ = 100;
 function upsertTrackerRowsByKey_(sheet, width, desiredRows, keyIndexes, preserveUnmatched) {
   const headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS[Object.keys(APFP.SHEETS).find(key => APFP.SHEETS[key] === sheet.getName())] || 1, capacity = sheet.getMaxRows() - headerRow;
-  if (desiredRows.length > capacity) throw new Error(`${sheet.getName()} Table capacity is ${capacity}; ${desiredRows.length} rows are required.`);
   const existing = capacity > 0 ? sheet.getRange(headerRow + 1, 1, capacity, width).getValues() : [],
     existingByKey = {}, emptyIndexes = [];
   existing.forEach((row, i) => {
@@ -152,6 +199,21 @@ function upsertTrackerRowsByKey_(sheet, width, desiredRows, keyIndexes, preserve
       emptyIndexes.push(i);
     }
   });
+  // Grow the sheet and its Table (with headroom) when there are more new keys than empty rows.
+  const newKeys = new Set();
+  desiredRows.forEach(row => {
+    const key = trackerKey_(row, keyIndexes);
+    if (key && existingByKey[key] == null) newKeys.add(key);
+  });
+  if (newKeys.size > emptyIndexes.length) {
+    const extra = newKeys.size - emptyIndexes.length + TRACKER_GROWTH_ROWS_;
+    sheet.insertRowsAfter(sheet.getMaxRows(), extra);
+    extendTableToSheetEnd_(sheet.getName());
+    for (let i = 0; i < extra; i++) {
+      emptyIndexes.push(existing.length);
+      existing.push(Array(width).fill(''));
+    }
+  }
   const finalRows = existing.map(row => row.slice()), desiredKeys = new Set(), assigned = new Set();
   desiredRows.forEach(row => {
     const key = trackerKey_(row, keyIndexes);

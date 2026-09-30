@@ -92,6 +92,7 @@ function processRequestedActions() {
    return;
  }
  let success = 0, needsAttention = 0, processed = 0, stoppedForRuntime = false;
+ const failures = [];
  const startedAt = Date.now();
  try {
    refreshDuplicateFlagsForRows_(batch.map(row => row.rowNumber));
@@ -100,7 +101,8 @@ function processRequestedActions() {
      try {
        ensureRequestIdForRow_(row);
        if (key_(row.action) === 'retry sharing') {
-         retrySharingForIntakeRow_(row, config) ? success++ : needsAttention++;
+         if (retrySharingForIntakeRow_(row, config)) success++;
+         else { needsAttention++; failures.push(runFailure_(row, row.failureReason)); }
          processed++;
          continue;
        }
@@ -108,13 +110,16 @@ function processRequestedActions() {
        if (!validation.ok) {
          needsAttention++;
          recordValidationFailure_(row, validation.errors);
+         failures.push(runFailure_(row, validation.errors.join(' ')));
          processed++;
          continue;
        }
-       processWorkspaceRequest_(row, config) ? success++ : needsAttention++;
+       if (processWorkspaceRequest_(row, config)) success++;
+       else { needsAttention++; failures.push(runFailure_(row, row.failureReason)); }
      } catch (e) {
        needsAttention++;
        markUnexpectedRowError_(row, e);
+       failures.push(runFailure_(row, friendlyErrorMessage_('PROCESSING_FAILED', e)));
      }
      processed++;
    }
@@ -125,7 +130,7 @@ function processRequestedActions() {
    ? ' The run stopped safely before the Apps Script time limit; remaining rows were left untouched. Run the workspace action again to continue.' : '';
  recordAutomationStatus_('Workspace Creation', needsAttention || stoppedForRuntime ? 'Needs attention' : 'Success',
    `${processed} processed; ${success} completed; ${needsAttention} need attention${stoppedForRuntime ? '; safely paused' : ''}`);
- SpreadsheetApp.getUi().alert(`Processed ${processed} requested action(s). ${success} completed; ${needsAttention} need attention.${note}`);
+ SpreadsheetApp.getUi().alert(runSummaryMessage_(processed, success, needsAttention, failures, note));
 }
 function validateIntakeRequest_(row) {
  const errors = [], tech = row.requestId ? techByRequest_(row.requestId) : null,
@@ -215,4 +220,20 @@ function markUnexpectedRowError_(row, error) {
    field: `Request ${requestId}`, message: error.message, recommendedAction: friendly,
    runId: existing ? existing.record['Run ID'] : ''
  });
+}
+function runFailure_(row, reason) {
+  return {
+    rowNumber: row.rowNumber, organisation: clean_(row.organisationName),
+    reason: clean_(reason) || 'See Last Error Message in the Technical Registry.'
+  };
+}
+// The end-of-run message names each row that needs attention and why (failure reasons are otherwise only in hidden sheets).
+function runSummaryMessage_(processed, success, needsAttention, failures, note) {
+  const lines = [`Processed ${processed} requested action(s). ${success} completed; ${needsAttention} need attention.${note || ''}`];
+  if (failures.length) {
+    lines.push('', 'Needs attention:');
+    failures.slice(0, 8).forEach(f => lines.push(`• Row ${f.rowNumber}${f.organisation ? ` (${f.organisation})` : ''}: ${f.reason}`));
+    if (failures.length > 8) lines.push(`• …and ${failures.length - 8} more (see the Technical Registry).`);
+  }
+  return lines.join('\n');
 }

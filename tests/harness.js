@@ -119,6 +119,7 @@ class FakeSheet {
       getColumn: () => col
     };
   }
+  insertRowsAfter(_after, count) { this.maxRows = Math.max(this.maxRows, this.grid.length) + count; }
   getSheetId() { return this.name; }
 }
 

@@ -262,6 +262,7 @@ function finishWorkspaceCreation_(row, request, requestId, grantId, orgFolder, c
      'Last Updated': now_(), 'Request ID': requestId, 'Grant ID': grantId
    });
    setWorkspaceStatusNote_(row.rowNumber, friendly);
+   row.failureReason = friendly;
    refreshWorkspaceCreatorRow_(grantId);
    return false;
  }
