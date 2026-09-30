@@ -1,6 +1,5 @@
 // Config.gs — names, schemas, field positions, and controlled options.
 const APFP = Object.freeze({
- SCHEMA_VERSION: '2026-09-01-v15.0',
  FONT_FAMILY: 'Arial',
  TIME_ZONE: 'Asia/Kolkata',
  HIDDEN_SYSTEM_SHEETS: [

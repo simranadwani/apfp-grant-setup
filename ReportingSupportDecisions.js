@@ -81,14 +81,7 @@ function writeChangedMatrixRows_(sheet, startRow, startColumn, current, desired)
   const changed = [];
   for (let i = 0; i < desired.length; i++) if (!rowValuesEqual_(current[i] || [], desired[i])) changed.push(i);
   if (!changed.length) return 0;
-  const groups = [];
-  let group = [changed[0]];
-  for (let i = 1; i < changed.length; i++) {
-    if (changed[i] === group[group.length - 1] + 1) group.push(changed[i]);
-    else { groups.push(group); group = [changed[i]]; }
-  }
-  groups.push(group);
-  groups.forEach(indexes => {
+  groupConsecutive_(changed).forEach(indexes => {
     const first = indexes[0], values = indexes.map(index => desired[index]);
     sheet.getRange(startRow + first, startColumn, values.length, desired[0].length).setValues(values);
   });
@@ -271,7 +264,7 @@ function refreshReportingData() {
       support = refreshSupportTracker_(),
       decisions = refreshDecisionTracker_(),
       disbursements = syncDisbursementsToGranteeWorkbooks_(),
-      links = syncGranteeDisbursementLinksToCentral_()
+      links = syncGranteeDisbursementLinksToCentral_(),
       detail = `${outcomes} outcomes; ${support} support; ${decisions} decisions; ${disbursements} disbursement rows; ${links} links`;
     recordAutomationStatus_('Reporting, Support & Decisions', 'Success', detail);
     recordAutomationStatus_('Disbursement Transfer', 'Success', `${disbursements} rows; ${links} links`);
@@ -421,14 +414,7 @@ function syncGranteeDisbursementLinksToCentral_() {
   });
   const rowNumbers = Object.keys(changes).map(Number).sort((a, b) => a - b);
   if (!rowNumbers.length) return 0;
-  const groups = [];
-  let group = [rowNumbers[0]];
-  for (let i = 1; i < rowNumbers.length; i++) {
-    if (rowNumbers[i] === group[group.length - 1] + 1) group.push(rowNumbers[i]);
-    else { groups.push(group); group = [rowNumbers[i]]; }
-  }
-  groups.push(group);
-  groups.forEach(items => sheet.getRange(items[0], map[key_('Donation Receipt Link')] + 1, items.length, 2)
+  groupConsecutive_(rowNumbers).forEach(items => sheet.getRange(items[0], map[key_('Donation Receipt Link')] + 1, items.length, 2)
     .setValues(items.map(rowNumber => changes[rowNumber])));
   return rowNumbers.length;
 }

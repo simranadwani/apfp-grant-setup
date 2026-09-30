@@ -118,44 +118,6 @@ function resolveOrganisation_(request, existingTechRecord) {
   appendObject_(APFP.SHEETS.ORGANISATIONS, 1, patch);
   return patch;
 }
-function normaliseOrganisationName_(value) {
- return clean_(value).toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
-}
-function levenshtein_(a, b) {
- a = normaliseOrganisationName_(a);
- b = normaliseOrganisationName_(b);
- if (a === b) return 0;
- if (!a.length) return b.length;
- if (!b.length) return a.length;
- const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
- for (let i = 1; i <= a.length; i++) {
-   const curr = [i];
-   for (let j = 1; j <= b.length; j++)
-     curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-   for (let j = 0; j < curr.length; j++) prev[j] = curr[j];
- }
- return prev[b.length];
-}
-function likelySameOrganisationName_(a, b) {
- const x = normaliseOrganisationName_(a), y = normaliseOrganisationName_(b);
- if (!x || !y) return false;
- if (x === y) return true;
- const longer = Math.max(x.length, y.length), shorter = Math.min(x.length, y.length);
- if ((x.includes(y) || y.includes(x)) && shorter >= 8 && shorter / longer >= 0.72) return true;
- const distance = levenshtein_(x, y);
- if (longer >= 8 && distance <= Math.max(2, Math.floor(longer * 0.08))) return true;
- const ax = new Set(x.split(' ')), ay = new Set(y.split(' ')),
-   intersection = [...ax].filter(t => ay.has(t)).length, union = new Set([...ax, ...ay]).size;
- return union >= 2 && intersection / union >= 0.8;
-}
-function likelyOrganisationMatches_(organisationName) {
-  if (!clean_(organisationName)) return [];
-  return organisationRegistryRows_().filter(item => {
-    const record = item.record;
-    return key_(record['Record Status']) !== 'inactive' &&
-      likelySameOrganisationName_(organisationName, record['Organisation Name']);
-  });
-}
 function refreshOrganisationRegistryEntry_(organisationId, organisationName) {
   const existing = organisationById_(organisationId);
   if (!existing) return;

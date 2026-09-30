@@ -22,7 +22,7 @@ function workbookOwnerEmail_(spreadsheet) {
   }
 }
 
-function v15HardenProtectionEditors_(protection, spreadsheet) {
+function hardenProtectionEditors_(protection, spreadsheet) {
   const owner = workbookOwnerEmail_(spreadsheet);
   const actor = clean_(Session.getEffectiveUser().getEmail());
   const allowed = Array.from(new Set([owner, actor].filter(validEmail_)));
@@ -127,7 +127,7 @@ function applyWorkbookProtectionSpecs_(spreadsheet, specs) {
       .setDescription(spec.description || `APFP client protection - ${spec.sheetName}`)
       .setWarningOnly(false)
       .setUnprotectedRanges(editableRanges);
-    v15HardenProtectionEditors_(protection, spreadsheet);
+    hardenProtectionEditors_(protection, spreadsheet);
 
     if (spec.hidden === true && !sheet.isSheetHidden()) sheet.hideSheet();
     if (spec.hidden === false && sheet.isSheetHidden()) sheet.showSheet();

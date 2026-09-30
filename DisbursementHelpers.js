@@ -30,13 +30,19 @@ function disbDateValue_(value) {
  return isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function disbHeaderRow_() {
+ return APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS;
+}
+function disbFirstDataRow_() {
+ return disbHeaderRow_() + 1;
+}
 function disbTracker_() {
  const sheet = ss_().getSheetByName(APFP.SHEETS.DISBURSEMENTS);
  if (!sheet) throw new Error(`Missing sheet: ${APFP.SHEETS.DISBURSEMENTS}`);
  return sheet;
 }
 function disbHeaderMap_(sheet) {
- const headers = sheet.getRange(APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS, 1, 1, APFP.DISBURSEMENT_HEADERS.length).getDisplayValues()[0];
+ const headers = sheet.getRange(disbHeaderRow_(), 1, 1, APFP.DISBURSEMENT_HEADERS.length).getDisplayValues()[0];
  const map = {};
  headers.forEach((header, i) => { if (clean_(header)) map[key_(header)] = i; });
  return map;
@@ -45,7 +51,4 @@ function disbColumn_(map, header) {
  const index = map[key_(header)];
  if (index == null) throw new Error(`Missing required Disbursement Tracker column: ${header}`);
  return index + 1;
-}
-function disbNotify_(message) {
- notifyAdmin_(message);
 }

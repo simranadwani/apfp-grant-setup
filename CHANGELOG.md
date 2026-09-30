@@ -4,6 +4,51 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Phase 1 — Cleanup and de-versioning (behaviour-preserving)
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes (code only; no sheet, template or config change)
+
+### Changed
+- `V15Actions.js` → **`UiActions.js`** (renamed). Helpers renamed: `v15SelectedDataRow_` → `selectedDataRow_`,
+  `v15Notify_` → `showToast_` (toast title `APFP V15` → `APFP`), `v15RunWorkspaceAction_` → `runWorkspaceAction_`,
+  `v15DisbursementOrganisationsForFy_` → `disbursementOrganisationsForFy_`.
+  `ProtectionIntegrity.js`: `v15HardenProtectionEditors_` → `hardenProtectionEditors_`.
+  **Every public function name is unchanged**, so buttons, triggers and the Retry/Reshare dialog keep working.
+- `Config.js` — removed the unused `SCHEMA_VERSION: '…-v15.0'` constant (nothing read it; the stamped
+  `DATA_SYNC_SCHEMA_VERSION` comes from `System - Configuration`, unchanged).
+- `UiActions.js` — the "Support closure is manual…" message no longer mentions V15.
+- `ReportingSupportDecisions.js` — fixed a missing comma in `refreshReportingData` that turned `detail` into an
+  accidental global variable (it worked only because Apps Script is not strict; now a proper `const`).
+- New shared helper `groupConsecutive_` (Utilities.js) replaces three hand-written copies of the same loop in
+  `writeChangedSegments_`, `writeChangedMatrixRows_` and `syncGranteeDisbursementLinksToCentral_`.
+- New helpers `disbHeaderRow_()` / `disbFirstDataRow_()` (DisbursementHelpers.js) replace ~15 repeats of
+  `APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS (+ 1)` in the disbursement code.
+
+### Removed (dead code — no caller anywhere)
+- `showAdminMenu_` (empty), `clearHeaderCache_`, `disbNotify_` (now calls `notifyAdmin_` directly).
+- `ensureWriterAccess_`, `ensureInitialWorkspaceSharing_` — one-line wrappers, inlined as
+  `ensureUserRole_(…, 'writer', config)`.
+- The organisation fuzzy-match chain `likelyOrganisationMatches_`, `likelySameOrganisationName_`, `levenshtein_`,
+  `normaliseOrganisationName_` — deliberately disabled ("similar-looking names are allowed for New Organisation");
+  still available in git history if ever wanted.
+
+### Kept on purpose
+`uiRetryWorkspace`, `uiReshareWorkspace`, `uiCompleteSelectedSupport` and every other public function: they may still
+be assigned to buttons. They will be removed only after the owner exports the real button assignments.
+
+### Tests
+`npm test` → 30 passing, 4 TODO (the known Upload Folder defects, unchanged), 0 failing. New tests: `groupConsecutive_`,
+`writeChangedSegments_`, and a guard that no `V15`/version-number naming reappears in code or dialogs.
+
+### Deploy / verify (TEST copy first)
+```bash
+git pull origin claude/gifted-allen-0a626q
+clasp push                 # goes to the TEST script (see .clasp.json)
+```
+In the TEST sheet: run `runPreflightChecks` (expect PASS + the "notification disabled" warning), then click
+**Refresh Outcome Progress** and **Refresh Disbursement Options** once to confirm buttons still respond.
+Note: `clasp push` replaces the file `V15Actions` with `UiActions` in the script project — that is expected.
+
 ## Phase 0b — Test copy and push safety (no behaviour change)
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** no

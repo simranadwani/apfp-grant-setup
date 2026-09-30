@@ -35,6 +35,17 @@ test('no unexpected new public (non-underscore) functions appear', () => {
   assert.equal(declared, PUBLIC_ENTRY_POINTS.length);
 });
 
+test('no version-number naming (V15 etc.) remains in code, dialogs or user-facing text', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { ROOT } = require('./harness');
+  fs.readdirSync(ROOT).filter(n => /\.(js|html)$/.test(n)).forEach(name => {
+    const text = fs.readFileSync(path.join(ROOT, name), 'utf8');
+    assert.doesNotMatch(text, /\bv\d{2}\b/i, `${name} still mentions a version number`);
+    assert.doesNotMatch(text, /v15/i, `${name} still mentions V15`);
+  });
+});
+
 test('schema contract snapshot (intentionally updated when a phase changes the schema)', () => {
   const project = loadProject();
   const apfp = plain(project.get('APFP'));

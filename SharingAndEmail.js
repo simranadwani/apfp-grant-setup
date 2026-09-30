@@ -1,15 +1,9 @@
 // SharingAndEmail.gs — access control, archive access, and workspace email.
-function ensureWriterAccess_(folderId, email, config) {
- return ensureUserRole_(folderId, email, 'writer', config);
-}
-function ensureInitialWorkspaceSharing_(workspaceFolderId, email, config) {
- return ensureWriterAccess_(workspaceFolderId, email, config);
-}
 function ensureWorkspaceSharingSafe_(requestId, workspaceFolderId, email, config) {
  const permissionSnapshot = permissionForUser_(workspaceFolderId, email);
  assertWorkspaceFilesSafeToShare_(requestId, config);
  try {
-   ensureInitialWorkspaceSharing_(workspaceFolderId, email, config);
+   ensureUserRole_(workspaceFolderId, email, 'writer', config);
    removeWorkspaceGranteeProtectionAccess_(requestId, config, email);
    assertWorkspaceFilesSafeToShare_(requestId, config, email);
    return true;

@@ -1,18 +1,8 @@
-// MenuAndChecks.gs — Central Administration menu, protection checks, and preflight.
-function showAdminMenu_() {
-  // V15 uses assigned sheet buttons. No custom menu is added.
-}
+// MenuAndChecks.gs — Central Administration open handler, admin notices, sheet checks, and preflight.
 function handleCentralAdminOpen() {
-  // Keep the UI menu-free while ensuring Organisation Name always has a live Registry dropdown.
+  // No custom menu is added: actions run from assigned sheet buttons. Keep the Organisation Name dropdown live.
   applyWorkspaceOrganisationDropdown_();
 }
-
-function clearHeaderCache_() {
-  Object.keys(HEADER_CACHE_).forEach(key => delete HEADER_CACHE_[key]);
-}
-
-
-
 
 function notifyAdmin_(message) {
   const text = clean_(message);

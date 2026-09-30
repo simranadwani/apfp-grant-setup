@@ -1,5 +1,5 @@
-// V15Actions.gs — thin, sheet-aware UI actions and dependent disbursement choices.
-function v15SelectedDataRow_(sheetName, headerRow) {
+// UiActions.gs — thin, sheet-aware UI actions (button entry points) and dependent disbursement choices.
+function selectedDataRow_(sheetName, headerRow) {
   const sheet = ss_().getActiveSheet();
   const range = sheet && sheet.getActiveRange();
   if (!sheet || sheet.getName() !== sheetName || !range || range.getRow() <= headerRow) {
@@ -8,17 +8,17 @@ function v15SelectedDataRow_(sheetName, headerRow) {
   if (range.getNumRows() !== 1) throw new Error('Select only one data row.');
   return { sheet: sheet, rowNumber: range.getRow() };
 }
-function v15Notify_(message) {
-  SpreadsheetApp.getActive().toast(message, 'APFP V15', 6);
+function showToast_(message) {
+  SpreadsheetApp.getActive().toast(message, 'APFP', 6);
 }
-function v15RunWorkspaceAction_(action) {
-  const selected = v15SelectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW);
+function runWorkspaceAction_(action) {
+  const selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW);
   selected.sheet.getRange(selected.rowNumber, APFP.INTAKE.ACTION_COLUMN).setValue(action);
   processRequestedActions();
 }
-function uiCreateWorkspace() { v15RunWorkspaceAction_('Create Workspace'); }
+function uiCreateWorkspace() { runWorkspaceAction_('Create Workspace'); }
 function uiRetryOrReshareWorkspace() {
-  const selected = v15SelectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW);
+  const selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW);
   const row = rowObject_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, selected.rowNumber);
   const status = key_(row['Workspace Status']);
   const action = ['completed', 'sharing pending', 'workspace created'].includes(status)
@@ -81,39 +81,39 @@ function uiLockAndMigrateApprovedSetups() {
 function uiReopenSetupForChanges() {
   reopenSelectedSetup();
 }
-// Backward-compatible aliases for any drawings assigned before V15.
-function uiRetryWorkspace() { v15RunWorkspaceAction_('Retry Workspace'); }
-function uiReshareWorkspace() { v15RunWorkspaceAction_('Retry Sharing'); }
+// Backward-compatible aliases: keep until the sheet buttons are confirmed not to use them.
+function uiRetryWorkspace() { runWorkspaceAction_('Retry Workspace'); }
+function uiReshareWorkspace() { runWorkspaceAction_('Retry Sharing'); }
 function uiRefreshOutcomeProgress() {
   const count = refreshOutcomeProgressTracker_();
   recordAutomationStatus_('Outcome Progress', 'Success', `${count} rows refreshed`);
-  v15Notify_(`${count} outcome rows refreshed.`);
+  showToast_(`${count} outcome rows refreshed.`);
   return count;
 }
 function uiRefreshSupport() {
   const count = refreshSupportTracker_();
   recordAutomationStatus_('Support', 'Success', `${count} rows refreshed`);
-  v15Notify_(`${count} support rows refreshed.`);
+  showToast_(`${count} support rows refreshed.`);
   return count;
 }
 function uiCompleteSelectedSupport() {
-  throw new Error('Support closure is manual in V15. Update Status directly in 3. Support.');
+  throw new Error('Support closure is manual. Update Status directly in 3. Support.');
 }
 function uiRefreshDecisions() {
   const count = refreshDecisionTracker_();
   recordAutomationStatus_('Decisions', 'Success', `${count} rows refreshed`);
-  v15Notify_(`${count} decision rows refreshed.`);
+  showToast_(`${count} decision rows refreshed.`);
   return count;
 }
 function uiRefreshDecisionDocuments() {
   const count = refreshDecisionDocumentLinks_();
   recordAutomationStatus_('Decision Documents', 'Success', `${count} rows refreshed`);
-  v15Notify_(`${count} Decision Tracker row(s) refreshed with Annual Report, Fund Utilisation and 10BE links.`);
+  showToast_(`${count} Decision Tracker row(s) refreshed with Annual Report, Fund Utilisation and 10BE links.`);
   return count;
 }
 function uiPushGrantStatus() {
   const headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DECISIONS;
-  const selected = v15SelectedDataRow_(APFP.SHEETS.DECISIONS, headerRow);
+  const selected = selectedDataRow_(APFP.SHEETS.DECISIONS, headerRow);
   const row = rowObject_(APFP.SHEETS.DECISIONS, headerRow, selected.rowNumber);
   const grantId = clean_(row['Grant ID']);
   if (!grantId) throw new Error('The selected Decision Tracker row has no Grant ID.');
@@ -125,9 +125,9 @@ function uiPushGrantStatus() {
       'Grant Status': 'Complete', 'Last Updated': now_()
     }));
   refreshWorkspaceCreatorRow_(grantId);
-  v15Notify_(`Grant ${grantId} marked Complete in Workspace Creator and Grant Registry.`);
+  showToast_(`Grant ${grantId} marked Complete in Workspace Creator and Grant Registry.`);
 }
-function v15DisbursementOrganisationsForFy_(fy) {
+function disbursementOrganisationsForFy_(fy) {
   const wanted = key_(disbCanonicalFy_(fy));
   if (!wanted) return [];
   const seen = {};
@@ -140,7 +140,7 @@ function v15DisbursementOrganisationsForFy_(fy) {
 function refreshDisbursementOrganisationOptionsForRow_(sheet, rowNumber, map) {
   const fy = sheet.getRange(rowNumber, disbColumn_(map, 'Financial Year')).getDisplayValue();
   const organisationCell = sheet.getRange(rowNumber, disbColumn_(map, 'Organisation Name'));
-  const options = v15DisbursementOrganisationsForFy_(fy);
+  const options = disbursementOrganisationsForFy_(fy);
   organisationCell.clearNote();
   if (!options.length) {
     organisationCell.clearDataValidations();
@@ -155,7 +155,7 @@ function refreshDisbursementOrganisationOptionsForRow_(sheet, rowNumber, map) {
 }
 function refreshDisbursementOrganisationOptions_() {
   const sheet = disbTracker_();
-  const headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS;
+  const headerRow = disbHeaderRow_();
   const map = disbHeaderMap_(sheet);
   const lastRow = Math.max(headerRow + 1, sheet.getLastRow());
   let updated = 0;
@@ -169,26 +169,26 @@ function refreshDisbursementOrganisationOptions_() {
 }
 function uiRefreshDisbursementOptions() {
   const count = refreshDisbursementOrganisationOptions_();
-  v15Notify_(`Organisation dropdowns refreshed for ${count} disbursement rows.`);
+  showToast_(`Organisation dropdowns refreshed for ${count} disbursement rows.`);
   return count;
 }
 function uiPushDisbursements() {
   completeDisbursementRows_();
   const count = syncDisbursementsToGranteeWorkbooks_();
   recordAutomationStatus_('Disbursement Push', 'Success', `${count} rows pushed`);
-  v15Notify_(`${count} disbursement rows pushed to grantee workbooks.`);
+  showToast_(`${count} disbursement rows pushed to grantee workbooks.`);
   return count;
 }
 function uiSyncDisbursements() {
   const links = syncGranteeDisbursementLinksToCentral_();
   recordAutomationStatus_('Disbursement Sync', 'Success', `${links} links synced`);
-  v15Notify_(`${links} grantee document links synced.`);
+  showToast_(`${links} grantee document links synced.`);
   return links;
 }
 function uiCorrectWorkspaceDetails() {
-  const selected = v15SelectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW);
+  const selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW);
   const result = correctWorkspaceDetailsForRow_(selected.rowNumber);
-  v15Notify_(
+  showToast_(
     `Workspace details corrected for ${result.grantId}. No IDs, folders, sharing permissions or historical rows were changed.`
   );
   return result;

@@ -286,17 +286,20 @@ function comparable_(value) {
  if (value === true || value === false) return String(value);
  return clean_(value);
 }
+// Splits an ascending list into runs of consecutive numbers (by keyFn, default identity),
+// so contiguous cells/rows can be written with one setValues call.
+function groupConsecutive_(items, keyFn) {
+ const key = keyFn || (x => x), groups = [];
+ items.forEach((item, i) => {
+   if (i > 0 && key(item) === key(items[i - 1]) + 1) groups[groups.length - 1].push(item);
+   else groups.push([item]);
+ });
+ return groups;
+}
 function writeChangedSegments_(sheet, rowNumber, changes) {
  if (!changes.length) return false;
  changes.sort((a, b) => a.index - b.index);
- const segments = [];
- let segment = [changes[0]];
- for (let i = 1; i < changes.length; i++) {
-   if (changes[i].index === segment[segment.length - 1].index + 1) segment.push(changes[i]);
-   else { segments.push(segment); segment = [changes[i]]; }
- }
- segments.push(segment);
- segments.forEach(items => {
+ groupConsecutive_(changes, change => change.index).forEach(items => {
    const start = items[0].index, values = items.map(item => item.value);
    sheet.getRange(rowNumber, start + 1, 1, values.length).setValues([values]);
  });

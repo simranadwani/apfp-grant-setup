@@ -152,6 +152,21 @@ test('configuredSetupValueIsValid_ enforces Field Config validation rules', () =
   assert.equal(ok('', row('EMAIL')), true); // blanks are the Required Rule's job
 });
 
-test('organisation-name normalisation used by duplicate checks', () => {
-  assert.equal(f('normaliseOrganisationName_')('  Sadaya & Co. Foundation '), 'sadaya and co foundation');
+test('groupConsecutive_ splits ascending numbers into contiguous runs', () => {
+  const g = f('groupConsecutive_');
+  assert.deepEqual(plain(g([])), []);
+  assert.deepEqual(plain(g([3])), [[3]]);
+  assert.deepEqual(plain(g([1, 2, 3, 5, 6, 9])), [[1, 2, 3], [5, 6], [9]]);
+  assert.deepEqual(plain(g([{ index: 0 }, { index: 1 }, { index: 4 }], c => c.index)), [[{ index: 0 }, { index: 1 }], [{ index: 4 }]]);
+});
+
+test('writeChangedSegments_ writes each contiguous run of changed cells once', () => {
+  const { FakeSheet } = require('./harness');
+  const sheet = new FakeSheet('S', [['a', 'b', 'c', 'd', 'e']]);
+  const changed = f('writeChangedSegments_')(sheet, 1, [
+    { index: 4, value: 'E' }, { index: 0, value: 'A' }, { index: 1, value: 'B' }]);
+  assert.equal(changed, true);
+  assert.deepEqual(sheet.writes.map(w => [w.col, w.cols]), [[1, 2], [5, 1]]);
+  assert.deepEqual(plain(sheet.grid[0]), ['A', 'B', 'c', 'd', 'E']);
+  assert.equal(f('writeChangedSegments_')(sheet, 1, []), false);
 });
