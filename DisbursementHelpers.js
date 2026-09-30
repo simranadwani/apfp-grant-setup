@@ -52,3 +52,25 @@ function disbColumn_(map, header) {
  if (index == null) throw new Error(`Missing required Disbursement Tracker column: ${header}`);
  return index + 1;
 }
+
+// Column positions in a grantee "Disbursement Documents" sheet, resolved from its header row, so that
+// added or reordered columns (for example Upload Folder) can never change what is read or written.
+// col(name) throws a clear error only for a column the caller actually uses.
+function granteeDisbursementTable_(workbook, grantId) {
+ const schema = APFP.PREFLIGHT_SCHEMA.TRANSACTIONAL_TEMPLATE,
+   sheet = workbook.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.DISBURSEMENTS);
+ if (!sheet) throw new Error(`Disbursement Documents sheet is missing for Grant ID ${grantId}.`);
+ const width = sheet.getLastColumn(), positions = {};
+ sheet.getRange(schema.HEADER_ROW, 1, 1, width).getDisplayValues()[0].forEach((header, index) => {
+   const name = key_(header);
+   if (name && positions[name] == null) positions[name] = index;
+ });
+ return {
+   sheet, width, firstRow: schema.DATA_START_ROW, rows: schema.DATA_ROWS,
+   col(name) {
+     if (positions[key_(name)] == null)
+       throw new Error(`Disbursement Documents for Grant ID ${grantId} is missing the column "${name}".`);
+     return positions[key_(name)];
+   }
+ };
+}

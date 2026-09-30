@@ -4,6 +4,51 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Phase 2b — Fix the Upload Folder layout defects (disbursements + outcome summary)
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes (`ReportingSupportDecisions.js`, `DisbursementHelpers.js`)
+
+### Fixed
+The templates gained an **Upload Folder** column (Disbursement Documents col E; one after every quarter in Outcome
+Progress) but four functions still used the old column positions. All four now find columns **by header name**.
+1. **Push Disbursements** (`syncDisbursementsToGranteeWorkbooks_`) — no longer fails with "…has no empty rows remaining"
+   (a row is free when its four system cells are empty; Upload Folder text no longer counts as data) and no longer
+   overwrites the Upload Folder formula. It writes only *Grant ID, Disbursement ID, Disbursement Date, Disbursed Amount*,
+   only for cells that changed; grantee-entered receipt/letter links are never touched.
+2. **Sync Disbursement Links** (`syncGranteeDisbursementLinksToCentral_`) — reads *Donation Receipt Link* and
+   *Donation Letter Link* by name (previously it copied "Upload Folder" into Receipt and the receipt into Letter).
+   The central Receipt/Letter columns are also written by name.
+3. **Decision Tracker "Outcome Summary"** (`outcomeSummaryForGrant_`) — picks the latest of *Final Actual, Q4…Q1 Progress*
+   by header (previously it read "Upload Folder" text from an old column position).
+4. New helper `granteeDisbursementTable_` (DisbursementHelpers.js) resolves the columns of a grantee *Disbursement Documents*
+   sheet once from its header row; adding, removing or reordering columns there no longer needs a code change.
+
+### Behaviour differences to be aware of
+- Push now **stops with a clear error** if a grant has more disbursements than the sheet has rows (100) — before, extra
+  rows were silently dropped.
+- The "N rows pushed" number now counts rows actually changed (before, it was inflated because rows always looked changed).
+- A missing required column produces a message naming the column, e.g.
+  `Disbursement Documents for Grant ID G1 is missing the column "Donation Receipt Link".`
+- Otherwise unchanged: grantees clearing a link does not clear it centrally; only `Disbursed` rows are pushed.
+
+### Tests
+`tests/known-defects.test.js` → `tests/disbursement-sync.test.js`; the four `todo` tests are now real tests, plus new ones for
+idempotent push, in-place amount update, added/reordered columns, capacity error and missing-column error.
+`npm test` → **42 passing, 0 TODO, 0 failing.**
+
+### Deploy / verify (TEST copy first — do not use the 5 copied organisations)
+The TEST sheet's five existing grants point at the *production* workbooks, so create a brand-new grant in TEST:
+1. `1. Workspace Creator`: new row — FY 2026-27, 01/04/2026–31/03/2027, New Organisation "Zz Test Org", any classification,
+   Grant Title "ZZ Test Grant", Unrestricted, Amount 1000000, Primary Contact Email = **your own address** → select the row → **Create Workspace**.
+2. `6. Committed & Spent Tracker`: **Refresh Organisation Options**, pick FY 2026-27 and "Zz Test Org", enter Planned Date and Planned Amount,
+   click **Prepare Disbursement Rows** (a `DISB-2627-…` ID appears). Set Status = Disbursed, Actual Date, Actual Amount.
+3. Click **Push Disbursements**. Open the test org's Outcome workbook → *Disbursement Documents*: the row shows the
+   Grant ID, Disbursement ID, date and amount, and the **Upload Folder** cell still works.
+4. In that workbook paste any Drive links into *Donation Receipt Link* and *Donation Letter Link*, then in the central tracker click
+   **Sync Disbursement Links**: the two central link columns show the pasted links (not the words "Upload Folder").
+5. Change the Actual Amount centrally and push again: only the amount changes; the pasted links stay.
+Send me anything unexpected. Nothing here touches production.
+
 ## Phase 1 — Cleanup and de-versioning (behaviour-preserving)
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes (code only; no sheet, template or config change)

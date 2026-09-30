@@ -288,11 +288,24 @@ function outcomeSummaryForGrant_(grant) {
   try {
     const sheet = workbook.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.OUTCOMES), lines = [];
     if (!sheet) throw new Error(`Outcome Progress workbook is missing sheet ${APFP.OUTCOME_TEMPLATE_SHEETS.OUTCOMES}.`);
-    const schema = APFP.PREFLIGHT_SCHEMA.OUTCOME_TEMPLATE;
-    sheet.getRange(schema.DATA_START_ROW, 1, schema.DATA_ROWS, schema.TOTAL_COLUMNS).getDisplayValues().forEach(row => {
-      if (!clean_(row[2]) || !clean_(row[3])) return;
-      const latest = clean_(row[21]) || clean_(row[17]) || clean_(row[13]) || clean_(row[9]) || clean_(row[5]) || 'No progress reported yet';
-      lines.push(`${row[3]} — ${latest}`);
+    const schema = APFP.PREFLIGHT_SCHEMA.OUTCOME_TEMPLATE, headerRow = schema.DATA_START_ROW - 1,
+      values = sheet.getRange(headerRow, 1, schema.DATA_ROWS + 1, sheet.getLastColumn()).getDisplayValues(),
+      positions = {};
+    // Columns are found by header name: the sheet has several "Upload Folder" columns between the quarters.
+    values[0].forEach((header, index) => {
+      const name = key_(header);
+      if (name && positions[name] == null) positions[name] = index;
+    });
+    const col = name => {
+      if (positions[key_(name)] == null) throw new Error(`Outcome Progress is missing the column "${name}".`);
+      return positions[key_(name)];
+    };
+    const idCol = col('Outcome ID'), indicatorCol = col('Outcome / Indicator'),
+      progressCols = ['Final Actual', 'Q4 Progress', 'Q3 Progress', 'Q2 Progress', 'Q1 Progress'].map(col);
+    values.slice(1).forEach(row => {
+      if (!clean_(row[idCol]) || !clean_(row[indicatorCol])) return;
+      const latest = progressCols.map(c => clean_(row[c])).find(Boolean) || 'No progress reported yet';
+      lines.push(`${row[indicatorCol]} — ${latest}`);
     });
     return lines.join('\n');
   } catch (error) {
@@ -341,58 +354,76 @@ function externalHeaderMap_(sheet, headerRow) {
   return map;
 }
 function syncDisbursementsToGranteeWorkbooks_() {
-  const sheet = disbursementSheet_(), map = externalHeaderMap_(sheet, 2), last = sheet.getLastRow();
-  if (last < 3) return 0;
-  const rows = sheet.getRange(3, 1, last - 2, sheet.getLastColumn()).getValues(), byGrant = {};
+  const sheet = disbursementSheet_(), map = externalHeaderMap_(sheet, disbHeaderRow_()), last = sheet.getLastRow(),
+    firstRow = disbFirstDataRow_();
+  if (last < firstRow) return 0;
+  const rows = sheet.getRange(firstRow, 1, last - firstRow + 1, sheet.getLastColumn()).getValues(), byGrant = {};
   rows.forEach(row => {
     const grantId = clean_(row[map[key_('Grant ID')]]), id = clean_(row[map[key_('Disbursement ID')]]),
       status = key_(row[map[key_('Status')]]), actualDate = row[map[key_('Actual Date')]], actualAmount = row[map[key_('Actual Amount')]];
     if (!grantId || !id || status !== 'disbursed' || !actualDate || actualAmount === '' || actualAmount == null) return;
     if (!byGrant[grantId]) byGrant[grantId] = [];
-    byGrant[grantId].push({
-      id,
-      date: actualDate || row[map[key_('Planned Date')]],
-      amount: actualAmount !== '' && actualAmount != null ? actualAmount : row[map[key_('Planned Amount')]]
-    });
+    byGrant[grantId].push({ id, date: actualDate, amount: actualAmount });
   });
   let changedRows = 0;
   Object.keys(byGrant).forEach(grantId => {
     const workbook = disbursementWorkbookForGrant_(grantId);
     if (!workbook) return;
-    const target = workbook.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.DISBURSEMENTS);
-    if (!target) throw new Error(`Disbursement Documents sheet is missing for Grant ID ${grantId}.`);
-    const disbSchema = APFP.PREFLIGHT_SCHEMA.TRANSACTIONAL_TEMPLATE,
-      existing = target.getRange(disbSchema.DATA_START_ROW, 1, disbSchema.DATA_ROWS, disbSchema.HEADERS.length).getValues(), byId = {}, empty = [];
+    const table = granteeDisbursementTable_(workbook, grantId), items = byGrant[grantId];
+    if (items.length > table.rows)
+      throw new Error(`Disbursement Documents for Grant ID ${grantId} holds ${table.rows} rows; ${items.length} disbursements need a row.`);
+    // Only these four system columns are ever written. Upload Folder and the grantee link columns are never touched.
+    const fields = [
+      { column: table.col('Grant ID'), value: () => grantId },
+      { column: table.col('Disbursement ID'), value: item => item.id },
+      { column: table.col('Disbursement Date'), value: item => item.date },
+      { column: table.col('Disbursed Amount'), value: item => item.amount }
+    ];
+    const existing = table.sheet.getRange(table.firstRow, 1, table.rows, table.width).getValues(),
+      byId = {}, empty = [];
     existing.forEach((row, i) => {
-      const id = key_(row[1]);
+      const id = key_(row[fields[1].column]);
       if (id) byId[id] = i;
-      else if (!row.some(value => clean_(value))) empty.push(i);
+      // A row is free when none of the system columns is filled (other columns, e.g. Upload Folder, always show text).
+      else if (!fields.some(field => clean_(row[field.column]))) empty.push(i);
     });
-    const finalRows = existing.map(row => row.slice()), used = new Set();
-    byGrant[grantId].slice(0, disbSchema.DATA_ROWS).forEach(item => {
+    const desired = existing.map(row => row.slice()), used = new Set();
+    items.forEach(item => {
       const idKey = key_(item.id);
       let index = byId[idKey];
       if (index == null) {
         while (empty.length && used.has(empty[0])) empty.shift();
         if (!empty.length) throw new Error(`Disbursement Documents workbook for ${grantId} has no empty rows remaining.`);
         index = empty.shift();
+        byId[idKey] = index;
       }
-      const old = existing[index] || Array(6).fill('');
-      finalRows[index] = [grantId, item.id, item.date, item.amount, old[4] || '', old[5] || ''];
+      fields.forEach(field => { desired[index][field.column] = field.value(item); });
       used.add(index);
     });
-    changedRows += writeChangedMatrixRows_(target, disbSchema.DATA_START_ROW, 1, existing, finalRows);
+    const touchedRows = new Set();
+    fields.forEach(field => {
+      const changed = [];
+      desired.forEach((row, i) => {
+        if (comparable_(row[field.column]) !== comparable_(existing[i][field.column])) changed.push(i);
+      });
+      changed.forEach(i => touchedRows.add(i));
+      groupConsecutive_(changed).forEach(run => table.sheet.getRange(table.firstRow + run[0], field.column + 1, run.length, 1)
+        .setValues(run.map(i => [desired[i][field.column]])));
+    });
+    changedRows += touchedRows.size;
   });
   return changedRows;
 }
 function syncGranteeDisbursementLinksToCentral_() {
-  const sheet = disbursementSheet_(), map = externalHeaderMap_(sheet, 2), last = sheet.getLastRow();
-  if (last < 3) return 0;
-  const width = sheet.getLastColumn(), rows = sheet.getRange(3, 1, last - 2, width).getValues(), central = {}, changes = {}, grantIds = new Set();
+  const sheet = disbursementSheet_(), map = externalHeaderMap_(sheet, disbHeaderRow_()), last = sheet.getLastRow(),
+    firstRow = disbFirstDataRow_();
+  if (last < firstRow) return 0;
+  const width = sheet.getLastColumn(), rows = sheet.getRange(firstRow, 1, last - firstRow + 1, width).getValues(),
+    central = {}, changes = {}, grantIds = new Set();
   rows.forEach((row, i) => {
     const id = clean_(row[map[key_('Disbursement ID')]]), grantId = clean_(row[map[key_('Grant ID')]]);
     if (id) central[key_(id)] = {
-      rowNumber: i + 3, grantId,
+      rowNumber: i + firstRow, grantId,
       receipt: row[map[key_('Donation Receipt Link')]], letter: row[map[key_('Donation Letter Link')]]
     };
     if (id && grantId) grantIds.add(grantId);
@@ -400,13 +431,13 @@ function syncGranteeDisbursementLinksToCentral_() {
   grantIds.forEach(grantId => {
     const workbook = disbursementWorkbookForGrant_(grantId);
     if (!workbook) return;
-    const source = workbook.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.DISBURSEMENTS);
-    if (!source) throw new Error(`Disbursement Documents sheet is missing for Grant ID ${grantId}.`);
-    const disbSchema = APFP.PREFLIGHT_SCHEMA.TRANSACTIONAL_TEMPLATE;
-    source.getRange(disbSchema.DATA_START_ROW, 1, disbSchema.DATA_ROWS, disbSchema.HEADERS.length).getValues().forEach(row => {
-      const id = clean_(row[1]), target = central[key_(id)];
+    const table = granteeDisbursementTable_(workbook, grantId),
+      idCol = table.col('Disbursement ID'), receiptCol = table.col('Donation Receipt Link'),
+      letterCol = table.col('Donation Letter Link');
+    table.sheet.getRange(table.firstRow, 1, table.rows, table.width).getValues().forEach(row => {
+      const id = clean_(row[idCol]), target = central[key_(id)];
       if (!id || !target || key_(target.grantId) !== key_(grantId)) return;
-      const receipt = clean_(row[4]), letter = clean_(row[5]);
+      const receipt = clean_(row[receiptCol]), letter = clean_(row[letterCol]);
       const nextReceipt = receipt || target.receipt || '', nextLetter = letter || target.letter || '';
       if (comparable_(target.receipt) !== comparable_(nextReceipt) || comparable_(target.letter) !== comparable_(nextLetter))
         changes[target.rowNumber] = [nextReceipt, nextLetter];
@@ -414,8 +445,12 @@ function syncGranteeDisbursementLinksToCentral_() {
   });
   const rowNumbers = Object.keys(changes).map(Number).sort((a, b) => a - b);
   if (!rowNumbers.length) return 0;
-  groupConsecutive_(rowNumbers).forEach(items => sheet.getRange(items[0], map[key_('Donation Receipt Link')] + 1, items.length, 2)
-    .setValues(items.map(rowNumber => changes[rowNumber])));
+  [['Donation Receipt Link', 0], ['Donation Letter Link', 1]].forEach(([header, position]) => {
+    const column = map[key_(header)];
+    if (column == null) throw new Error(`Disbursement Tracker is missing the column "${header}".`);
+    groupConsecutive_(rowNumbers).forEach(run => sheet.getRange(run[0], column + 1, run.length, 1)
+      .setValues(run.map(rowNumber => [changes[rowNumber][position]])));
+  });
   return rowNumbers.length;
 }
 function refreshDecisionDocumentLinks_() {
