@@ -30,7 +30,7 @@ Buttons are drawings assigned to these functions. A workspace button **never wri
 | `uiRefreshReportingForce` | Forget "unchanged" memory and re-read every Active workbook |
 | `uiPushGrantStatus` | Mark the selected Decision Tracker grant Complete |
 | `uiRefreshDisbursementOptions`, `completeDisbursementRows` | Organisation dropdowns and ID/quarter completion in the Committed & Spent Tracker |
-| `uiPushDisbursements`, `uiSyncDisbursements`, `uiSyncDisbursementsFullCheck`, `uiResetDisbursementStatuses` | Push Disbursed rows to grantee workbooks; sync document links back (see §5) |
+| `uiPushDisbursements`, `uiSyncDisbursements`, `uiSyncDisbursementsFullCheck` | Push Disbursed rows to grantee workbooks; sync document links back (see §5) |
 | `uiCorrectWorkspaceDetails` | Correct a grant title / details everywhere, including old disbursement rows |
 | `uiBackupCentralAdministration` | Copy this sheet into `<CENTRAL_ADMIN_FOLDER_ID>/Backups` (do this before bulk operations) |
 | `runPreflightChecks` | Health check: settings, sheets, headers by name, Tables, dropdowns, templates, protections, time zones, email templates |

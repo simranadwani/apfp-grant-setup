@@ -15,8 +15,6 @@ function showToast_(message) {
 // Workspace buttons never write an Action. They run the rows a person (or the system, after a failure) has already marked.
 // Retry / Reshare additionally opens its dialog for the selected row when that row already has a workspace.
 function uiCreateWorkspace() { processRequestedActions(); }
-function uiRetryWorkspace() { processRequestedActions(); }
-function uiReshareWorkspace() { processRequestedActions(); }
 function uiRetryOrReshareWorkspace() {
   let selected = null;
   try { selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW); } catch (error) { selected = null; }
@@ -107,9 +105,6 @@ function uiRefreshReportingForce() {
   const outcomes = refreshOutcomeProgressTracker_(), support = refreshSupportTracker_(), decisions = refreshDecisionTracker_();
   showToast_(`Full re-read done: ${outcomes} outcome, ${support} support, ${decisions} decision row(s).${refreshNote_()}`);
   return { outcomes, support, decisions };
-}
-function uiCompleteSelectedSupport() {
-  throw new Error('Support closure is manual. Update Status directly in 3. Support.');
 }
 function uiRefreshDecisions() {
   const count = refreshDecisionTracker_();
@@ -231,15 +226,6 @@ function runDisbursementLinkSync_(options) {
 function uiSyncDisbursements() { return runDisbursementLinkSync_(); }
 // Re-checks rows already marked Synced (a grantee may have replaced a link later).
 function uiSyncDisbursementsFullCheck() { return runDisbursementLinkSync_({ full: true }); }
-// Redo: blanks Push Status and Document Sync Status for the selected rows.
-function uiResetDisbursementStatuses() {
-  const sheet = disbTracker_(), range = sheet.getActiveRange();
-  if (ss_().getActiveSheet().getName() !== sheet.getName() || !range)
-    throw new Error('Select the rows to reset in 6. Committed & Spent Tracker, then run this action again.');
-  const count = clearDisbursementStatuses_(sheet, disbHeaderMap_(sheet), range.getRow(), range.getLastRow());
-  showToast_(`${count} row(s) will be pushed and synced again.`);
-  return count;
-}
 function uiBackupCentralAdministration() {
   const url = backupCentralAdministration_();
   showToast_('Backup saved in the Central Administration Backups folder.');

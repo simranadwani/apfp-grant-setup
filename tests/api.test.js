@@ -8,14 +8,14 @@ const { loadProject, plain } = require('./harness');
 const PUBLIC_ENTRY_POINTS = [
   'completeDisbursementRows', 'handleCentralAdminEdit', 'handleCentralAdminOpen', 'handleEdit',
   'processRequestedActions', 'refreshReportingData', 'reopenSelectedSetup', 'runPreflightChecks',
-  'submitRetryReshareGrantFy', 'uiCompleteSelectedSupport', 'uiCorrectWorkspaceDetails',
+  'submitRetryReshareGrantFy', 'uiCorrectWorkspaceDetails',
   'uiCreateWorkspace', 'uiLockAndMigrateApprovedSetups', 'uiPushDisbursements', 'uiPushGrantStatus',
   'uiRefreshDecisionDocuments', 'uiRefreshDecisions', 'uiRefreshDisbursementOptions',
-  'uiRefreshOutcomeProgress', 'uiRefreshSupport', 'uiReopenSetupForChanges', 'uiReshareWorkspace',
-  'uiRetryOrReshareWorkspace', 'uiRetryWorkspace', 'uiSyncDisbursements', 'updateApprovedSetupData',
+  'uiRefreshOutcomeProgress', 'uiRefreshSupport', 'uiReopenSetupForChanges',
+  'uiRetryOrReshareWorkspace', 'uiSyncDisbursements', 'updateApprovedSetupData',
   'validateDisbursementTracker',
   // added with the status columns (buttons optional):
-  'uiSyncDisbursementsFullCheck', 'uiResetDisbursementStatuses', 'uiBackupCentralAdministration',
+  'uiSyncDisbursementsFullCheck', 'uiBackupCentralAdministration',
   // config-driven lists:
   'refreshDropdownsFromConfig', 'uiRefreshReportingForce'
 ];

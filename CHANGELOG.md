@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round H2 — unbound functions removed
+
+**Date:** 2026-09-30 · **TEST only** · Removed `uiCompleteSelectedSupport`, `uiRetryWorkspace`, `uiReshareWorkspace` (`UiActions.js`) and `uiResetDisbursementStatuses`: the owner confirmed no button uses them (Central Administration buttons: Create Workspace, Retry/Reshare, Lock & Migrate, Reopen Setup, Correct Workspace Details, Refresh Outcomes/Support/Decisions/Documents, Push Grant Status, Push to Grantee Workspaces, Refresh Organisations Options, Complete Rows).
+
 ## Round H — dropdown check no longer position-sensitive; clear unused settings
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes (small) · **TEST only**
