@@ -80,3 +80,26 @@ test('a Transactional workspace (shown as Disbursement Only) still counts as sha
   p.get('uiRetryOrReshareWorkspace')();
   assert.equal(dialogs.length, 1);
 });
+
+test('an empty row with an Action is reported and gets no Request ID or registry record', () => {
+  const { p, alerts, processed } = setup();
+  const created = [];
+  p.override('intakeRowsWithActions_', () => [{ rowNumber: 14, action: 'Create Workspace', requestId: '', financialYear: '', grantStartDate: '', grantEndDate: '',
+    organisationName: '', projectTitle: '', grantType: '', amountApproved: '', granteeEmail: '' }]);
+  p.override('ensureRequestIdForRow_', row => { created.push(row.rowNumber); return 'REQ'; });
+  p.get('processRequestedActions')();
+  assert.deepEqual(created, [], 'no Request ID written');
+  assert.deepEqual(processed, []);
+  assert.match(alerts[0], /Row 14: This row is empty/);
+});
+
+test('a partly filled row is still validated normally (and still gets a Request ID)', () => {
+  const { p } = setup();
+  const created = [];
+  p.override('intakeRowsWithActions_', () => [{ rowNumber: 14, action: 'Create Workspace', requestId: '', organisationName: 'Org', financialYear: '', projectTitle: '' }]);
+  p.override('ensureRequestIdForRow_', row => { created.push(row.rowNumber); return 'REQ'; });
+  p.override('validateIntakeRequest_', () => ({ ok: false, errors: ['x'] }));
+  p.override('recordValidationFailure_', () => {});
+  p.get('processRequestedActions')();
+  assert.deepEqual(created, [14]);
+});

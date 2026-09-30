@@ -34,6 +34,11 @@ function intakeRowsWithActions_() {
    };
  }).filter(row => APFP.INTAKE.PROCESS_ACTIONS.includes(row.action));
 }
+// A row with an Action but none of the grant details filled in: report it, but create no Request ID or Technical Registry record for it.
+function intakeRowIsBlank_(row) {
+ return ![row.financialYear, row.grantStartDate, row.grantEndDate, row.organisationName, row.projectTitle, row.grantType,
+   row.amountApproved, row.granteeEmail].some(value => clean_(value instanceof Date ? value.getTime() : value));
+}
 function runtimeGuard_() {
  [APFP.SHEETS.INTAKE, APFP.SHEETS.ORGANISATIONS, APFP.SHEETS.GRANTS, APFP.SHEETS.TECHNICAL, APFP.SHEETS.LEADERSHIP].forEach(name => {
    if (!ss_().getSheetByName(name)) throw new Error(`Required sheet is missing: ${name}`);
@@ -102,6 +107,12 @@ function processRequestedActions() {
    for (const row of batch) {
      if (processed > 0 && Date.now() - startedAt >= APFP.EXECUTION_GUARD_MS) { stoppedForRuntime = true; break; }
      try {
+       if (!clean_(row.requestId) && intakeRowIsBlank_(row)) {
+         needsAttention++;
+         failures.push(runFailure_(row, 'This row is empty. Fill in the grant details, or clear the Action.'));
+         processed++;
+         continue;
+       }
        ensureRequestIdForRow_(row);
        if (key_(row.action) === 'retry sharing') {
          if (retrySharingForIntakeRow_(row, config)) success++;

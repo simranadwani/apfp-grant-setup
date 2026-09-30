@@ -18,17 +18,21 @@ Read this first when picking the project up again. Keep it current. Every code c
 - Buttons/triggers may be bound to any public function: the list is frozen by `tests/api.test.js`. Two manual triggers exist:
   `handleCentralAdminOpen` (on open) and `handleCentralAdminEdit` (on edit).
 
-## 2. Status
-Done and verified on TEST: test harness (Phase 0), TEST copy + push safety (0b), V15 cleanup / dead code (1),
-Upload Folder layout fixes for disbursement push, link sync and outcome summary (2b). R1 verified on TEST. Phase 3b (growing tables, stable Outcome IDs, Backup button, `PROTECTION_EDITORS`, failure reasons) built, 72 tests passing, awaiting TEST run by owner.
-TEST steps for 3b: add a `PROTECTION_EDITORS` row to System - Configuration; set `CENTRAL_ADMIN_FOLDER_ID` to the TEST folder `1woVxClKRApzFqaW1zGyrd3Ygc_HlHc6L` (the copied value points at PRODUCTION Admin); then force a failed Create Workspace row, reorder indicators on a re-approval, run Backup.
-Next: R1/R2 below, then column-tolerant reading everywhere (plan Phase 2), config-driven lists (Phase 3), hardening (Phase 5).
+## 2. Status (2026-09-30, close-out)
+Built and tested locally (116 tests) and, up to Phase 3b + the speed rounds, verified on TEST by the owner: test harness, V15 cleanup, Upload Folder fixes, Push/Sync status columns, growing tables, stable Outcome IDs, Backup button,
+`PROTECTION_EDITORS`, failure reasons, buttons that never write an Action, Disbursement Only / Not Applicable statuses, faster protection and sharing, and the close-out rounds:
+**A** fewer saves + isolated / skippable refreshes, **B** column-tolerant reads/writes and name-based preflight, **C** config-driven lists / rolling financial years / time zone. Rounds A–C and the last cleanup still need the owner's TEST run
+(checklist in `docs/PRODUCTION_ROLLOUT.md` §0 and the chat). **Nothing is on production.** Next: owner confirms TEST → follow `docs/PRODUCTION_ROLLOUT.md`.
+
+Explicitly NOT done (needs the owner's yes, one item at a time): sharing / permission hardening (reopen rollback, old-email revocation retry, approval tied to a workbook version, `writersCanShare=false`, ACL audit);
+storing "How will it be Measured?"; the two meanings of Q1–Q4; Exceptions Log auto-close (needs the owner's status vocabulary); `recordAutomationStatus_` is kept (harmless: writes only if Start Here has a matching label row);
+protected ranges of the grantee templates and the export block rows stay layout-driven (documented in `docs/OPERATING_MODEL.md` §6).
 
 ## 3. Owner decisions (do not re-litigate without asking)
 - No hard-coded dropdown values or column positions in the long run; adding a column must not need a code change. Lists will live in
   `System - Configuration` (no new system sheet). Behaviour-driving values (Transactional, Discretionary, Approved …) stay in code.
 - No functionality may be lost; all public function names stay until the real button bindings are confirmed.
-- "Approved editors" for protections = team@goalkeep.net and Anagha's account (config key `PROTECTION_EDITORS`, built in 3b).
+- "Approved editors" for protections = team@goalkeep.net and Anagha's account (config key `PROTECTION_EDITORS`, built).
 - Mixed file ownership (apfp.rda vs team@goalkeep.net): parked.
 - Central Administration must not stay link-shared "anyone – editor" (owner will restrict it).
 - **Completed grants:** Outcome / Support / Decision refresh covers **Active grants only**; a Complete/Discontinued grant is frozen at completion.

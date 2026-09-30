@@ -4,6 +4,17 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round D — empty rows, documentation and the production runbook
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes (small) · **TEST only**
+
+- **Empty row with an Action** (`IntakeValidation.js`): the run reports "This row is empty. Fill in the grant details, or clear the Action." and creates **no** Request ID and **no** Technical Registry record for it (before, a blank row left an orphan registry entry).
+  A partly filled row is validated as before.
+- **Docs (repo only):** `docs/OPERATING_MODEL.md` (layers, grant types and their statuses, every button, settings, Push/Sync statuses, how to change columns / lists / time zone without code, what is layout-driven on purpose),
+  `docs/PRODUCTION_ROLLOUT.md` (exact backup → verify-original → push → sheet changes → preflight → smoke test → clean-up → rollback), `README.md`, `docs/PROJECT_NOTES.md` status.
+- Left as is on purpose: `recordAutomationStatus_` (harmless when Start Here has no matching row), Exceptions Log auto-close (needs the owner's status vocabulary).
+- 116 tests pass.
+
 ## Round A — fewer saves, isolated and skippable refreshes, batched dropdown refresh
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**
