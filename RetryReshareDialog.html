@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body { font: 14px Arial, sans-serif; color: #202124; margin: 22px; }
+      .context { background: #f6f8fc; border-radius: 8px; padding: 12px; line-height: 1.55; }
+      label.option { display: block; margin: 18px 0 8px; }
+      input[type=email] { box-sizing: border-box; width: 100%; padding: 9px; margin-top: 8px; }
+      .note { color: #5f6368; font-size: 12px; margin-top: 8px; }
+      .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+      button { border: 0; border-radius: 4px; padding: 9px 16px; cursor: pointer; }
+      .primary { background: #1a73e8; color: white; }
+      #status { color: #b3261e; min-height: 18px; margin-top: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="context">
+      <strong><?= context.organisationName ?></strong><br>
+      Financial year: <?= context.financialYear ?><br>
+      Grant ID: <?= context.grantId ?><br>
+      Current email: <?= context.currentEmail ?>
+    </div>
+    <label class="option"><input type="radio" name="mode" value="same" checked onchange="toggleEmail()"> Continue with the same email</label>
+    <label class="option"><input type="radio" name="mode" value="change" onchange="toggleEmail()"> Change the email for this Grant-FY only</label>
+    <input id="newEmail" type="email" placeholder="New primary contact email" disabled>
+    <div class="note">Changing it here does not update the organisation-wide contact or any other grant.</div>
+    <div id="status"></div>
+    <div class="actions">
+      <button onclick="google.script.host.close()">Cancel</button>
+      <button id="run" class="primary" onclick="submitForm()">Retry / Reshare</button>
+    </div>
+    <script>
+      const context = <?!= JSON.stringify(context) ?>;
+      function mode() { return document.querySelector('input[name=mode]:checked').value; }
+      function toggleEmail() {
+        const input = document.getElementById('newEmail');
+        input.disabled = mode() !== 'change';
+        if (!input.disabled) input.focus();
+      }
+      function submitForm() {
+        const email = document.getElementById('newEmail').value.trim();
+        if (mode() === 'change' && !email) {
+          document.getElementById('status').textContent = 'Enter the new email address.';
+          return;
+        }
+        document.getElementById('run').disabled = true;
+        document.getElementById('status').textContent = 'Working…';
+        google.script.run
+          .withSuccessHandler(message => { alert(message); google.script.host.close(); })
+          .withFailureHandler(error => {
+            document.getElementById('run').disabled = false;
+            document.getElementById('status').textContent = error.message || String(error);
+          })
+          .submitRetryReshareGrantFy(Object.assign({}, context, { mode: mode(), newEmail: email }));
+      }
+    </script>
+  </body>
+</html>
