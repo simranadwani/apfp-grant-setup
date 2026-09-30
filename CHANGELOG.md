@@ -4,6 +4,15 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Notes — requirements and decisions recorded (no code change)
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** no
+
+Added `docs/PROJECT_NOTES.md`, the living record of environments, owner decisions, the "processed status columns" requirement (R1),
+the "never lose history" requirement (R2), the findings backlog and the build order. Owner decisions taken today: completed grants stay frozen
+at completion (rows never deleted), central sheets keep mirroring grantee workbooks including blanks, and title corrections keep updating old
+disbursement rows (all = current behaviour, kept on purpose).
+
 ## Phase 2b — Fix the Upload Folder layout defects (disbursements + outcome summary)
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes (`ReportingSupportDecisions.js`, `DisbursementHelpers.js`)
