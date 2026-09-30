@@ -12,29 +12,26 @@ function showToast_(message) {
   const timing = slowestStepsSummary_(3);
   SpreadsheetApp.getActive().toast(timing ? `${message} ${timing}` : message, 'APFP', timing ? 15 : 6);
 }
-function runWorkspaceAction_(action) {
-  const selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW);
-  selected.sheet.getRange(selected.rowNumber, APFP.INTAKE.ACTION_COLUMN).setValue(action);
-  processRequestedActions();
-}
-// Runs every row whose Action a person has already set. This button never writes an Action into the selected row:
-// only Retry / Reshare (which acts on the row you explicitly select) marks a row itself.
+// Workspace buttons never write an Action. They run the rows a person (or the system, after a failure) has already marked.
+// Retry / Reshare additionally opens its dialog for the selected row when that row already has a workspace.
 function uiCreateWorkspace() { processRequestedActions(); }
+function uiRetryWorkspace() { processRequestedActions(); }
+function uiReshareWorkspace() { processRequestedActions(); }
 function uiRetryOrReshareWorkspace() {
-  const selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW);
-  const row = rowObject_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, selected.rowNumber);
-  const status = key_(row['Workspace Status']);
-  const action = ['completed', 'sharing pending', 'workspace created'].includes(status)
-    ? 'Retry Sharing' : 'Retry Workspace';
-  if (action === 'Retry Workspace') {
-    selected.sheet.getRange(selected.rowNumber, APFP.INTAKE.ACTION_COLUMN).setValue(action);
+  let selected = null;
+  try { selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW); } catch (error) { selected = null; }
+  const row = selected ? rowObject_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, selected.rowNumber) : null;
+  const requestId = row ? clean_(row['Request ID']) : '', grantId = row ? clean_(row['Grant ID']) : '';
+  const tech = requestId ? techByRequest_(requestId) : null;
+  // The Technical Registry status decides (the Workspace Status shown on the row is display text and differs for Transactional).
+  const shareable = !!tech && ['completed', 'sharing pending', 'workspace created', 'disbursement only']
+    .includes(key_(tech.record['Workspace Status']));
+  if (!row || !shareable || APFP.INTAKE.PROCESS_ACTIONS.includes(clean_(row['Action']))) {
     processRequestedActions();
     return;
   }
-  const requestId = clean_(row['Request ID']), grantId = clean_(row['Grant ID']);
-  if (!requestId || !grantId) throw new Error('The selected row has no Request ID or Grant ID.');
-  const tech = techByRequest_(requestId);
-  if (!tech || key_(tech.record['Grant ID']) !== key_(grantId))
+  if (!grantId) throw new Error('The selected row has no Request ID or Grant ID.');
+  if (key_(tech.record['Grant ID']) !== key_(grantId))
     throw new Error('The selected row is not linked to one unambiguous Grant-FY record.');
   const template = HtmlService.createTemplateFromFile('RetryReshareDialog');
   template.context = {
@@ -85,8 +82,6 @@ function uiReopenSetupForChanges() {
   reopenSelectedSetup();
 }
 // Backward-compatible aliases: keep until the sheet buttons are confirmed not to use them.
-function uiRetryWorkspace() { runWorkspaceAction_('Retry Workspace'); }
-function uiReshareWorkspace() { runWorkspaceAction_('Retry Sharing'); }
 function uiRefreshOutcomeProgress() {
   const count = refreshOutcomeProgressTracker_();
   recordAutomationStatus_('Outcome Progress', 'Success', `${count} rows refreshed`);

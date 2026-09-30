@@ -303,7 +303,7 @@ const APFP = Object.freeze({
        { NAME: 'Outcome, Support and Disbursement Tracker', TYPE: 'TEXT' },
        { NAME: 'Supporting & Compliance', TYPE: 'TEXT' },
        { NAME: 'Budget Allocation & Fund Utilisation', TYPE: 'TEXT' },
-       { NAME: 'Setup Review Status', TYPE: 'DROPDOWN', VALUES: ['', 'Awaiting Review', 'Changes Required', 'Approved', 'Retry Approval', 'Locked & Migrated'] },
+       { NAME: 'Setup Review Status', TYPE: 'DROPDOWN', VALUES: ['', 'Awaiting Review', 'Changes Required', 'Approved', 'Retry Approval', 'Locked & Migrated', 'Not Applicable'] },
        { NAME: 'Progress Report Q1', TYPE: 'TEXT' },
        { NAME: 'Progress Report Q2', TYPE: 'TEXT' },
        { NAME: 'Progress Report Q3', TYPE: 'TEXT' },
@@ -418,7 +418,7 @@ const APFP = Object.freeze({
  },
  STATUS: {
    VALIDATION_FAILED: 'Validation Failed', IN_PROGRESS: 'In Progress',
-   NEEDS_ATTENTION: 'Needs Attention', WORKSPACE_CREATED: 'Workspace Created', REGISTRY_ONLY: 'Registry Only',
+   NEEDS_ATTENTION: 'Needs Attention', WORKSPACE_CREATED: 'Workspace Created', REGISTRY_ONLY: 'Registry Only', DISBURSEMENT_ONLY: 'Disbursement Only', NOT_APPLICABLE: 'Not Applicable',
    SHARING_PENDING: 'Sharing Pending', COMPLETED: 'Completed', PENDING: 'Pending', FAILED: 'Failed'
  },
  STEP: {

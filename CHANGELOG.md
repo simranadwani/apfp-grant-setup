@@ -4,6 +4,21 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Buttons never write an Action; statuses for Transactional / Discretionary; faster protection editors
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**
+
+- **Retry / Reshare bug** (`UiActions.js`): the button wrote `Retry Workspace` into whichever row was selected (a blank row 14) and then ran all queued rows. Rule now applies to **every** workspace button:
+  they never write an Action; only rows a person (or the system after a failure) marked run. `uiRetryOrReshareWorkspace` opens its dialog only when the selected row already has a workspace (decided from the
+  Technical Registry status) and no pending Action; otherwise it just runs the marked rows. `uiRetryWorkspace` / `uiReshareWorkspace` (aliases) simply run the marked rows. `runWorkspaceAction_` removed.
+- **Statuses** (`TrackerLinks.js`, `WorkspaceCreation.js`, `Config.js`): Transactional now shows Workspace Status **Disbursement Only**; Discretionary keeps **Registry Only**; both show Setup Review Status **Not Applicable**.
+  Display only: the Technical Registry keeps `Workspace Created` for Transactional, so no rule that reads it changes. `Not Applicable` was added to the Setup Review Status dropdown definition
+  (**existing sheets need the value added once**, see steps below; preflight compares the dropdown list).
+- **Faster** (`ProtectionIntegrity.js`): "Protection: restrict editors" cost ~1.8 s x13 per Setup workbook. Owner / running account / `PROTECTION_EDITORS` are now resolved once per workbook, editors are read once,
+  and adds/removes happen only when needed (one batched `removeEditors`). The end state is identical (only those people can edit; everyone else and domain editing removed).
+- The end-of-run alert now lists the 8 slowest steps.
+- Tests: `tests/statuses.test.js` (new), button tests in `tests/actions.test.js`, call-count tests in `tests/safety.test.js`. 91 tests pass.
+
 ## Fix — batched placeholder check failed on out-of-grid ranges (regression from speed step 2)
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**

@@ -108,7 +108,7 @@ function processWorkspaceRequest_(row, config) {
      'Supporting & Compliance': '', 'Budget Allocation & Fund Utilisation': '',
      'Progress Report Q1': '', 'Progress Report Q2': '', 'Progress Report Q3': '',
      'Progress Report Q4': '', 'Disbursement Documents': '',
-     'Setup Review Status': '', 'Last Updated': now_(), 'Request ID': requestId,
+     'Setup Review Status': APFP.STATUS.NOT_APPLICABLE, 'Last Updated': now_(), 'Request ID': requestId,
      'Organisation ID': organisationId, 'Grant ID': grantId, 'Workspace ID': ''
    });
    setWorkspaceStatusNote_(row.rowNumber, '');

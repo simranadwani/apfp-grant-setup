@@ -10,7 +10,7 @@ function fakeProtection(initial, denied) {
     addEditors: emails => emails.forEach(add),
     addEditor(email) { if ((denied || []).includes(email)) throw new Error('no access to this file'); add(email); },
     getEditors: () => list.slice(),
-    removeEditor(user) { const i = list.indexOf(user); if (i >= 0) list.splice(i, 1); },
+    removeEditors(emails) { emails.forEach(email => { const i = list.findIndex(u => u.getEmail() === email); if (i >= 0) list.splice(i, 1); }); },
     canDomainEdit: () => false, setDomainEdit() {},
     emails: () => list.map(u => u.getEmail())
   };
@@ -77,4 +77,30 @@ test('backup explains what is missing when CENTRAL_ADMIN_FOLDER_ID is not config
   const p = loadProject({ DriveApp: {} });
   p.override('config_', () => ({}));
   assert.throws(() => p.get('backupCentralAdministration_')(), /Missing active configuration: CENTRAL_ADMIN_FOLDER_ID/);
+});
+
+test('protection hardening makes few calls: nothing to do when editors are already right, one batched remove otherwise', () => {
+  const calls = [];
+  const wrap = protection => new Proxy(protection, { get: (t, k) => typeof t[k] === 'function' ? (...a) => { calls.push(String(k)); return t[k](...a); } : t[k] });
+  const p = loadProject();
+  p.override('workbookOwnerEmail_', () => 'owner@example.org');
+  p.override('config_', () => ({}));
+  const ok = fakeProtection(['owner@example.org', 'tester@example.org']);
+  p.get('hardenProtectionEditors_')(wrap(ok), { getId: () => 'wb1' });
+  assert.deepEqual(calls.filter(c => /add|remove/.test(c)), []);
+  calls.length = 0;
+  const dirty = fakeProtection(['owner@example.org', 'a@x.org', 'b@x.org']);
+  p.get('hardenProtectionEditors_')(wrap(dirty), { getId: () => 'wb1' });
+  assert.deepEqual(calls.filter(c => /add|remove/.test(c)), ['addEditors', 'removeEditors']);
+  assert.deepEqual(dirty.emails().sort(), ['owner@example.org', 'tester@example.org']);
+});
+
+test('the owner/actor lookup happens once per workbook, not once per protection', () => {
+  let lookups = 0;
+  const p = loadProject();
+  p.override('workbookOwnerEmail_', () => { lookups++; return 'owner@example.org'; });
+  p.override('config_', () => ({}));
+  const wb = { getId: () => 'wb2' };
+  for (let i = 0; i < 13; i++) p.get('hardenProtectionEditors_')(fakeProtection(['owner@example.org', 'tester@example.org']), wb);
+  assert.equal(lookups, 1);
 });

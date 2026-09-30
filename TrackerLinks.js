@@ -32,17 +32,21 @@ function workspaceCreatorSystemPatch_(grantId, tech) {
  if (!context) return null;
  const r = context.record;
  const grant = grantById_(grantId),
-   transactional = isTransactionalGrantType_(r['Grant Type'] || (grant && grant.record['Grant Type']));
+   grantType = r['Grant Type'] || (grant && grant.record['Grant Type']),
+   transactional = isTransactionalGrantType_(grantType), discretionary = isDiscretionaryGrantType_(grantType);
  const link = (label, url) => clean_(url) ? hyperlinkFormula_(label, clean_(url)) : '';
  return {
    'Grant Status': grant ? grantStatusOrDefault_(grant.record['Grant Status']) : 'Active',
-   'Workspace Status': clean_(r['Workspace Status']) || APFP.STATUS.IN_PROGRESS,
+   // Display only: the Technical Registry keeps 'Workspace Created' for Transactional, so every rule that reads it is unchanged.
+   'Workspace Status': transactional && key_(r['Workspace Status']) === key_(APFP.STATUS.WORKSPACE_CREATED)
+     ? APFP.STATUS.DISBURSEMENT_ONLY : (clean_(r['Workspace Status']) || APFP.STATUS.IN_PROGRESS),
    'Organisation Workspace': link('Open organisation workspace', r['Organisation Folder URL'] || r['Grant Workspace URL']),
    'Setup Workbook': transactional ? '' : link('Open Grant Setup', r['Setup Workbook URL']),
    'Outcome, Support and Disbursement Tracker': transactional ? '' : link('Open Outcome, Support and Disbursement Tracker', r['Outcome Progress Workbook URL']),
    'Supporting & Compliance': link('Open supporting & compliance', r['Supporting Documents Folder URL']),
    'Budget Allocation & Fund Utilisation': transactional ? '' : link('Open budget & fund utilisation', r['Budget Allocation & Fund Utilisation Folder URL']),
-   'Setup Review Status': transactional ? '' : (clean_(r['Setup Review Status']) || APFP.REVIEW_STATUS.AWAITING),
+   'Setup Review Status': transactional || discretionary ? APFP.STATUS.NOT_APPLICABLE
+     : (clean_(r['Setup Review Status']) || APFP.REVIEW_STATUS.AWAITING),
 
    'Progress Report Q1': transactional ? '' : link('Open Q1 folder', r['Q1 Folder URL']),
    'Progress Report Q2': transactional ? '' : link('Open Q2 folder', r['Q2 Folder URL']),

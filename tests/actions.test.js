@@ -43,3 +43,40 @@ test('Create Workspace button never writes an Action into the selected row (only
   assert.deepEqual(writes, []);
   assert.deepEqual(processed, [9, 10, 12]);
 });
+
+function retrySetup(selectedRow, rowObject, tech) {
+  const { p, processed } = setup();
+  const stamps = [], dialogs = [];
+  p.override('selectedDataRow_', () => selectedRow);
+  p.override('rowObject_', () => rowObject);
+  p.override('techByRequest_', () => tech);
+  p.override('sheet_', () => ({ getRange: () => ({ setValue: v => stamps.push(v) }) }));
+  p.ctx.HtmlService = { createTemplateFromFile: () => ({ evaluate: () => ({ setWidth() { return { setHeight() { return {}; } }; } }) }) };
+  p.ctx.SpreadsheetApp.getUi = () => ({ alert() {}, showModalDialog: (_o, title) => dialogs.push(title) });
+  return { p, processed, stamps, dialogs };
+}
+
+test('Retry/Reshare on a blank selected row does not touch it and runs the marked rows', () => {
+  const { p, processed, stamps } = retrySetup({ rowNumber: 14, sheet: {} }, { 'Request ID': '', 'Grant ID': '', Action: '' }, null);
+  p.get('uiRetryOrReshareWorkspace')();
+  assert.deepEqual(stamps, []);
+  assert.deepEqual(processed, [9, 10, 12]);
+});
+
+test('Retry/Reshare on a row that already has a workspace opens the dialog for that row (no Action written)', () => {
+  const tech = { record: { 'Workspace Status': 'Workspace Created', 'Grant ID': 'G1', 'Primary Contact Email': 'a@b.org' } };
+  const { p, processed, stamps, dialogs } = retrySetup({ rowNumber: 13, sheet: {} },
+    { 'Request ID': 'REQ13', 'Grant ID': 'G1', Action: 'Completed', 'Organisation Name': 'O', 'Financial Year': '2026-27' }, tech);
+  p.get('uiRetryOrReshareWorkspace')();
+  assert.deepEqual(stamps, []);
+  assert.deepEqual(processed, []);
+  assert.equal(dialogs.length, 1);
+});
+
+test('a Transactional workspace (shown as Disbursement Only) still counts as shareable', () => {
+  const tech = { record: { 'Workspace Status': 'Workspace Created', 'Grant ID': 'G1', 'Primary Contact Email': 'a@b.org' } };
+  const { p, dialogs } = retrySetup({ rowNumber: 13, sheet: {} },
+    { 'Request ID': 'REQ13', 'Grant ID': 'G1', Action: '', 'Workspace Status': 'Disbursement Only' }, tech);
+  p.get('uiRetryOrReshareWorkspace')();
+  assert.equal(dialogs.length, 1);
+});
