@@ -36,8 +36,12 @@ git fetch origin claude/gifted-allen-0a626q
 git reset --hard origin/claude/gifted-allen-0a626q
 git log -1 --oneline
 npm test
-clasp push -P .clasp.prod.json
+rm -rf ../apfp-prod-push && mkdir ../apfp-prod-push
+cp .clasp.prod.json ../apfp-prod-push/.clasp.json
+cp *.js *.html appsscript.json ../apfp-prod-push/
+(cd ../apfp-prod-push && clasp push)
 ```
+(Newer `clasp` versions refuse `clasp push -P .clasp.prod.json` with "srcDir escapes project root", so production is pushed from its own small folder, exactly like step 2's pull. `../apfp-prod-live` stays untouched as the rollback copy.)
 Do **not** run `clasp pull` in this folder right before updating: it overwrites the local files with the deployed script and you would push the old code again. After the push, run `runPreflightChecks`: its first line shows `Code version: …`, which must match the round in `CHANGELOG.md`.
 `npm test` must show all tests passing. The manifest now also lists the `script.container.ui` scope (needed to open the Retry/Reshare dialog): after the push, open the Apps Script editor once, run any function (for example `runPreflightChecks`) and click **Allow** so the new permission is granted; other users are asked once on their next button click. `clasp push` asks nothing else; the script is replaced with this version (the old `V15Actions.js` is removed automatically).
 Leave the `DATA_SYNC_SCHEMA_VERSION` row in place for now (see step 0b); nothing reads it in the new code, and preflight only warns about it. Delete it after sign-off, together with any V14.1 / V15.0 description text.
