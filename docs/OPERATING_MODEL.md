@@ -34,7 +34,6 @@ Buttons are drawings assigned to these functions. A workspace button **never wri
 | `uiCorrectWorkspaceDetails` | Correct a grant title / details everywhere, including old disbursement rows |
 | `uiBackupCentralAdministration` | Copy this sheet into `<CENTRAL_ADMIN_FOLDER_ID>/Backups` (do this before bulk operations) |
 | `runPreflightChecks` | Health check: settings, sheets, headers by name, Tables, dropdowns, templates, protections, time zones, email templates |
-| `refreshDropdownsFromConfig` | Push edited `LIST_…` settings into the Table dropdowns (lists fall back to built-in defaults when a row is missing) |
 
 Triggers (manual, installed by the operating account): `handleCentralAdminOpen` (on open) and `handleCentralAdminEdit` (on edit).
 
@@ -43,15 +42,15 @@ Rows are `Setting | Value | … | Active` (the script reads columns A, B and F; 
 
 * Folders / templates / patterns: `ROOT_FOLDER_ID`, `CENTRAL_ADMIN_FOLDER_ID`, `SETUP_TEMPLATE_ID`, `OUTCOME_PROGRESS_TEMPLATE_ID`, `DISBURSEMENT_DOCUMENT_TEMPLATE_ID`, `*_WORKBOOK_PATTERN`, `*_FOLDER_PATTERN`, `SUPPORTING_DOCUMENTS_FOLDER_NAME`, `BUDGET_UTILISATION_FOLDER_NAME`.
 * Behaviour: `MAX_BATCH_SIZE` (rows per run), `SEND_WORKSPACE_NOTIFICATION`, `SEND_SHARING_NOTIFICATION`, `WORKSPACE_EMAIL_TEMPLATE_DOC_ID`, `PROTECTION_EDITORS` (emails kept as protection editors besides the owner and the running account), `TIME_ZONE` (default Asia/Kolkata).
-* Lists: `LIST_THEMATIC_AREAS`, `LIST_THEMATIC_SUBAREAS`, `LIST_PROXIMITY`, `LIST_PROGRAMME_STATUSES` (values separated by `|`); financial years roll forward from `FIRST_FY` for `FY_YEARS_AHEAD` years past the current one, or set `LIST_FINANCIAL_YEARS` to fix them. A missing row falls back to the default in `Config.js`.
+* **Dropdowns are edited directly in the sheet** (Table column → dropdown): Thematic Area, Sub-area, Proximity, Programme Status, Financial Year, Support Type (in the Outcome template) and any other label list. Only words the code compares (Grant Type, Grant Status, Action, Setup Review Status, Organisation Type, Disbursement Status) must keep their required values; adding options to those is also fine, removing or renaming is not. Preflight only checks that the required options are still present.
 
 ## 5. Disbursement Push Status / Document Sync Status
 Two script-controlled columns at the end of `6. Committed & Spent Tracker` (nobody types in them): **Push Status** — blank → *Pushed* / *Failed: reason* / *Not applicable* (Discretionary) / *Changed – push again* (an edit to date, amount, status or grant after a push). **Document Sync Status** — *Waiting for push* → *Awaiting documents* → *Partial (1 of 2 links)* → *Synced*. Push and Sync only visit rows that are not finished; a grant with nothing to do is not opened. Without the columns the code works as before.
 
 ## 6. Changing things without touching code
 * **Add a column to a central sheet or Table:** add it anywhere; the code finds columns by header name and never overwrites columns it does not know. Preflight shows an "extra column" warning only.
-* **Add a value to a label dropdown** (thematic area, sub-area, proximity, programme status): edit the `LIST_…` row, then run `refreshDropdownsFromConfig`.
-* **Change the time zone or the years shown:** edit `TIME_ZONE`, `FIRST_FY`, `FY_YEARS_AHEAD`.
+* **Add a value to a label dropdown:** edit the dropdown in the sheet. No code change and no other step.
+* **Change the time zone:** edit `TIME_ZONE` (System - Configuration).
 * **Not configurable on purpose** (logic depends on the exact words): Grant Type, Grant Status, Action, Setup Review Status, Organisation Type, quarter labels, Yes/No.
 * **Still layout-driven (change together with the template):** the protected/editable ranges of the grantee templates (`F5:F14`, …), the export block rows in `System - Tracker Export` (2 / 15 / 58 / 161), and the `System - Configuration` column positions. `tests/api.test.js` freezes the public function names because buttons and triggers are bound to them.
 

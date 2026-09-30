@@ -4,6 +4,15 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round J — dropdown lists are edited directly in the sheet
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**
+
+- **Why:** the config-driven lists (`LIST_…` rows, `refreshDropdownsFromConfig`) added complexity for no gain; operators should just edit a dropdown where it lives.
+- **Removed** (`Config.js`, `Utilities.js`, `UiActions.js`): `LIST_DEFAULTS`, `getList_`, `listNames_`, `defaultList_`, `rollingFinancialYears_`, `dropdownUpdateRequests_`, `refreshDropdownsFromConfig`, and the `FIRST_FY` / `FY_YEARS_AHEAD` / `LIST_*` settings. `TIME_ZONE` stays.
+- **Preflight:** label dropdowns (Financial Year, Thematic Area, Sub-area, Proximity, Programme Status) are marked `FREE`: only the column must be a dropdown, options are not compared. Code-driven dropdowns still require their needed options (extras allowed). Leftover `LIST_…` rows now show in the "settings the code never reads" warning.
+- **Tests:** list tests removed; 114 pass.
+
 ## Round I — clean messages; Organisation Type correctable
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**

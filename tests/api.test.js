@@ -16,8 +16,7 @@ const PUBLIC_ENTRY_POINTS = [
   'validateDisbursementTracker',
   // added with the status columns (buttons optional):
   'uiSyncDisbursementsFullCheck', 'uiBackupCentralAdministration',
-  // config-driven lists:
-  'refreshDropdownsFromConfig', 'uiRefreshReportingForce'
+  'uiRefreshReportingForce'
 ];
 
 test('all project files load together without redeclaration or syntax errors', () => {

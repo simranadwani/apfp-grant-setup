@@ -44,15 +44,6 @@ function uiRetryOrReshareWorkspace() {
     'Retry / Reshare Grant-FY workspace'
   );
 }
-// Pushes the current LIST_* settings (System - Configuration) into the dropdowns of the native Tables. Run after editing a list.
-function refreshDropdownsFromConfig() {
-  requireAdvancedSheetsService_();
-  const plan = dropdownUpdateRequests_(adminTablesSnapshot_(), APFP.ADMIN_TABLES);
-  if (plan.requests.length) Sheets.Spreadsheets.batchUpdate({ requests: plan.requests }, ss_().getId());
-  showToast_(plan.changed.length ? `Dropdowns updated: ${plan.changed.join('; ')}` : 'All dropdowns already match System - Configuration.');
-  return plan.changed;
-}
-// One-time helper: adds the list / time-zone / financial-year settings to System - Configuration with today's values (never overwrites an existing row).
 function submitRetryReshareGrantFy(payload) {
  const lock = LockService.getScriptLock();
  if (!lock.tryLock(30000)) throw new Error('Another APFP automation run is active. Try again shortly.');

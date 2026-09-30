@@ -13,44 +13,6 @@ function project(config, nowIso) {
   return p;
 }
 
-test('getList_ returns the default when the LIST_ row is missing, and the sheet value (pipe separated, de-duplicated) when present', () => {
-  assert.deepEqual(plain(project({}).get('getList_')('PROGRAMME_STATUSES')), ['Currently Operational', 'Starting Soon']);
-  const p = project({ LIST_PROGRAMME_STATUSES: ' Currently Operational | Starting Soon |Paused| Paused ||' });
-  assert.deepEqual(plain(p.get('getList_')('PROGRAMME_STATUSES')), ['Currently Operational', 'Starting Soon', 'Paused']);
-});
-
-test('financial years roll forward by themselves and honour FIRST_FY / FY_YEARS_AHEAD', () => {
-  assert.deepEqual(plain(project({}, '2026-09-30').get('getList_')('FINANCIAL_YEARS')), ['2026-27', '2027-28', '2028-29', '2029-30']);
-  assert.deepEqual(plain(project({}, '2028-05-10').get('getList_')('FINANCIAL_YEARS')).slice(-2), ['2030-31', '2031-32']);
-  assert.deepEqual(plain(project({ FIRST_FY: '2025-26', FY_YEARS_AHEAD: '1' }, '2026-09-30').get('getList_')('FINANCIAL_YEARS')), ['2025-26', '2026-27', '2027-28']);
-  assert.deepEqual(plain(project({ LIST_FINANCIAL_YEARS: '2026-27|2027-28' }, '2026-09-30').get('getList_')('FINANCIAL_YEARS')), ['2026-27', '2027-28']);
-});
-
-test('Table dropdown definitions use the configured lists', () => {
-  const p = project({ LIST_THEMATIC_AREAS: 'Education|Nutrition' });
-  const spec = plain(p.get('APFP')).ADMIN_TABLES.find(s => s.SHEET_NAME === '8. Grant Registry');
-  const columns = plain(p.get('tableColumnProperties_')(spec));
-  const area = columns.find(c => c.columnName === 'Thematic Area');
-  assert.deepEqual(area.dataValidationRule.condition.values.map(v => v.userEnteredValue), ['Education', 'Nutrition']);
-});
-
-test('dropdownUpdateRequests_ only touches list columns whose values changed', () => {
-  const p = project({ LIST_PROGRAMME_STATUSES: 'Currently Operational|Starting Soon|Paused' });
-  const spec = plain(p.get('APFP')).ADMIN_TABLES.find(s => s.SHEET_NAME === '8. Grant Registry');
-  // the live table still has the OLD statuses; every other dropdown already matches
-  const defaultsProject = project({});
-  const live = plain(defaultsProject.get('tableColumnProperties_')(spec));
-  const snapshot = { sheets: [{ properties: { title: spec.SHEET_NAME }, tables: [{ name: spec.TABLE_NAME, tableId: 42, columnProperties: live }] }] };
-  const plan = plain(p.get('dropdownUpdateRequests_')(snapshot, [spec]));
-  assert.deepEqual(plan.changed, ['8. Grant Registry › Programme Status']);
-  assert.equal(plan.requests.length, 1);
-  const updated = plan.requests[0].updateTable.table.columnProperties.find(c => c.columnName === 'Programme Status');
-  assert.deepEqual(updated.dataValidationRule.condition.values.map(v => v.userEnteredValue), ['Currently Operational', 'Starting Soon', 'Paused']);
-  assert.equal(plan.requests[0].updateTable.fields, 'columnProperties');
-  // nothing to do when the table already matches
-  assert.deepEqual(plain(defaultsProject.get('dropdownUpdateRequests_')(snapshot, [spec])), { requests: [], changed: [] });
-});
-
 test('time zone comes from config with the built-in fallback', () => {
   assert.equal(project({ TIME_ZONE: 'Asia/Dubai' }).get('timeZone_')(), 'Asia/Dubai');
   assert.equal(project({}).get('timeZone_')(), 'Asia/Kolkata');

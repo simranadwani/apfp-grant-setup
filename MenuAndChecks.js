@@ -200,7 +200,7 @@ function runPreflightChecks() {
     capture('Configuration keys in use', () => {
       const sheet = sheet_(APFP.SHEETS.CONFIG), last = sheet.getLastRow(), known = new Set(APFP.PREFLIGHT_SCHEMA.KNOWN_CONFIG_KEYS.map(key_)),
         unused = last < 3 ? [] : sheet.getRange(3, 1, last - 2, 1).getValues().map(row => clean_(row[0]))
-          .filter(name => name && !known.has(key_(name)) && !/^LIST_/i.test(name));
+          .filter(name => name && !known.has(key_(name)));
       if (unused.length) warnings.push(`System - Configuration has row(s) the code never reads (safe to delete): ${unused.join(', ')}.`);
     });
     if (key_(config.SEND_WORKSPACE_NOTIFICATION) !== 'yes')
