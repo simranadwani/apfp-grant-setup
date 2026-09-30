@@ -145,7 +145,9 @@ function processWorkspaceRequest_(row, config) {
      patternName_(config.DISBURSEMENT_WORKBOOK_PATTERN, request),
      config.DISBURSEMENT_DOCUMENT_TEMPLATE_ID
    );
-   finaliseTransactionalWorkbookIntegrity_(openSpreadsheetCached_(disbursementWorkbook.getId()));
+   const transactionalBook = openSpreadsheetCached_(disbursementWorkbook.getId());
+   writeTransactionalUploadLinks_(transactionalBook, disbursement.getUrl());
+   finaliseTransactionalWorkbookIntegrity_(transactionalBook);
 
    record = saveTech_(requestId, {
      'Setup Folder URL': '', 'Setup Workbook URL': '', 'Outcome Progress Workbook URL': '',

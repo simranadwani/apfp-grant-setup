@@ -248,8 +248,6 @@ function transferGrantFyPrimaryEmail_(row, newEmail, config) {
    });
    setWorkspaceStatusNote_(row.rowNumber, '');
    refreshWorkspaceCreatorRow_(row.grantId);
-   recordAutomationStatus_('Workspace Creation', 'Success',
-     `Grant-FY ${row.grantId} primary email changed from ${oldEmail} to ${newEmail}`);
    return true;
  } catch (error) {
    if (!committed) snapshots.forEach(snapshot => {

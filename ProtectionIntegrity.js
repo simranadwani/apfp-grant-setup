@@ -459,6 +459,7 @@ function repairWorkspaceFilesBeforeRetrySharing_(requestId, config) {
     const workbookUrl = clean_(record['Disbursement Workbook URL']);
     if (!workbookUrl) throw new Error('Transactional Disbursement workbook is missing before sharing.');
     const workbook = openSpreadsheetCached_(urlId_(workbookUrl));
+    if (clean_(record['Disbursement Folder URL'])) writeTransactionalUploadLinks_(workbook, record['Disbursement Folder URL']);
     finaliseTransactionalWorkbookIntegrity_(workbook);
     removeGranteeProtectionAccess_(workbook, transactionalWorkbookProtectionSpecs_(), record['Primary Contact Email']);
     return assertWorkspaceFilesSafeToShare_(requestId, effectiveConfig);

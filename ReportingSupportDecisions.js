@@ -409,22 +409,13 @@ function refreshSupportTracker_() {
   return desired.length;
 }
 function refreshReportingData() {
-  try {
-    const outcomes = refreshOutcomeProgressTracker_(),
-      support = refreshSupportTracker_(),
-      decisions = refreshDecisionTracker_(),
-      disbursements = syncDisbursementsToGranteeWorkbooks_(),
-      links = syncGranteeDisbursementLinksToCentral_(),
-      detail = `${outcomes} outcomes; ${support} support; ${decisions} decisions; ${disbursements} disbursement rows; ${links} links`;
-    recordAutomationStatus_('Reporting, Support & Decisions', 'Success', detail);
-    recordAutomationStatus_('Disbursement Transfer', 'Success', `${disbursements} rows; ${links} links`);
-    notifyAdmin_(`Reporting refreshed: ${outcomes} outcomes, ${support} support items, ${decisions} decisions, ${disbursements} disbursement rows, ${links} document links.`);
-    return { outcomes, support, decisions, disbursements, links };
-  } catch (error) {
-    recordAutomationStatus_('Reporting, Support & Decisions', 'Failed', error.message);
-    recordAutomationStatus_('Disbursement Transfer', 'Failed', error.message);
-    throw error;
-  }
+  const outcomes = refreshOutcomeProgressTracker_(),
+    support = refreshSupportTracker_(),
+    decisions = refreshDecisionTracker_(),
+    disbursements = syncDisbursementsToGranteeWorkbooks_(),
+    links = syncGranteeDisbursementLinksToCentral_();
+  notifyAdmin_(`Reporting refreshed: ${outcomes} outcomes, ${support} support items, ${decisions} decisions, ${disbursements} disbursement rows, ${links} document links.`);
+  return { outcomes, support, decisions, disbursements, links };
 }
 function nextFinancialYear_(fy) {
   if (!validFinancialYear_(fy)) return '';

@@ -28,6 +28,7 @@ npm test
 clasp push -P .clasp.prod.json
 ```
 `npm test` must show all tests passing. `clasp push` asks nothing else; the script is replaced with this version (the old `V15Actions.js` is removed automatically).
+Also delete the `DATA_SYNC_SCHEMA_VERSION` row (and any V14.1 / V15.0 description text) in System - Configuration: nothing reads it any more, and preflight warns while the row exists.
 
 ## 4. One-time sheet changes in production (in this order)
 1. **Setup Review Status dropdown:** in `1. Workspace Creator`, edit the Table column *Setup Review Status* → dropdown → add the value `Not Applicable`.

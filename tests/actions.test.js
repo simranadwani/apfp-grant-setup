@@ -18,7 +18,6 @@ function setup() {
   p.override('ensureRequestIdForRow_', row => row.requestId);
   p.override('validateIntakeRequest_', () => ({ ok: true, errors: [] }));
   p.override('processWorkspaceRequest_', row => { processed.push(row.rowNumber); return true; });
-  p.override('recordAutomationStatus_', () => {});
   return { p, alerts, processed };
 }
 

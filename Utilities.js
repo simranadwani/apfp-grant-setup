@@ -538,18 +538,6 @@ function writeException_(data) {
    'Assigned To': '', 'Resolved At': '', 'Resolution Notes': '', 'Run ID': data.runId || ''
  });
 }
-function recordAutomationStatus_(automation, status, detail) {
- try {
-   const sheet = ss_().getSheetByName(APFP.SHEETS.START);
-   if (!sheet || sheet.getLastRow() < 17) return;
-   const labels = sheet.getRange(17, 1, Math.min(4, sheet.getLastRow() - 16), 1).getDisplayValues().flat(),
-     index = labels.findIndex(label => key_(label) === key_(automation));
-   if (index < 0) return;
-   sheet.getRange(17 + index, 2, 1, 2).setValues([[now_(), `${clean_(status)}${clean_(detail) ? ` — ${clean_(detail)}` : ''}`]]);
- } catch (error) {
-   console.warn(`Automation status write skipped: ${error.message}`);
- }
-}
 function friendlyErrorMessage_(code, error) {
  const message = clean_(error && error.message ? error.message : error), errorKey = key_(code);
  if (errorKey === 'sharing_failed')

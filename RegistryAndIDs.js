@@ -324,11 +324,6 @@ function correctWorkspaceDetailsForRow_(rowNumber) {
   });
 
   SpreadsheetApp.flush();
-  recordAutomationStatus_(
-    'Workspace Detail Correction',
-    'Success',
-    `Updated approved amount and grant classification for ${grantId}`
-  );
   return { grantId: grantId, projectTitle: projectTitle };
 }
 

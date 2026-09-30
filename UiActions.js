@@ -119,13 +119,11 @@ function uiReopenSetupForChanges() {
 // Backward-compatible aliases: keep until the sheet buttons are confirmed not to use them.
 function uiRefreshOutcomeProgress() {
   const count = refreshOutcomeProgressTracker_();
-  recordAutomationStatus_('Outcome Progress', 'Success', `${count} rows refreshed`);
   showToast_(`${count} outcome rows refreshed.${refreshNote_()}`);
   return count;
 }
 function uiRefreshSupport() {
   const count = refreshSupportTracker_();
-  recordAutomationStatus_('Support', 'Success', `${count} rows refreshed`);
   showToast_(`${count} support rows refreshed.${refreshNote_()}`);
   return count;
 }
@@ -141,13 +139,11 @@ function uiCompleteSelectedSupport() {
 }
 function uiRefreshDecisions() {
   const count = refreshDecisionTracker_();
-  recordAutomationStatus_('Decisions', 'Success', `${count} rows refreshed`);
   showToast_(`${count} decision rows refreshed.${refreshNote_()}`);
   return count;
 }
 function uiRefreshDecisionDocuments() {
   const count = refreshDecisionDocumentLinks_();
-  recordAutomationStatus_('Decision Documents', 'Success', `${count} rows refreshed`);
   showToast_(`${count} Decision Tracker row(s) refreshed with Annual Report, Fund Utilisation and 10BE links.`);
   return count;
 }
@@ -241,7 +237,6 @@ function uiPushDisbursements() {
   completeDisbursementRows_();
   const result = pushDisbursements_();
   const summary = `${result.changedRows} disbursement row(s) updated in ${result.pushedGrants} grantee workbook(s).`;
-  recordAutomationStatus_('Disbursement Push', result.failures.length ? 'Needs attention' : 'Success', summary);
   showToast_(summary);
   const notes = [];
   if (result.stoppedEarly) notes.push('Paused before the time limit. Click Push Disbursements again to continue.');
@@ -252,7 +247,6 @@ function uiPushDisbursements() {
 function runDisbursementLinkSync_(options) {
   const result = syncDisbursementLinks_(options);
   const summary = `${result.linkRows} document link(s) synced from ${result.checkedGrants} grantee workbook(s).`;
-  recordAutomationStatus_('Disbursement Sync', result.failures.length ? 'Needs attention' : 'Success', summary);
   showToast_(summary);
   const notes = [];
   if (result.stoppedEarly) notes.push('Paused before the time limit. Click Sync Disbursement Links again to continue.');

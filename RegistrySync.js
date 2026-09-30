@@ -88,8 +88,6 @@ function updateApprovedSetupData() {
    lock.releaseLock();
  }
  const suffix = stopped ? ' Remaining approved records were left untouched; run this menu action again to continue.' : '';
- recordAutomationStatus_('Setup Approval & Registry Sync', failed || stopped ? 'Needs attention' : 'Success',
-   `${completed} completed; ${failed} need attention${stopped ? '; safely paused' : ''}`);
  const failureLines = failures.filter(Boolean).slice(0, 5)
    .map(item => `• ${item.organisationName || item.grantId}: ${item.summary}`);
  const detail = failureLines.length ? `\n\nNeeds attention:\n${failureLines.join('\n')}` : '';
@@ -362,7 +360,7 @@ function syncOneMasterDataRow_(rowNumber) {
  if (['updated', 'updating'].includes(key_(record['Data Update Status'])))
    throw new Error('Approved Setup is already updated or currently updating.');
  const config = config_();
- requireConfig_(config, ['SETUP_TEMPLATE_ID', 'DATA_SYNC_SCHEMA_VERSION']);
+ requireConfig_(config, ['SETUP_TEMPLATE_ID']);
  const sourceUrl = clean_(record['Setup Workbook URL']), sourceId = sourceUrl ? urlId_(sourceUrl) : '',
    source = sourceId ? openSpreadsheetCached_(sourceId) : null;
  if (!source) throw new Error('Setup Workbook URL is missing from Technical Registry.');
@@ -375,7 +373,8 @@ function syncOneMasterDataRow_(rowNumber) {
    financialYear = clean_(record['Financial Year']),
    projectTitle = clean_(record['Project Title']) || readSingleConfigured_(source, byCode.project_title),
    organisationId = clean_(record['Organisation ID']), grantId = clean_(record['Grant ID']),
-   syncedAt = now_(), schema = clean_(config.DATA_SYNC_SCHEMA_VERSION),
+   syncedAt = now_(),
+  
    older = hasLaterApprovedCompletedSource_(organisationId, financialYear, grantId),
    exported = setupRegistryExportRecords_(source);
  if (!organisationId || !grantId || !organisationName || !projectTitle) throw new Error('Sync identity is incomplete.');
@@ -385,10 +384,10 @@ function syncOneMasterDataRow_(rowNumber) {
    'Last Error Code': '', 'Last Error Message': ''
  });
  if (!older) {
-   syncOrganisationMaster_(source, byCode, organisationId, organisationName, sourceUrl, syncedAt, schema, exported.organisation);
-   syncLeadershipMaster_(source, byCode, organisationId, sourceUrl, syncedAt, schema);
+   syncOrganisationMaster_(source, byCode, organisationId, organisationName, sourceUrl, syncedAt, exported.organisation);
+   syncLeadershipMaster_(source, byCode, organisationId, sourceUrl, syncedAt);
  }
- syncGrantMaster_(source, byCode, grantId, organisationId, organisationName, financialYear, projectTitle, sourceUrl, syncedAt, schema, exported.grant);
+ syncGrantMaster_(source, byCode, grantId, organisationId, organisationName, financialYear, projectTitle, sourceUrl, syncedAt, exported.grant);
  syncApprovedOutcomesToGranteeWorkbook_(grantId, sourceId, true);
  archiveApprovedSetup_(grantId);
  saveTech_(record['Request ID'], {
@@ -415,11 +414,11 @@ function configuredScalarDestinationPatch_(source, byCode, destinationTable, opt
  });
  return out;
 }
-function syncOrganisationMaster_(source, byCode, organisationId, organisationName, sourceUrl, syncedAt, schema, exported) {
+function syncOrganisationMaster_(source, byCode, organisationId, organisationName, sourceUrl, syncedAt, exported) {
  const patch = Object.assign({}, exported || {}, {
    'Organisation ID': organisationId, 'Organisation Name': organisationName,
    'Source Setup Workbook URL': sourceUrl, 'Master Data Synced At': syncedAt,
-   'Template Schema Version': schema, 'Record Status': APFP.ACTIVE
+   'Record Status': APFP.ACTIVE
  }, configuredScalarDestinationPatch_(source, byCode, 'Organisation Registry', {
    excludedCodes: ['org_name'],
    rawInputTypes: ['date', 'year']
@@ -429,7 +428,7 @@ function syncOrganisationMaster_(source, byCode, organisationId, organisationNam
    ? setByHeaders_(APFP.SHEETS.ORGANISATIONS, 1, existing.rowNumber, patch)
    : appendObject_(APFP.SHEETS.ORGANISATIONS, 1, patch);
 }
-function syncLeadershipMaster_(source, byCode, organisationId, sourceUrl, syncedAt, schema) {
+function syncLeadershipMaster_(source, byCode, organisationId, sourceUrl, syncedAt) {
  const names = readTableConfigured_(source, byCode.leadership_name),
    designations = readTableConfigured_(source, byCode.leadership_designation),
    emails = readTableConfigured_(source, byCode.leadership_email),
@@ -466,8 +465,7 @@ function syncLeadershipMaster_(source, byCode, organisationId, sourceUrl, synced
        'LinkedIn Profile': linkedIn,
        'Source Setup Workbook URL': sourceUrl,
        'Master Data Synced At': syncedAt,
-       'Template Schema Version': schema,
-       'Record Status': APFP.ACTIVE
+      'Record Status': APFP.ACTIVE
      };
    seen.add(slotKey);
    match
@@ -479,7 +477,7 @@ function syncLeadershipMaster_(source, byCode, organisationId, sourceUrl, synced
      setByHeaders_(APFP.SHEETS.LEADERSHIP, 2, x.rowNumber, { 'Record Status': 'Inactive', 'Master Data Synced At': syncedAt });
  });
 }
-function syncGrantMaster_(source, byCode, grantId, organisationId, organisationName, financialYear, projectTitle, sourceUrl, syncedAt, schema, exported) {
+function syncGrantMaster_(source, byCode, grantId, organisationId, organisationName, financialYear, projectTitle, sourceUrl, syncedAt, exported) {
  const g = grantById_(grantId), base = g ? g.record : {},
    primaryBeneficiary = primaryBeneficiaryFromSetup_(source, byCode.beneficiary_type, byCode.direct_beneficiary_count),
    p = Object.assign({}, exported || {}, {
@@ -502,8 +500,7 @@ function syncGrantMaster_(source, byCode, grantId, organisationId, organisationN
      'Primary Contact Email': readSingleConfigured_(source, byCode.primary_contact_email),
      'Master Data Sync Status': 'Completed', 'Record Status': APFP.ACTIVE,
      'Last Updated At': syncedAt, 'Source Setup Workbook URL': sourceUrl,
-
-     'Master Data Synced At': syncedAt, 'Template Schema Version': schema
+     'Master Data Synced At': syncedAt
    }, configuredScalarDestinationPatch_(source, byCode, 'Grant Registry', {
      excludedCodes: ['project_title'],
      rawAll: true

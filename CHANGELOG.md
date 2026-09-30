@@ -4,6 +4,16 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round G — Transactional Upload Folder link, obsolete code removed
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**
+
+- **Upload Folder link** (`TemplatePrefill.js` `writeTransactionalUploadLinks_`, `WorkspaceCreation.js`, `ProtectionIntegrity.js`): the Disbursement Documents folder was already created, but the Transactional workbook's Upload Folder cells were plain text
+  (that template has no Links sheet). They are now `=HYPERLINK(<Disbursement Folder URL>,"Upload Folder")` in all 100 rows, written at creation and again by Retry Workspace / Retry Sharing (so existing Transactional workbooks are repaired). Only the Upload Folder column is written; push/sync are unaffected.
+- **Removed `DATA_SYNC_SCHEMA_VERSION`** (`Config.js`, `RegistrySync.js`): no longer required or stamped; the `Template Schema Version` registry columns keep their existing values. Delete that row from System - Configuration (preflight warns while it exists).
+- **Removed `recordAutomationStatus_`** (`Utilities.js` and 14 calls): it wrote to Start Here rows that do not exist. `refreshReportingData` simplified accordingly.
+- **Test:** `tests/upload-links.test.js`.
+
 ## Round F — FCRA Registration Status and Foreign Funding % are required fields
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes (small) · **TEST only**
@@ -13,7 +23,7 @@ everything else listed under "Repo only" stays in git (see `.claspignore`).
 - **Preflight** (`Utilities.js`): honours `ANY_TYPE`; a missing column is now an error, never an "extra column" warning.
 - **Registry Export read** (`RegistrySync.js`): `setupRegistryExportRecords_` reads the org and grant blocks by header name (extra/reordered columns fine, missing core header named in the error). Older workbooks lacking the two new fields read them as blank instead of failing.
 - **Seed function** (`UiActions.js`): `seedListsFromDefaults` fills Active / Editable / Value Type / Description / Last Updated columns by header name.
-- **Tests:** schema snapshot (43/61, Table columns equal the header lists), export read by header incl. old workbooks. 117 tests pass.
+- **Tests:** schema snapshot (43/61, Table columns equal the header lists), export read by header incl. old workbooks. 117 tests pass (118 after Round G).
 
 ## Round D — empty rows, documentation and the production runbook
 

@@ -25,7 +25,7 @@ Built and tested locally (116 tests) and, up to Phase 3b + the speed rounds, ver
 (checklist in `docs/PRODUCTION_ROLLOUT.md` §0 and the chat). **Nothing is on production.** Next: owner confirms TEST → follow `docs/PRODUCTION_ROLLOUT.md`.
 
 Explicitly NOT done (needs the owner's yes, one item at a time): sharing / permission hardening (reopen rollback, old-email revocation retry, approval tied to a workbook version, `writersCanShare=false`, ACL audit);
-storing "How will it be Measured?"; the two meanings of Q1–Q4; Exceptions Log auto-close (needs the owner's status vocabulary); `recordAutomationStatus_` is kept (harmless: writes only if Start Here has a matching label row);
+storing "How will it be Measured?"; the two meanings of Q1–Q4; Exceptions Log auto-close (needs the owner's status vocabulary); `recordAutomationStatus_` was removed (Round G);
 protected ranges of the grantee templates and the export block rows stay layout-driven (documented in `docs/OPERATING_MODEL.md` §6).
 
 ## 3. Owner decisions (do not re-litigate without asking)
@@ -66,9 +66,9 @@ changes the status; disbursement eligibility uses Record Status, not Grant Statu
 ## 6. Findings backlog (from the full Drive/code review)
 - Config: 9 keys in `System - Configuration` are never read by the code (`CENTRAL_ADMIN_FOLDER_ID`, `WORKSPACE_FOLDER_PATTERN`, `ORGANISATION_ID_PATTERN`,
   `GRANT_ID_PATTERN`, `SHARING_METHOD`, `TECHNICAL_REGISTRY_SHEET`, `OUTCOME_PROGRESS_SCHEMA_VERSION`, `SUPPORT_CATEGORY_OPTIONS`, `SUPPORT_STATUS_OPTIONS`).
-- `recordAutomationStatus_` writes to Start Here rows that do not exist (no-op). Failure reasons are only in hidden sheets.
+- Failure reasons are only in hidden sheets (shown in the end-of-run message).
 - Setup › D. Outcomes "How will it be Measured?" is required but never stored. Stale "System Link" rows in the Setup template's Field Config.
-- Two meanings of Q1–Q4 (grant quarters vs financial-year quarters). Transactional template has no Links sheet, so its Upload Folder cell has no destination.
+- Two meanings of Q1–Q4 (grant quarters vs financial-year quarters). (Transactional Upload Folder cells are now written as links to the Disbursement Documents folder — Round G.)
 - Sharing/permissions hardening (reopen rollback, old-email revocation, approval tied to a workbook version, `writersCanShare=false`, ACL audit): Phase 5, approve item by item.
 - Codebook docs in Drive `Codes/` (V15.0 / V15.2 / V15.3) are stale; this repo is the source of truth.
 - Grant Status uses `Complete`; workspace Action/Status use `Completed` — different fields, keep.
@@ -91,7 +91,7 @@ approval, reopen or email (covered only by the manual TEST scenario).
   confirm real button bindings to retire unused aliases.
 - P1 (data safety): tracker tables are fixed size → auto-grow; Outcome IDs follow row position → keep them attached to the indicator; Backup button;
   `PROTECTION_EDITORS` (team@goalkeep.net + Anagha are not kept as protection editors today); sharing hardening (reopen rollback, old-email revocation, approval tied to a version,
-  grantees are folder writers); "How will it be Measured?" never stored; Transactional Upload Folder has no destination; failure reasons only in hidden sheets; `recordAutomationStatus_`
+  grantees are folder writers); "How will it be Measured?" never stored; failure reasons only in hidden sheets; `recordAutomationStatus_`
   is a no-op; Exceptions Log never closes; orphan registry row for blank intake rows.
 - P2 (column/dropdown changes without code): 27 positional `row[n]` reads (21 in `ReportingSupportDecisions.js`), `APFP.INTAKE.*_COLUMN` constants, ~34 fixed header widths,
   exact-order preflight, hard-coded dropdown lists / FY list / time zone, 9 unused config keys, 2 columns unknown to `Config.js`, stale docs.

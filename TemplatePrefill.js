@@ -329,3 +329,18 @@ function removeGeneratedAdminSheets_(spreadsheet) {
  [APFP.TEMPLATE_SHEETS.VALIDATION_MASTER, APFP.TEMPLATE_SHEETS.FIELD_CONFIG]
    .forEach(sheetName => removeGeneratedAdminSheet_(spreadsheet, sheetName));
 }
+// The Transactional template has no Links sheet, so each Upload Folder cell is written as a link to the grant's
+// "Disbursement Documents" folder. Idempotent; only the Upload Folder column (outside the grantee-editable range) is touched.
+function writeTransactionalUploadLinks_(spreadsheet, folderUrl) {
+  const url = clean_(folderUrl);
+  if (!url) throw new Error('Disbursement Folder URL is missing, so the Upload Folder links cannot be written.');
+  const schema = APFP.PREFLIGHT_SCHEMA.TRANSACTIONAL_TEMPLATE, sheet = spreadsheet.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.DISBURSEMENTS);
+  if (!sheet) throw new Error(`Transactional workbook is missing the ${APFP.OUTCOME_TEMPLATE_SHEETS.DISBURSEMENTS} sheet.`);
+  const columns = columnsByHeader_(sheet, schema.HEADER_ROW, 'Transactional Disbursement workbook'),
+    column = columns.col('Upload Folder') + 1,
+    formula = `=HYPERLINK("${url.replace(/"/g, '""')}","Upload Folder")`,
+    range = sheet.getRange(schema.DATA_START_ROW, column, schema.DATA_ROWS, 1);
+  if (range.getFormulas().every(row => row[0] === formula)) return false;
+  range.setFormulas(Array.from({ length: schema.DATA_ROWS }, () => [formula]));
+  return true;
+}
