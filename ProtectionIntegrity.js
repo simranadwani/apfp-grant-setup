@@ -132,11 +132,11 @@ function applyWorkbookProtectionSpecs_(spreadsheet, specs) {
         'overlapping approved grantee-editable cells. Remove or adjust only those protections.'
       );
     }
-    protection
+    timed_('Protection: set ranges', () => protection
       .setDescription(spec.description || `APFP client protection - ${spec.sheetName}`)
       .setWarningOnly(false)
-      .setUnprotectedRanges(editableRanges);
-    hardenProtectionEditors_(protection, spreadsheet);
+      .setUnprotectedRanges(editableRanges));
+    timed_('Protection: restrict editors', () => hardenProtectionEditors_(protection, spreadsheet));
 
     if (spec.hidden === true && !sheet.isSheetHidden()) sheet.hideSheet();
     if (spec.hidden === false && sheet.isSheetHidden()) sheet.showSheet();
@@ -315,12 +315,14 @@ function verifyTransactionalWorkbookProtections_(spreadsheet) {
 
 function finaliseSetupWorkbookIntegrity_(spreadsheet, fieldConfig) {
   const specs = setupWorkbookProtectionSpecs_(fieldConfig);
-  removeGeneratedAdminSheets_(spreadsheet);
-  ensureSpreadsheetTimeZone_(spreadsheet);
-  applyWorkbookProtectionSpecs_(spreadsheet, specs);
-  SpreadsheetApp.flush();
-  verifyGeneratedLinks_(spreadsheet);
-  verifyWorkbookProtectionSpecs_(spreadsheet, specs);
+  timed_('Setup: remove admin sheets and set time zone', () => {
+    removeGeneratedAdminSheets_(spreadsheet);
+    ensureSpreadsheetTimeZone_(spreadsheet);
+  });
+  timed_('Setup: apply protections', () => applyWorkbookProtectionSpecs_(spreadsheet, specs));
+  timed_('Setup: flush', () => SpreadsheetApp.flush());
+  timed_('Setup: verify links', () => verifyGeneratedLinks_(spreadsheet));
+  timed_('Setup: verify protections', () => verifyWorkbookProtectionSpecs_(spreadsheet, specs));
   verifySpreadsheetTimeZone_(spreadsheet, 'Generated Grant Setup workbook');
   return true;
 }

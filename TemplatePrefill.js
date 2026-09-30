@@ -217,6 +217,25 @@ function writeGeneratedLinks_(spreadsheet, links) {
 // Structure, links and protections were just verified by finaliseSetupWorkbookIntegrity_ (nothing has been written since),
 // so this only checks that the sheets exist and that no invisible placeholder is left in a configured value range.
 // One Sheets API call reads every range (it used to be one call per Field Config row).
+function columnNumber_(letters) {
+ return String(letters).split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
+}
+function columnLetters_(number) {
+ let out = '';
+ for (let n = number; n > 0; n = Math.floor((n - 1) / 26)) out = String.fromCharCode(65 + (n - 1) % 26) + out;
+ return out;
+}
+// The Sheets API rejects ranges outside the sheet grid (SpreadsheetApp tolerated them). Shortens a simple A1 range to the grid,
+// returns '' when it lies wholly outside, and passes anything it cannot parse (whole columns, named ranges) through unchanged.
+function clipA1ToGrid_(a1, maxRows, maxCols) {
+ const m = /^\$?([A-Z]{1,3})\$?(\d+)(?::\$?([A-Z]{1,3})\$?(\d+))?$/.exec(clean_(a1).toUpperCase());
+ if (!m) return a1;
+ const c1 = columnNumber_(m[1]), r1 = Number(m[2]), c2 = m[3] ? columnNumber_(m[3]) : c1, r2 = m[4] ? Number(m[4]) : r1;
+ if (r1 > maxRows || c1 > maxCols) return '';
+ const lastRow = Math.min(r2, maxRows), lastCol = Math.min(c2, maxCols);
+ const first = `${columnLetters_(c1)}${r1}`, last = `${columnLetters_(lastCol)}${lastRow}`;
+ return first === last ? first : `${first}:${last}`;
+}
 function verifyConfiguredWorkbook_(spreadsheet, fieldConfig) {
  APFP.GENERATED_VISIBLE_SHEETS.forEach(
    name => {
@@ -227,9 +246,10 @@ function verifyConfiguredWorkbook_(spreadsheet, fieldConfig) {
  const checked = [];
  fieldConfig.forEach(row => {
    const sheetName = clean_(row['Sheet Name']);
-   if (!spreadsheet.getSheetByName(sheetName))
+   const sheet = spreadsheet.getSheetByName(sheetName);
+   if (!sheet)
      throw new Error(`Field Config references missing generated sheet: ${row['Sheet Name']}`);
-   const a1 = configValueRange_(row);
+   const a1 = clipA1ToGrid_(configValueRange_(row), sheet.getMaxRows(), sheet.getMaxColumns());
    if (a1) checked.push({ row, range: quotedSheetA1_(sheetName, a1) });
  });
  if (!checked.length) return;

@@ -4,6 +4,17 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Fix — batched placeholder check failed on out-of-grid ranges (regression from speed step 2)
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**
+
+- **What broke:** Create Workspace failed on a new row with `Range (Links!B7) exceeds grid limits. Max rows: 6`. The batched check in `verifyConfiguredWorkbook_` (`TemplatePrefill.js`)
+  sends Field Config ranges to the Sheets API, which rejects ranges outside the sheet; the old per-row `getRange` tolerated them. The Setup template's Field Config still has stale "System Link" rows (`Links!B5:B12`) but the Links sheet has 6 rows.
+- **Fix:** ranges are clipped to the real grid first (`clipA1ToGrid_`): wholly outside → skipped, partly outside → shortened, unparseable → unchanged. The placeholder check itself is unchanged.
+- **Row that failed:** it kept `Retry Workspace`; click Create Workspace again and it resumes from its saved step (nothing is duplicated).
+- **Finer timers** inside the Setup protection steps (remove admin sheets/time zone, apply protections, flush, verify links, verify protections, and per protection: set ranges / restrict editors) to find the real cost (protections were ~30 s per Setup workbook).
+- Tests: `clipA1ToGrid_` cases and the stale `Links!B7` scenario. 81 tests pass.
+
 ## Fix + speed step 2 — Create Workspace button no longer marks the selected row; faster Setup workbook check
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**
