@@ -49,6 +49,7 @@ function retrySetup(selectedRow, rowObject, tech) {
   p.override('selectedDataRow_', () => selectedRow);
   p.override('rowObject_', () => rowObject);
   p.override('techByRequest_', () => tech);
+  p.override('showToast_', () => {});
   p.override('sheet_', () => ({ getRange: () => ({ setValue: v => stamps.push(v) }) }));
   p.ctx.HtmlService = { createTemplateFromFile: () => ({ evaluate: () => ({ setWidth() { return { setHeight() { return {}; } }; } }) }) };
   p.ctx.SpreadsheetApp.getUi = () => ({ alert() {}, showModalDialog: (_o, title) => dialogs.push(title) });
@@ -63,7 +64,7 @@ test('Retry/Reshare on a blank selected row does not touch it and runs the marke
 });
 
 test('Retry/Reshare on a row that already has a workspace opens the dialog for that row (no Action written)', () => {
-  const tech = { record: { 'Workspace Status': 'Workspace Created', 'Grant ID': 'G1', 'Primary Contact Email': 'a@b.org' } };
+  const tech = { record: { 'Workspace Status': 'Workspace Created', 'Grant ID': 'G1', 'Primary Contact Email': 'a@b.org', 'Organisation Folder URL': 'https://drive.google.com/drive/folders/FOLDER_ID_123456789012345' } };
   const { p, processed, stamps, dialogs } = retrySetup({ rowNumber: 13, sheet: {} },
     { 'Request ID': 'REQ13', 'Grant ID': 'G1', Action: 'Completed', 'Organisation Name': 'O', 'Financial Year': '2026-27' }, tech);
   p.get('uiRetryOrReshareWorkspace')();
@@ -73,7 +74,7 @@ test('Retry/Reshare on a row that already has a workspace opens the dialog for t
 });
 
 test('a Transactional workspace (shown as Disbursement Only) still counts as shareable', () => {
-  const tech = { record: { 'Workspace Status': 'Workspace Created', 'Grant ID': 'G1', 'Primary Contact Email': 'a@b.org' } };
+  const tech = { record: { 'Workspace Status': 'Workspace Created', 'Grant ID': 'G1', 'Primary Contact Email': 'a@b.org', 'Organisation Folder URL': 'https://drive.google.com/drive/folders/FOLDER_ID_123456789012345' } };
   const { p, dialogs } = retrySetup({ rowNumber: 13, sheet: {} },
     { 'Request ID': 'REQ13', 'Grant ID': 'G1', Action: '', 'Workspace Status': 'Disbursement Only' }, tech);
   p.get('uiRetryOrReshareWorkspace')();

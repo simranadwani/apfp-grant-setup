@@ -112,12 +112,48 @@ test('Retry/Reshare opens the dialog for a row with a workspace even when its Ac
   assert.equal(ran, 0);
 });
 
-test('Retry/Reshare with no workspace on the selected row runs the queued rows instead', () => {
-  const p = loadProject({ SpreadsheetApp: { getUi: () => ({ showModalDialog() { throw new Error('no dialog expected'); } }) } });
-  let ran = 0;
-  p.override('selectedDataRow_', () => ({ rowNumber: 9 }));
-  p.override('rowObject_', () => ({ 'Request ID': '', 'Grant ID': '', 'Action': '' }));
-  p.override('processRequestedActions', () => { ran++; });
+function retryButton(rowFacts, tech, selectionError) {
+  const dialogs = [], toasts = [], ran = [];
+  const p = loadProject({
+    HtmlService: { createTemplateFromFile: () => ({ evaluate: () => ({ setWidth() { return this; }, setHeight() { return this; } }) }) },
+    SpreadsheetApp: { getUi: () => ({ showModalDialog: (t, title) => dialogs.push(title) }) }
+  });
+  p.override('selectedDataRow_', () => { if (selectionError) throw new Error(selectionError); return { rowNumber: 9 }; });
+  p.override('rowObject_', () => rowFacts);
+  p.override('techByRequest_', () => tech);
+  p.override('showToast_', m => toasts.push(m));
+  p.override('processRequestedActions', () => { ran.push(1); });
   p.get('uiRetryOrReshareWorkspace')();
-  assert.equal(ran, 1);
+  return { dialogs, toasts, ran };
+}
+const workspaceTech = status => ({ record: { 'Grant ID': 'G1', 'Workspace Status': status, 'Primary Contact Email': 'a@x.org', 'Grant Type': 'Restricted', 'Organisation Folder URL': 'https://x/y' } });
+
+test('the dialog opens for a row with a workspace whatever its status text says', () => {
+  const r = retryButton({ 'Request ID': 'R1', 'Grant ID': 'G1', 'Action': 'Retry Sharing' }, workspaceTech('Needs Attention'));
+  assert.equal(r.dialogs.length, 1);
+  assert.equal(r.ran.length, 0);
+});
+
+test('a blank selected row runs the queue and says why the dialog did not open', () => {
+  const r = retryButton({ 'Request ID': '', 'Grant ID': '', 'Action': '' }, null);
+  assert.equal(r.ran.length, 1);
+  assert.match(r.toasts[0], /no Request ID yet/);
+});
+
+test('a row without a workspace folder explains itself', () => {
+  const r = retryButton({ 'Request ID': 'R1', 'Grant ID': 'G1' }, { record: { 'Grant ID': 'G1', 'Workspace Status': 'Needs Attention', 'Grant Type': 'Restricted' } });
+  assert.equal(r.ran.length, 1);
+  assert.match(r.toasts[0], /no workspace folder yet/);
+});
+
+test('several selected rows are called out instead of silently running the queue', () => {
+  const r = retryButton(null, null, 'Select only one data row.');
+  assert.equal(r.ran.length, 1);
+  assert.match(r.toasts[0], /More than one row is selected/);
+});
+
+test('no selection on the sheet just runs the marked rows without a message', () => {
+  const r = retryButton(null, null, 'Select one data row in 1. Workspace Creator, then run the action again.');
+  assert.equal(r.ran.length, 1);
+  assert.equal(r.toasts.length, 0);
 });

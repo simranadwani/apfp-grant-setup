@@ -14,18 +14,30 @@ function showToast_(message) {
 // Workspace buttons never write an Action. They run the rows a person (or the system, after a failure) has already marked.
 // Retry / Reshare additionally opens its dialog for the selected row when that row already has a workspace.
 function uiCreateWorkspace() { processRequestedActions(); }
+// Why the Retry / Reshare dialog was not opened, so the operator is never left guessing (empty = nothing worth saying).
+function retryDialogBlocker_(selected, selectionError, row, tech) {
+  if (!selected) return /only one/i.test(selectionError) ? 'More than one row is selected. Select a single row.' : '';
+  if (!row || !clean_(row['Request ID'])) return 'The selected row has no Request ID yet, so it has no workspace to share.';
+  if (!tech) return 'The selected row has no Technical Registry record.';
+  if (!clean_(tech.record['Organisation Folder URL'] || tech.record['Grant Workspace URL']) && !isRegistryOnlyRecord_(tech.record))
+    return 'The selected row has no workspace folder yet. Use Create Workspace or Retry Workspace first.';
+  return '';
+}
 function uiRetryOrReshareWorkspace() {
-  let selected = null;
-  try { selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW); } catch (error) { selected = null; }
+  let selected = null, selectionError = '';
+  try { selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW); } catch (error) { selectionError = error.message; }
   const row = selected ? rowObject_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, selected.rowNumber) : null;
   const requestId = row ? clean_(row['Request ID']) : '', grantId = row ? clean_(row['Grant ID']) : '';
   const tech = requestId ? techByRequest_(requestId) : null;
-  // The Technical Registry status decides (the Workspace Status shown on the row is display text and differs for Transactional).
-  const shareable = !!tech && ['completed', 'sharing pending', 'workspace created', 'disbursement only', 'registry only']
-    .includes(key_(tech.record['Workspace Status']));
+  // The facts decide (Request ID, workspace folder or Registry Only), not the Workspace Status text, which is display-only.
   // A row that already has a workspace always opens the dialog, even if its Action is set (the dialog runs that row).
-  // Otherwise (no row selected, blank row, no workspace yet) the button runs the rows already marked.
-  if (!row || !shareable) {
+  const blocker = retryDialogBlocker_(selected, selectionError, row, tech);
+  if (blocker) {
+    showToast_(`${blocker} Running the rows already marked instead.`);
+    processRequestedActions();
+    return;
+  }
+  if (!row || !tech) {
     processRequestedActions();
     return;
   }
