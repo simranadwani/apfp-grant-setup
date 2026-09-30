@@ -153,18 +153,6 @@ test('editing a pushed row marks it "Changed – push again"; other columns and 
   assert.equal(cellAt(c, 4, PUSH), '');
 });
 
-test('reset blanks both status columns for the selected rows only', () => {
-  const p = loadProject();
-  const c = central(p, [
-    { 'Disbursement ID': 'D1', [PUSH]: 'Pushed', [SYNC]: 'Synced' },
-    { 'Disbursement ID': 'D2', [PUSH]: 'Pushed', [SYNC]: 'Synced' }], [PUSH, SYNC]);
-  const map = p.get('disbHeaderMap_')(c);
-  assert.equal(p.get('clearDisbursementStatuses_')(c, map, 3, 3), 1);
-  assert.equal(cellAt(c, 3, PUSH), '');
-  assert.equal(cellAt(c, 3, SYNC), '');
-  assert.equal(cellAt(c, 4, PUSH), 'Pushed');
-});
-
 test('without the status columns push and sync behave as before (all rows checked every time)', () => {
   const p = loadProject();
   const c = central(p, [disbursed(p, 'G1', 'DISB-2627-0001', 500000)]);

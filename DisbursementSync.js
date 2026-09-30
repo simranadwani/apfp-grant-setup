@@ -245,13 +245,3 @@ function markEditedDisbursementsForRepush_(sheet, map, range) {
   writeColumnValues_(sheet, status.push, updates);
   return Object.keys(updates).length;
 }
-
-// Redo action: blanks both status columns for the given rows so the next push/sync treats them as new.
-function clearDisbursementStatuses_(sheet, map, fromRow, toRow) {
-  const status = disbStatusColumns_(map), first = Math.max(disbFirstDataRow_(), fromRow);
-  if (toRow < first) return 0;
-  const blank = {};
-  for (let row = first; row <= toRow; row++) blank[row] = '';
-  [status.push, status.sync].forEach(column => { if (column != null) writeColumnValues_(sheet, column, blank); });
-  return toRow - first + 1;
-}
