@@ -4,6 +4,42 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Phase 0b — Test copy and push safety (no behaviour change)
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** no
+
+### Changed
+- `.clasp.json` — now holds a **placeholder** script ID (`PASTE_TEST_COPY_SCRIPT_ID_HERE`). A plain `clasp push`
+  therefore cannot reach production by accident (it fails until a real test script ID is pasted in).
+- `.clasp.prod.json` (new) — holds the production script ID. Production is only ever pushed deliberately (below).
+- `.claspignore` — also excludes both `.clasp*.json` files.
+
+### Created in Google Drive (outside the production tree, owner: simranadwaniii@gmail.com, not shared)
+- Folder `APFP TEST` → `Test Root (Grant Setups)` (id `1rUu4ULndFlMhktBVY1butW6ou5dPHHyd`) — the test `ROOT_FOLDER_ID`.
+- `APFP Central Administration – TEST` (id `1g2CnNTCsgzDBRSMYr7Cu2bagoQmkcYDq9sqMWvOaVRk`) — a copy of the production
+  sheet, including its hidden sheets. **It still contains the production `ROOT_FOLDER_ID`, `SEND_WORKSPACE_NOTIFICATION = Yes`
+  and five real grantee emails until they are changed by hand (see steps below).**
+
+### Why
+Production sharing/email/disbursement code cannot be run from the cloud session and its side effects (emails, shares,
+data writes) cannot be undone by rolling code back, so every change is tried on the copy first.
+
+### Rollback (production)
+```bash
+git checkout 3346443 -- *.js *.html appsscript.json     # the original code cloned from Apps Script
+clasp push --force -P .clasp.prod.json                  # restore it to production (only if something breaks)
+```
+Sheet *data* is restored from File → Version history; sent emails and granted shares cannot be undone.
+
+### Steps for the owner (in the TEST copy only)
+1. Open the TEST sheet → **Extensions → Apps Script**. If the code files are there, the script was copied; open
+   **Project Settings** and copy the **Script ID**. Paste it into `.clasp.json` (replace the placeholder).
+2. In the TEST sheet: **View → Hidden sheets → System - Configuration** and set
+   `ROOT_FOLDER_ID` = `1rUu4ULndFlMhktBVY1butW6ou5dPHHyd` and `SEND_WORKSPACE_NOTIFICATION` = `No`.
+3. In `1. Workspace Creator` replace the five grantee emails with your own address (or clear the rows).
+4. Apps Script → **Triggers** → add `handleCentralAdminOpen` (On open) and `handleCentralAdminEdit` (On edit); click **Allow** when asked.
+5. Locally: `clasp push` (goes to the TEST script because of step 1), then run `runPreflightChecks` in the TEST sheet and send me the result.
+
 ## Phase 0 — Safety net (no behaviour change)
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** no

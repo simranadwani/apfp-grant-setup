@@ -5,3 +5,5 @@ package.json
 package-lock.json
 *.md
 .gitignore
+.clasp.json
+.clasp.prod.json
