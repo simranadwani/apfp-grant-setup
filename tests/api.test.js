@@ -17,7 +17,7 @@ const PUBLIC_ENTRY_POINTS = [
   // added with the status columns (buttons optional):
   'uiSyncDisbursementsFullCheck', 'uiResetDisbursementStatuses', 'uiBackupCentralAdministration',
   // config-driven lists:
-  'refreshDropdownsFromConfig', 'seedListsFromDefaults', 'uiRefreshReportingForce'
+  'refreshDropdownsFromConfig', 'seedListsFromDefaults', 'removeUnusedConfigRows', 'uiRefreshReportingForce'
 ];
 
 test('all project files load together without redeclaration or syntax errors', () => {

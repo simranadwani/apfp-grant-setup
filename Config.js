@@ -288,7 +288,7 @@ const APFP = Object.freeze({
        { NAME: 'Outcome, Support and Disbursement Tracker', TYPE: 'TEXT' },
        { NAME: 'Supporting & Compliance', TYPE: 'TEXT' },
        { NAME: 'Budget Allocation & Fund Utilisation', TYPE: 'TEXT' },
-       { NAME: 'Setup Review Status', TYPE: 'DROPDOWN', VALUES: ['', 'Awaiting Review', 'Changes Required', 'Approved', 'Retry Approval', 'Locked & Migrated', 'Not Applicable'] },
+       { NAME: 'Setup Review Status', TYPE: 'DROPDOWN', VALUES: ['Awaiting Review', 'Changes Required', 'Approved', 'Retry Approval', 'Locked & Migrated', 'Not Applicable'] },
        { NAME: 'Progress Report Q1', TYPE: 'TEXT' },
        { NAME: 'Progress Report Q2', TYPE: 'TEXT' },
        { NAME: 'Progress Report Q3', TYPE: 'TEXT' },

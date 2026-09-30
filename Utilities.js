@@ -344,8 +344,10 @@ function checkAdminTables_(errors, warnings, specs) {
        if (expected.TYPE === 'DROPDOWN') {
          const expectedValues = dropdownValuesFromTableColumn_(expectedColumns[index]),
            actualValues = dropdownValuesFromTableColumn_(actual);
-         if (expectedValues.length !== actualValues.length || expectedValues.some((v, i) => v !== actualValues[i]))
-           errors.push(`${spec.TABLE_NAME}.${expected.NAME} dropdown options do not match the configured schema.`);
+         // Order and blanks do not matter, and extra values are allowed: every value the code relies on must be present.
+         const have = new Set(actualValues.map(key_)), missingValues = expectedValues.filter(v => v && !have.has(key_(v)));
+         if (missingValues.length)
+           errors.push(`${spec.TABLE_NAME}.${expected.NAME} dropdown is missing option(s): ${missingValues.join(', ')}.`);
        }
      });
    });

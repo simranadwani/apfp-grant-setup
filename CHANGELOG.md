@@ -4,6 +4,14 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round H — dropdown check no longer position-sensitive; clear unused settings
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes (small) · **TEST only**
+
+- **Preflight dropdown check** (`Utilities.js` `checkAdminTables_`): a Table dropdown passes when every option the code relies on is present — order, blanks and extra options no longer matter; the error names the missing option(s).
+- **No blank option** (`Config.js`): the Setup Review Status dropdown no longer lists an empty first value.
+- **`removeUnusedConfigRows`** (`UiActions.js`): asks, then clears the System - Configuration rows nothing reads (the ones preflight warns about). Rows are cleared, not deleted, so the catalogue columns beside them are untouched.
+
 ## Round G — Transactional Upload Folder link, obsolete code removed
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**
