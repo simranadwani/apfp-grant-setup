@@ -97,7 +97,8 @@ function checkOutcomeTrackerExport_(spreadsheet) {
     checkExportFormulaCoverage_(sheet, section);
   });
 }
-function protectCompletedIntakeRow_(rowNumber) {
+function protectCompletedIntakeRow_(...args) { return timed_('Protect intake row', () => protectCompletedIntakeRowUntimed_(...args)); }
+function protectCompletedIntakeRowUntimed_(rowNumber) {
   const s = sheet_(APFP.SHEETS.INTAKE),
     range = s.getRange(rowNumber, APFP.INTAKE.IDENTITY_START_COLUMN, 1, APFP.INTAKE.IDENTITY_COLUMN_COUNT);
   s.getProtections(SpreadsheetApp.ProtectionType.RANGE)

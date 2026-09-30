@@ -30,7 +30,8 @@ function templateFieldConfigRows_(templateId) {
  FIELD_CONFIG_CACHE_[id] = rows;
  return rows;
 }
-function configureGeneratedWorkbook_(setupSpreadsheet, request, organisationRecord, links, config) {
+function configureGeneratedWorkbook_(...args) { return timed_('Configure Setup workbook', () => configureGeneratedWorkbookUntimed_(...args)); }
+function configureGeneratedWorkbookUntimed_(setupSpreadsheet, request, organisationRecord, links, config) {
   const fieldConfig = templateFieldConfigRows_(clean_(config.SETUP_TEMPLATE_ID));
   APFP.GENERATED_VISIBLE_SHEETS.forEach(sheetName => {
     if (!setupSpreadsheet.getSheetByName(sheetName)) {

@@ -1,5 +1,6 @@
 // SharingAndEmail.gs — access control, archive access, and workspace email.
-function ensureWorkspaceSharingSafe_(requestId, workspaceFolderId, email, config) {
+function ensureWorkspaceSharingSafe_(...args) { return timed_('Share folder', () => ensureWorkspaceSharingSafeUntimed_(...args)); }
+function ensureWorkspaceSharingSafeUntimed_(requestId, workspaceFolderId, email, config) {
  const permissionSnapshot = permissionForUser_(workspaceFolderId, email);
  assertWorkspaceFilesSafeToShare_(requestId, config);
  try {
@@ -57,7 +58,8 @@ function mergeWorkspaceEmailTemplate_(text, values) {
    throw new Error(`Unresolved workspace email placeholder(s): ${[...new Set(unresolved)].join(', ')}`);
  return rendered;
 }
-function sendWorkspaceNotificationOnce_(requestId, config) {
+function sendWorkspaceNotificationOnce_(...args) { return timed_('Send notification email', () => sendWorkspaceNotificationOnceUntimed_(...args)); }
+function sendWorkspaceNotificationOnceUntimed_(requestId, config) {
  const tech = techByRequest_(requestId);
  if (!tech) throw new Error(`No technical record exists for Request ID ${requestId}.`);
  const r = tech.record,

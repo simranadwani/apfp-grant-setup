@@ -13,7 +13,8 @@ function stepAtOrAfter_(current, target) {
  const a = stepRank_(current), b = stepRank_(target);
  return a >= 0 && b >= 0 && a >= b;
 }
-function openOrCopySpreadsheet_(folder, savedUrl, name, templateId) {
+function openOrCopySpreadsheet_(...args) { return timed_('Copy template workbook', () => openOrCopySpreadsheetUntimed_(...args)); }
+function openOrCopySpreadsheetUntimed_(folder, savedUrl, name, templateId) {
  let file = null;
  if (clean_(savedUrl)) {
    try {
@@ -29,7 +30,8 @@ function openOrCopySpreadsheet_(folder, savedUrl, name, templateId) {
  }
  return file;
 }
-function configureOutcomeProgressWorkbookBase_(workbookId, request, grantId, links) {
+function configureOutcomeProgressWorkbookBase_(...args) { return timed_('Configure Outcome workbook', () => configureOutcomeProgressWorkbookBaseUntimed_(...args)); }
+function configureOutcomeProgressWorkbookBaseUntimed_(workbookId, request, grantId, links) {
   const ss = openSpreadsheetCached_(workbookId);
   const schema = APFP.PREFLIGHT_SCHEMA.OUTCOME_TEMPLATE;
   const outcome = ss.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.OUTCOMES);

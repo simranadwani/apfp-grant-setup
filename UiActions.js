@@ -9,7 +9,8 @@ function selectedDataRow_(sheetName, headerRow) {
   return { sheet: sheet, rowNumber: range.getRow() };
 }
 function showToast_(message) {
-  SpreadsheetApp.getActive().toast(message, 'APFP', 6);
+  const timing = slowestStepsSummary_(3);
+  SpreadsheetApp.getActive().toast(timing ? `${message} ${timing}` : message, 'APFP', timing ? 15 : 6);
 }
 function runWorkspaceAction_(action) {
   const selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW);

@@ -56,7 +56,8 @@ function workspaceCreatorSystemPatch_(grantId, tech) {
    'Workspace ID': clean_(r['Workspace ID'])
  };
 }
-function refreshWorkspaceCreatorRow_(grantId) {
+function refreshWorkspaceCreatorRow_(...args) { return timed_('Refresh Workspace Creator row', () => refreshWorkspaceCreatorRowUntimed_(...args)); }
+function refreshWorkspaceCreatorRowUntimed_(grantId) {
  grantId = clean_(grantId);
  if (!grantId) return;
  const tech = techByGrantId_(grantId),

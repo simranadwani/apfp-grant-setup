@@ -332,7 +332,8 @@ function correctWorkspaceDetailsForRow_(rowNumber) {
   return { grantId: grantId, projectTitle: projectTitle };
 }
 
-function upsertGrantShell_(grantId, organisationId, request, setupUrl, outcomeWorkbookUrl) {
+function upsertGrantShell_(...args) { return timed_('Save Grant Registry shell', () => upsertGrantShellUntimed_(...args)); }
+function upsertGrantShellUntimed_(grantId, organisationId, request, setupUrl, outcomeWorkbookUrl) {
  const existing = grantById_(grantId), timestamp = now_(), transactional = isTransactionalGrantType_(request.grantType),
    registryOnly = transactional || isDiscretionaryGrantType_(request.grantType),
    patch = {
@@ -466,7 +467,8 @@ function patchDiffersFromRecord_(record, patch) {
    return comparable_(current) !== comparable_(next);
  });
 }
-function saveTech_(requestId, patch) {
+function saveTech_(...args) { return timed_('Save Technical Registry', () => saveTechUntimed_(...args)); }
+function saveTechUntimed_(requestId, patch) {
  const found = techByRequest_(requestId),
    base = Object.assign({ 'Request ID': requestId, 'Record Status': APFP.ACTIVE }, patch || {});
  if (!found) {

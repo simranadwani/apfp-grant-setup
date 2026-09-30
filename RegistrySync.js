@@ -33,7 +33,8 @@ function hasLaterApprovedCompletedSource_(organisationId, financialYear, exclude
      key_(record['Grant ID']) !== key_(excludedGrantId) && fy != null && fy > current && syncRecordIsApprovedCompleted_(record);
  });
 }
-function registerCreatedWorkbookForSync_(request, organisationId, grantId, workbookUrl) {
+function registerCreatedWorkbookForSync_(...args) { return timed_('Register workbook for sync', () => registerCreatedWorkbookForSyncUntimed_(...args)); }
+function registerCreatedWorkbookForSyncUntimed_(request, organisationId, grantId, workbookUrl) {
  const tech = techByGrantId_(grantId) || (request.requestId ? techByRequest_(request.requestId) : null);
  if (!tech) throw new Error(`Technical Registry record is missing for Grant ID ${grantId}.`);
  const record = tech.record, sourceId = urlId_(workbookUrl), patch = {

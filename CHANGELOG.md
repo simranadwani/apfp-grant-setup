@@ -4,6 +4,15 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Speed step 1 — measure where the time goes (no behaviour change)
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes (reporting only) · **TEST only**
+
+- **Files:** `Utilities.js` (`timed_`, `slowestStepsSummary_`, workbook opens timed), thin timing wrappers around the key steps in `WorkspaceCreation.js`, `TemplatePrefill.js`, `SharingAndEmail.js`,
+  `MenuAndChecks.js`, `ProtectionIntegrity.js`, `TrackerLinks.js`, `RegistryAndIDs.js`, `RegistrySync.js`; `IntakeValidation.js` and `UiActions.js` show the result.
+- **Why:** to optimise the real hot spots instead of guessing. The workspace alert and the refresh toasts now end with e.g. `Slowest steps: Copy template workbook 41.2s (x2), Save Technical Registry 9.8s (x27).`
+- Each wrapped function keeps its name and behaviour (the original body is now `<name>Untimed_`). `tests/pure.test.js` covers the timer. 75 tests pass.
+
 ## Change — workspace buttons run every queued row; message lists the rows
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**

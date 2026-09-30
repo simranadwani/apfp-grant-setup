@@ -18,7 +18,7 @@ function sheet_(name) {
 }
 function openSpreadsheetCached_(idOrUrl) {
  const id = urlId_(idOrUrl);
- if (!EXTERNAL_SPREADSHEET_CACHE_[id]) EXTERNAL_SPREADSHEET_CACHE_[id] = SpreadsheetApp.openById(id);
+ if (!EXTERNAL_SPREADSHEET_CACHE_[id]) EXTERNAL_SPREADSHEET_CACHE_[id] = timed_('Open workbook', () => SpreadsheetApp.openById(id));
  return EXTERNAL_SPREADSHEET_CACHE_[id];
 }
 function clean_(value) {
@@ -548,4 +548,23 @@ function deleteShortcutToTarget_(parentFolderId, targetFileId) {
  if (!existing) return false;
  Drive.Files.remove(existing.id, { supportsAllDrives: true });
  return true;
+}
+// ---- Step timing: lets a run report where its time went (no behaviour change) ----
+const STEP_TIMINGS_ = {};
+function timed_(label, fn) {
+ const startedAt = Date.now();
+ try {
+   return fn();
+ } finally {
+   const entry = STEP_TIMINGS_[label] || (STEP_TIMINGS_[label] = { ms: 0, count: 0 });
+   entry.ms += Date.now() - startedAt;
+   entry.count++;
+ }
+}
+// e.g. "Slowest steps: Copy template workbook 41.2s (x2), Save Technical Registry 9.8s (x27)"
+function slowestStepsSummary_(limit) {
+ const parts = Object.keys(STEP_TIMINGS_).map(label => ({ label, ms: STEP_TIMINGS_[label].ms, count: STEP_TIMINGS_[label].count }))
+   .filter(item => item.ms >= 500).sort((a, b) => b.ms - a.ms).slice(0, limit || 5)
+   .map(item => `${item.label} ${(item.ms / 1000).toFixed(1)}s${item.count > 1 ? ` (x${item.count})` : ''}`);
+ return parts.length ? `Slowest steps: ${parts.join(', ')}.` : '';
 }

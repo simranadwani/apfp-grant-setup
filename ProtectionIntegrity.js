@@ -336,7 +336,8 @@ function finaliseOutcomeWorkbookIntegrity_(spreadsheet) {
   return true;
 }
 
-function finaliseTransactionalWorkbookIntegrity_(spreadsheet) {
+function finaliseTransactionalWorkbookIntegrity_(...args) { return timed_('Protect Transactional workbook', () => finaliseTransactionalWorkbookIntegrityUntimed_(...args)); }
+function finaliseTransactionalWorkbookIntegrityUntimed_(spreadsheet) {
   ensureSpreadsheetTimeZone_(spreadsheet);
   applyTransactionalWorkbookProtections_(spreadsheet);
   SpreadsheetApp.flush();
