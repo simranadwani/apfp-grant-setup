@@ -278,7 +278,7 @@ function extendTableToSheetEnd_(sheetName, tableName) {
 // Compares a live header row with the REQUIRED header names: order and extra columns are allowed (extras are only reported).
 function headerGaps_(actualRow, requiredHeaders) {
  const actual = (actualRow || []).map(clean_).filter(Boolean), actualKeys = new Set(actual.map(key_)),
-   requiredKeys = new Set(requiredHeaders.map(key_));
+   requiredKeys = new Set(requiredHeaders.map(key_).concat([APFP.DISBURSEMENT_STATUS.PUSH_COLUMN, APFP.DISBURSEMENT_STATUS.SYNC_COLUMN].map(key_)));
  return {
    missing: requiredHeaders.filter(header => !actualKeys.has(key_(header))),
    extra: actual.filter(header => !requiredKeys.has(key_(header)))
@@ -329,7 +329,7 @@ function checkAdminTables_(errors, warnings, specs) {
      if ((range.startRowIndex || 0) !== expectedStartRow || range.startColumnIndex !== 0 || range.endColumnIndex < spec.COLUMNS.length ||
          (range.endRowIndex || 0) < (spec.MIN_ROWS || 500))
        errors.push(`${spec.TABLE_NAME} range does not match the expected ${spec.SHEET_NAME} table structure.`);
-     const columns = table.columnProperties || [], expectedColumns = tableColumnProperties_(spec), requiredNames = new Set(spec.COLUMNS.map(c => key_(c.NAME)));
+     const columns = table.columnProperties || [], expectedColumns = tableColumnProperties_(spec), requiredNames = new Set(spec.COLUMNS.map(c => key_(c.NAME)).concat([APFP.DISBURSEMENT_STATUS.PUSH_COLUMN, APFP.DISBURSEMENT_STATUS.SYNC_COLUMN].map(key_)));
      const extra = columns.map(c => clean_(c.columnName)).filter(name => name && !requiredNames.has(key_(name)));
      if (extra.length && warnings) warnings.push(`${spec.TABLE_NAME} has extra column(s) the code leaves alone: ${extra.join(', ')}.`);
      spec.COLUMNS.forEach((expected, index) => {
