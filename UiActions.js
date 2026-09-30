@@ -47,6 +47,30 @@ function uiRetryOrReshareWorkspace() {
     'Retry / Reshare Grant-FY workspace'
   );
 }
+// Pushes the current LIST_* settings (System - Configuration) into the dropdowns of the native Tables. Run after editing a list.
+function refreshDropdownsFromConfig() {
+  requireAdvancedSheetsService_();
+  const plan = dropdownUpdateRequests_(adminTablesSnapshot_(), APFP.ADMIN_TABLES);
+  if (plan.requests.length) Sheets.Spreadsheets.batchUpdate({ requests: plan.requests }, ss_().getId());
+  showToast_(plan.changed.length ? `Dropdowns updated: ${plan.changed.join('; ')}` : 'All dropdowns already match System - Configuration.');
+  return plan.changed;
+}
+// One-time helper: adds the list / time-zone / financial-year settings to System - Configuration with today's values (never overwrites an existing row).
+function seedListsFromDefaults() {
+  const sheet = sheet_(APFP.SHEETS.CONFIG), last = sheet.getLastRow(),
+    existing = new Set(last >= 3 ? sheet.getRange(3, 1, last - 2, 1).getValues().map(row => key_(row[0])) : []),
+    wanted = [['FIRST_FY', '2026-27'], ['FY_YEARS_AHEAD', '3'], ['TIME_ZONE', APFP.TIME_ZONE]]
+      .concat(listNames_().filter(name => name !== 'FINANCIAL_YEARS').map(name => [`LIST_${name}`, APFP.LIST_DEFAULTS[name].join('|')]))
+      .filter(([name]) => !existing.has(key_(name)));
+  if (!wanted.length) { showToast_('System - Configuration already has every list setting.'); return []; }
+  const start = Math.max(3, last + 1), end = start + wanted.length - 1;
+  if (end > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), end - sheet.getMaxRows());
+  sheet.getRange(start, 1, wanted.length, 2).setValues(wanted);
+  sheet.getRange(start, 6, wanted.length, 1).setValues(wanted.map(() => ['Yes']));
+  CONFIG_CACHE_ = null;
+  showToast_(`Added ${wanted.length} setting(s) to System - Configuration: ${wanted.map(item => item[0]).join(', ')}. Run "refreshDropdownsFromConfig" next if a list changed.`);
+  return wanted.map(item => item[0]);
+}
 function submitRetryReshareGrantFy(payload) {
  const lock = LockService.getScriptLock();
  if (!lock.tryLock(30000)) throw new Error('Another APFP automation run is active. Try again shortly.');

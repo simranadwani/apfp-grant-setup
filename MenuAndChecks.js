@@ -198,6 +198,12 @@ function runPreflightChecks() {
     }
     capture('Restricted/Unrestricted email template', () => workspaceEmailTemplateBlock_(config, 'RESTRICTED_UNRESTRICTED'));
     capture('Transactional email template', () => workspaceEmailTemplateBlock_(config, 'TRANSACTIONAL'));
+    capture('Configuration keys in use', () => {
+      const sheet = sheet_(APFP.SHEETS.CONFIG), last = sheet.getLastRow(), known = new Set(APFP.PREFLIGHT_SCHEMA.KNOWN_CONFIG_KEYS.map(key_)),
+        unused = last < 3 ? [] : sheet.getRange(3, 1, last - 2, 1).getValues().map(row => clean_(row[0]))
+          .filter(name => name && !known.has(key_(name)) && !/^LIST_/i.test(name));
+      if (unused.length) warnings.push(`System - Configuration has row(s) the code never reads (safe to delete): ${unused.join(', ')}.`);
+    });
     if (key_(config.SEND_WORKSPACE_NOTIFICATION) !== 'yes')
       warnings.push('Workspace email notification is disabled.');
   }
@@ -219,7 +225,7 @@ function backupCentralAdministration_() {
   const config = config_();
   requireConfig_(config, ['CENTRAL_ADMIN_FOLDER_ID']);
   const folder = getOrCreateUniqueChildFolder_(DriveApp.getFolderById(clean_(config.CENTRAL_ADMIN_FOLDER_ID)), 'Backups'),
-    stamp = Utilities.formatDate(now_(), APFP.TIME_ZONE, 'yyyy-MM-dd HHmm'),
+    stamp = Utilities.formatDate(now_(), timeZone_(), 'yyyy-MM-dd HHmm'),
     copy = DriveApp.getFileById(ss_().getId()).makeCopy(`${ss_().getName()} — backup ${stamp}`, folder);
   return copy.getUrl();
 }

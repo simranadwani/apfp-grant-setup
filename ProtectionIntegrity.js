@@ -283,14 +283,14 @@ function transactionalWorkbookProtectionSpecs_() {
 }
 
 function spreadsheetTimeZoneMatches_(actual) {
-  const wanted = APFP.TIME_ZONE;
+  const wanted = timeZone_();
   const equivalents = new Set([wanted, 'Asia/Calcutta']);
   return equivalents.has(clean_(actual));
 }
 
 function ensureSpreadsheetTimeZone_(spreadsheet) {
   if (!spreadsheetTimeZoneMatches_(spreadsheet.getSpreadsheetTimeZone())) {
-    spreadsheet.setSpreadsheetTimeZone(APFP.TIME_ZONE);
+    spreadsheet.setSpreadsheetTimeZone(timeZone_());
   }
 }
 
@@ -298,7 +298,7 @@ function verifySpreadsheetTimeZone_(spreadsheet, label) {
   const actual = spreadsheet.getSpreadsheetTimeZone();
   if (!spreadsheetTimeZoneMatches_(actual)) {
     throw new Error(
-      `${label || spreadsheet.getName()} timezone must be ${APFP.TIME_ZONE}; found ${actual}.`
+      `${label || spreadsheet.getName()} timezone must be ${timeZone_()}; found ${actual}.`
     );
   }
 }

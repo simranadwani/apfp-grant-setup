@@ -4,6 +4,19 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round C — dropdown lists, financial years and time zone from System - Configuration
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only** · **Nothing breaks before you seed the new rows (defaults are kept in `Config.js`).**
+
+- **Lists** (`Config.js`, `Utilities.js`): the label-only dropdowns — Thematic Area, Thematic Sub-area, Proximity, Programme Status (and Financial Year) — are no longer typed into the code.
+  Their live values are `LIST_<NAME>` rows in `System - Configuration` (values separated by `|`); a missing or empty row falls back to `APFP.LIST_DEFAULTS`.
+  Values that drive behaviour stay in code and are not editable lists: Organisation Type, Grant Type, Grant Status, Action, Setup Review Status, Grant Start Quarter, Yes/No.
+- **Financial years roll forward by themselves**: from `FIRST_FY` (default 2026-27) to the current FY + `FY_YEARS_AHEAD` (default 3); set `LIST_FINANCIAL_YEARS` to fix an explicit list instead. The list no longer expires after 2029-30.
+- **New admin functions** (`UiActions.js`): `seedListsFromDefaults()` adds the missing settings with today's values (never overwrites); `refreshDropdownsFromConfig()` pushes edited lists into the native Table dropdowns (one Sheets `updateTable` call, only for lists that changed).
+- **Preflight** compares Table dropdowns with the configured lists, and warns about `System - Configuration` rows the code never reads (safe to delete). `KNOWN_CONFIG_KEYS` is guarded by a test that scans the source.
+- **Time zone** is the `TIME_ZONE` setting (default Asia/Kolkata) instead of a constant.
+- Tests: `tests/lists.test.js` (defaults, overrides, rolling FY, dropdown update plan, seeding twice, known-keys scan). 109 tests pass.
+
 ## Round B — column-tolerant reads and writes (adding or moving a column needs no code change)
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**

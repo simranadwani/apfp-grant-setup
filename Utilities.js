@@ -38,7 +38,7 @@ function actorEmail_() {
  }
 }
 function id_(prefix) {
- return `${prefix}-${Utilities.formatDate(now_(), APFP.TIME_ZONE, 'yyyyMMddHHmmss')}-${Math.floor(1000 + Math.random() * 9000)}`;
+ return `${prefix}-${Utilities.formatDate(now_(), timeZone_(), 'yyyyMMddHHmmss')}-${Math.floor(1000 + Math.random() * 9000)}`;
 }
 function validEmail_(email) {
  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean_(email));
@@ -184,6 +184,57 @@ function adminTablesSnapshot_() {
    fields: 'sheets(properties(sheetId,title),tables(tableId,name,range,columnProperties(columnIndex,columnName,columnType,dataValidationRule)))'
  });
 }
+// ---- Editable dropdown lists live in System - Configuration (rows LIST_<NAME>, values separated by |) ----
+// A missing or empty row falls back to the default in Config.js, so nothing breaks before the rows are seeded.
+function rollingFinancialYears_() {
+ const config = config_(), firstMatch = clean_(config.FIRST_FY).match(/^(\d{4})-\d{2}$/),
+   firstStart = firstMatch ? Number(firstMatch[1]) : 2026, ahead = Math.max(0, Number(config.FY_YEARS_AHEAD) || 3),
+   currentStart = Number(financialYearFromDate_(now_()).slice(0, 4)) || firstStart, out = [];
+ for (let start = firstStart; start <= Math.max(currentStart + ahead, firstStart); start++)
+   out.push(`${start}-${String((start + 1) % 100).padStart(2, '0')}`);
+ return out;
+}
+function defaultList_(name) {
+ if (name === 'FINANCIAL_YEARS') return rollingFinancialYears_();
+ return (APFP.LIST_DEFAULTS[name] || []).slice();
+}
+function getList_(name) {
+ const raw = clean_(config_()[`LIST_${name}`]), items = raw ? raw.split('|').map(clean_).filter(Boolean) : [];
+ return items.length ? [...new Set(items)] : defaultList_(name);
+}
+function listNames_() {
+ return [...new Set(APFP.ADMIN_TABLES.reduce((all, spec) => all.concat(spec.COLUMNS.filter(c => c.LIST).map(c => c.LIST)), []))];
+}
+function timeZone_() {
+ try {
+   return clean_(config_().TIME_ZONE) || APFP.TIME_ZONE;
+ } catch (error) {
+   return APFP.TIME_ZONE;
+ }
+}
+// Table dropdown rules that differ from the current lists, as Sheets API updateTable requests (pure: no API calls).
+function dropdownUpdateRequests_(snapshot, specs) {
+ const requests = [], changed = [];
+ specs.forEach(spec => {
+   if (!spec.COLUMNS.some(column => column.LIST)) return;
+   const item = (snapshot.sheets || []).find(entry => entry.properties && entry.properties.title === spec.SHEET_NAME),
+     table = item && (item.tables || []).find(entry => entry.name === spec.TABLE_NAME);
+   if (!table) throw new Error(`${spec.SHEET_NAME} is missing Google Sheets Table ${spec.TABLE_NAME}.`);
+   const expected = tableColumnProperties_(spec);
+   let differs = false;
+   const columnProperties = (table.columnProperties || []).map(actual => {
+     const index = spec.COLUMNS.findIndex(column => key_(column.NAME) === key_(actual.columnName));
+     if (index < 0 || !spec.COLUMNS[index].LIST) return actual;
+     const wanted = dropdownValuesFromTableColumn_(expected[index]), current = dropdownValuesFromTableColumn_(actual);
+     if (wanted.length === current.length && wanted.every((value, i) => value === current[i])) return actual;
+     differs = true;
+     changed.push(`${spec.SHEET_NAME} › ${actual.columnName}`);
+     return Object.assign({}, actual, { dataValidationRule: expected[index].dataValidationRule });
+   });
+   if (differs) requests.push({ updateTable: { table: { tableId: table.tableId, columnProperties }, fields: 'columnProperties' } });
+ });
+ return { requests, changed };
+}
 function tableColumnProperties_(spec) {
  return spec.COLUMNS.map((column, index) => {
    const out = { columnIndex: index, columnName: column.NAME, columnType: column.TYPE };
@@ -192,7 +243,7 @@ function tableColumnProperties_(spec) {
        : column.DYNAMIC === 'MATURITY_ASPECTS' ? maturityAspectOptions_()
        : column.DYNAMIC === 'MATURITY_INDICATORS' ? maturityIndicatorOptions_()
        : column.DYNAMIC === 'MATURITY_STATUSES' ? maturityStatusOptions_()
-       : (column.VALUES || []);
+       : column.LIST ? getList_(column.LIST) : (column.VALUES || []);
      out.dataValidationRule = {
        condition: { type: 'ONE_OF_LIST', values: [...new Set(values)].map(value => ({ userEnteredValue: String(value) })) }
      };

@@ -1,7 +1,16 @@
 // Config.gs — names, schemas, field positions, and controlled options.
 const APFP = Object.freeze({
  FONT_FAMILY: 'Arial',
+ // Fallback when System - Configuration has no TIME_ZONE row.
  TIME_ZONE: 'Asia/Kolkata',
+ // Fallback values for the editable dropdown lists. The live lists are the LIST_<NAME> rows in System - Configuration
+ // (pipe-separated). Financial years are generated (FIRST_FY / FY_YEARS_AHEAD) unless LIST_FINANCIAL_YEARS is set.
+  LIST_DEFAULTS: {
+    THEMATIC_AREAS: ['Miscellaneous', 'Capacity Building', 'Education', 'Public Leadership', 'Social Justice', 'Health', 'Animal Welfare'],
+    THEMATIC_SUBAREAS: ['21st Century Skills', 'NA', 'Innovation', 'Personal Safety', 'Socio-Emotional Learning', 'Academics', 'Inclusion', 'Career Building', 'Early Childhood Education'],
+    PROXIMITY: ['Direct School Support', 'NA', 'After-School Support', 'Ecosystem Capacity Building - Entrepreneurs/Teachers', 'Ecosystem Capacity Building - State', 'Alternate School Support'],
+    PROGRAMME_STATUSES: ['Currently Operational', 'Starting Soon']
+  },
  HIDDEN_SYSTEM_SHEETS: [
    'System - Configuration',
    'System - Technical Registry',
@@ -74,6 +83,14 @@ const APFP = Object.freeze({
    'Q4 Progress','Q4 Evidence Link','Q4 Support Type','Q4 Support Required','Q4 Status','Q4 Anagha Notes','Final Actual'
  ],
  PREFLIGHT_SCHEMA: {
+   // Every setting the code reads (used to warn about rows in System - Configuration that nothing uses).
+   KNOWN_CONFIG_KEYS: [
+     'BUDGET_UTILISATION_FOLDER_NAME', 'CENTRAL_ADMIN_FOLDER_ID', 'DATA_SYNC_SCHEMA_VERSION', 'DISBURSEMENT_DOCUMENT_TEMPLATE_ID',
+     'DISBURSEMENT_WORKBOOK_PATTERN', 'FINANCIAL_YEAR_FOLDER_PATTERN', 'MAX_BATCH_SIZE', 'ORGANISATION_FOLDER_PATTERN',
+     'OUTCOME_PROGRESS_TEMPLATE_ID', 'OUTCOME_PROGRESS_WORKBOOK_PATTERN', 'PROTECTION_EDITORS', 'ROOT_FOLDER_ID',
+     'SEND_SHARING_NOTIFICATION', 'SEND_WORKSPACE_NOTIFICATION', 'SETUP_TEMPLATE_ID', 'SETUP_WORKBOOK_PATTERN',
+     'SUPPORTING_DOCUMENTS_FOLDER_NAME', 'WORKSPACE_EMAIL_TEMPLATE_DOC_ID', 'TIME_ZONE', 'FIRST_FY', 'FY_YEARS_AHEAD'
+   ],
    REQUIRED_CONFIG_KEYS: [
      'ROOT_FOLDER_ID', 'SETUP_TEMPLATE_ID',
      'OUTCOME_PROGRESS_TEMPLATE_ID', 'FINANCIAL_YEAR_FOLDER_PATTERN',
@@ -249,14 +266,14 @@ const APFP = Object.freeze({
    {
      SHEET_NAME: '1. Workspace Creator', TABLE_NAME: 'WorkspaceCreator', MIN_ROWS: 500,
      COLUMNS: [
-       { NAME: 'Financial Year', TYPE: 'DROPDOWN', VALUES: ['2026-27', '2027-28', '2028-29', '2029-30'] },
+       { NAME: 'Financial Year', TYPE: 'DROPDOWN', LIST: 'FINANCIAL_YEARS' },
        { NAME: 'Grant Start Date', TYPE: 'DATE' },
        { NAME: 'Grant End Date', TYPE: 'DATE' },
        { NAME: 'Organisation Type', TYPE: 'DROPDOWN', VALUES: ['New Organisation', 'Returning Organisation'] },
        { NAME: 'Organisation Name', TYPE: 'COLUMN_TYPE_UNSPECIFIED' },
-       { NAME: 'Thematic Area', TYPE: 'DROPDOWN', VALUES: ['Miscellaneous', 'Capacity Building', 'Education', 'Public Leadership', 'Social Justice', 'Health', 'Animal Welfare'] },
-       { NAME: 'Thematic Sub-area', TYPE: 'DROPDOWN', VALUES: ['21st Century Skills', 'NA', 'Innovation', 'Personal Safety', 'Socio-Emotional Learning', 'Academics', 'Inclusion', 'Career Building', 'Early Childhood Education'] },
-       { NAME: 'Proximity to Children / Beneficiary', TYPE: 'DROPDOWN', VALUES: ['Direct School Support', 'NA', 'After-School Support', 'Ecosystem Capacity Building - Entrepreneurs/Teachers', 'Ecosystem Capacity Building - State', 'Alternate School Support'] },
+       { NAME: 'Thematic Area', TYPE: 'DROPDOWN', LIST: 'THEMATIC_AREAS' },
+       { NAME: 'Thematic Sub-area', TYPE: 'DROPDOWN', LIST: 'THEMATIC_SUBAREAS' },
+       { NAME: 'Proximity to Children / Beneficiary', TYPE: 'DROPDOWN', LIST: 'PROXIMITY' },
        { NAME: 'Grant Title', TYPE: 'TEXT' },
        { NAME: 'Grant Type', TYPE: 'DROPDOWN', VALUES: ['Restricted', 'Unrestricted', 'Transactional', 'Discretionary'] },
        { NAME: 'Amount Approved', TYPE: 'COLUMN_TYPE_UNSPECIFIED', FORMAT: 'INDIAN_CURRENCY' },
@@ -335,15 +352,15 @@ const APFP = Object.freeze({
        { NAME: 'Grant ID', TYPE: 'TEXT' }, { NAME: 'Financial Year', TYPE: 'TEXT' },
        { NAME: 'Grant Start Quarter', TYPE: 'DROPDOWN', VALUES: ['Q1 (Apr-Jun)', 'Q2 (Jul-Sep)', 'Q3 (Oct-Dec)', 'Q4 (Jan-Mar)'] },
        { NAME: 'Organisation ID', TYPE: 'TEXT' }, { NAME: 'Organisation Name', TYPE: 'TEXT' },
-       { NAME: 'Thematic Area', TYPE: 'DROPDOWN', VALUES: ['Miscellaneous', 'Capacity Building', 'Education', 'Public Leadership', 'Social Justice', 'Health', 'Animal Welfare'] },
-       { NAME: 'Thematic Sub-area', TYPE: 'DROPDOWN', VALUES: ['21st Century Skills', 'NA', 'Innovation', 'Personal Safety', 'Socio-Emotional Learning', 'Academics', 'Inclusion', 'Career Building', 'Early Childhood Education'] },
-       { NAME: 'Proximity to Children / Beneficiary', TYPE: 'DROPDOWN', VALUES: ['Direct School Support', 'NA', 'After-School Support', 'Ecosystem Capacity Building - Entrepreneurs/Teachers', 'Ecosystem Capacity Building - State', 'Alternate School Support'] },
+       { NAME: 'Thematic Area', TYPE: 'DROPDOWN', LIST: 'THEMATIC_AREAS' },
+       { NAME: 'Thematic Sub-area', TYPE: 'DROPDOWN', LIST: 'THEMATIC_SUBAREAS' },
+       { NAME: 'Proximity to Children / Beneficiary', TYPE: 'DROPDOWN', LIST: 'PROXIMITY' },
        { NAME: 'Project Title', TYPE: 'TEXT' }, { NAME: 'Grant Start Date', TYPE: 'DATE' },
        { NAME: 'Grant End Date', TYPE: 'DATE' },
        { NAME: 'Grant Type', TYPE: 'DROPDOWN', VALUES: ['Restricted', 'Unrestricted', 'Transactional', 'Discretionary'] },
        { NAME: 'Amount Approved', TYPE: 'COLUMN_TYPE_UNSPECIFIED', FORMAT: 'INDIAN_CURRENCY' },
        { NAME: 'Grant Status', TYPE: 'DROPDOWN', VALUES: ['Active', 'Discontinued', 'Complete'] },
-       { NAME: 'Programme Status', TYPE: 'DROPDOWN', VALUES: ['Currently Operational', 'Starting Soon'] },
+       { NAME: 'Programme Status', TYPE: 'DROPDOWN', LIST: 'PROGRAMME_STATUSES' },
        { NAME: 'Years Implemented', TYPE: 'DOUBLE' }, { NAME: 'Project Duration (Months)', TYPE: 'DOUBLE' },
        { NAME: 'Total Project Budget', TYPE: 'COLUMN_TYPE_UNSPECIFIED', FORMAT: 'INDIAN_CURRENCY' }, { NAME: 'States Covered', TYPE: 'TEXT' },
        { NAME: 'Districts Covered', TYPE: 'TEXT' }, { NAME: 'Amount Requested', TYPE: 'COLUMN_TYPE_UNSPECIFIED', FORMAT: 'INDIAN_CURRENCY' },
