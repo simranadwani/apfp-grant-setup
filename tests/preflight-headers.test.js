@@ -19,10 +19,10 @@ function checkWith(headers) {
   return { errors, warnings };
 }
 
-test('checkHeaders_: reordered required headers plus a new column pass with a warning', () => {
+test('checkHeaders_: reordered required headers plus a new column pass with no warning', () => {
   const { errors, warnings } = checkWith(['Notes', 'Grant Title', 'Grant ID']);
   assert.deepEqual(errors, []);
-  assert.match(warnings[0], /extra column\(s\) the code leaves alone: Notes/);
+  assert.deepEqual(warnings, []);
 });
 
 test('checkHeaders_: a missing required header is a blocking error naming it', () => {
@@ -46,7 +46,7 @@ test('checkAdminTables_: an extra Table column and different column order pass; 
   const ok = run([{ columnIndex: 0, columnName: 'Team Note', columnType: 'TEXT' },
     { columnIndex: 1, columnName: 'Two', columnType: 'DROPDOWN', dataValidationRule: dd }, { columnIndex: 2, columnName: 'One', columnType: 'TEXT' }]);
   assert.deepEqual(ok.errors, []);
-  assert.match(ok.warnings[0], /extra column\(s\) the code leaves alone: Team Note/);
+  assert.deepEqual(ok.warnings, []);
   const bad = run([{ columnIndex: 0, columnName: 'One', columnType: 'TEXT' }, { columnIndex: 1, columnName: 'Other', columnType: 'TEXT' }]);
   assert.ok(bad.errors.some(e => /missing required column "Two"/.test(e)));
 });

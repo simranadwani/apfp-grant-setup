@@ -231,7 +231,7 @@ function extendTableToSheetEnd_(sheetName, tableName) {
 }
 // Column positions of any sheet, found from its header row (first match wins, so repeated headers such as
 // "Upload Folder" are harmless). col(name) throws a clear error only for a column the caller actually uses.
-// Compares a live header row with the REQUIRED header names: order and extra columns are allowed (extras are only reported).
+// Compares a live header row with the REQUIRED header names: order and extra columns are allowed.
 function headerGaps_(actualRow, requiredHeaders) {
  const actual = (actualRow || []).map(clean_).filter(Boolean), actualKeys = new Set(actual.map(key_)),
    requiredKeys = new Set(requiredHeaders.map(key_).concat([APFP.DISBURSEMENT_STATUS.PUSH_COLUMN, APFP.DISBURSEMENT_STATUS.SYNC_COLUMN].map(key_)));
@@ -286,8 +286,6 @@ function checkAdminTables_(errors, warnings, specs) {
          (range.endRowIndex || 0) < (spec.MIN_ROWS || 500))
        errors.push(`${spec.TABLE_NAME} range does not match the expected ${spec.SHEET_NAME} table structure.`);
      const columns = table.columnProperties || [], expectedColumns = tableColumnProperties_(spec), requiredNames = new Set(spec.COLUMNS.map(c => key_(c.NAME)).concat([APFP.DISBURSEMENT_STATUS.PUSH_COLUMN, APFP.DISBURSEMENT_STATUS.SYNC_COLUMN].map(key_)));
-     const extra = columns.map(c => clean_(c.columnName)).filter(name => name && !requiredNames.has(key_(name)));
-     if (extra.length && warnings) warnings.push(`${spec.TABLE_NAME} has extra column(s) the code leaves alone: ${extra.join(', ')}.`);
      spec.COLUMNS.forEach((expected, index) => {
        const actual = columns.find(c => key_(c.columnName) === key_(expected.NAME));
        if (!actual) { errors.push(`${spec.TABLE_NAME} is missing required column "${expected.NAME}".`); return; }

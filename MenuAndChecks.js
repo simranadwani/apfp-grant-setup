@@ -113,13 +113,12 @@ function completedIntakeProtection_(protection, rowNumber) {
     return false;
   }
 }
-// Required headers must exist by name; their order and extra columns are allowed (extras are reported as warnings).
+// Required headers must exist by name; their order and extra columns are allowed (extras are not reported).
 function checkHeaders_(errors, sheetName, headerRow, expected, warnings) {
   const s = ss_().getSheetByName(sheetName);
   if (!s) { errors.push(`Missing sheet: ${sheetName}`); return; }
   const gaps = headerGaps_(s.getRange(headerRow, 1, 1, s.getLastColumn()).getDisplayValues()[0], expected);
   if (gaps.missing.length) errors.push(`${sheetName} is missing required header(s): ${gaps.missing.join(', ')}.`);
-  if (gaps.extra.length && warnings) warnings.push(`${sheetName} has extra column(s) the code leaves alone: ${gaps.extra.join(', ')}.`);
 }
 function preflightCentralHeaderSpecs_() {
   const rows = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS;

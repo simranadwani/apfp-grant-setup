@@ -48,7 +48,7 @@ Rows are `Setting | Value | … | Active` (the script reads columns A, B and F; 
 Two script-controlled columns at the end of `6. Committed & Spent Tracker` (nobody types in them): **Push Status** — blank → *Pushed* / *Failed: reason* / *Not applicable* (Discretionary) / *Changed – push again* (an edit to date, amount, status or grant after a push). **Document Sync Status** — *Waiting for push* → *Awaiting documents* → *Partial (1 of 2 links)* → *Synced*. Push and Sync only visit rows that are not finished; a grant with nothing to do is not opened. Without the columns the code works as before.
 
 ## 6. Changing things without touching code
-* **Add a column to a central sheet or Table:** add it anywhere; the code finds columns by header name and never overwrites columns it does not know. Preflight shows an "extra column" warning only.
+* **Add a column to a central sheet or Table:** add it anywhere; the code finds columns by header name and never overwrites columns it does not know. Preflight ignores extra columns.
 * **Add a value to a label dropdown:** edit the dropdown in the sheet. No code change and no other step.
 * **Change the time zone:** edit `TIME_ZONE` (System - Configuration).
 * **Not configurable on purpose** (logic depends on the exact words): Grant Type, Grant Status, Action, Setup Review Status, Organisation Type, quarter labels, Yes/No.

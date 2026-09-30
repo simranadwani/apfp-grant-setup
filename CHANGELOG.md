@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round K — extra columns are not warned about
+
+**Date:** 2026-09-30 · **TEST only** · `MenuAndChecks.js` `checkHeaders_` and `Utilities.js` `checkAdminTables_` no longer report "extra column(s) the code leaves alone" (adding a column such as Support Provided is normal). Missing required columns still fail. Tests and docs updated.
+
 ## Round J — dropdown lists are edited directly in the sheet
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**

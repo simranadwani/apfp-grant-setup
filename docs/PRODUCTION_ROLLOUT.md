@@ -35,7 +35,7 @@ Also delete the `DATA_SYNC_SCHEMA_VERSION` row (and any V14.1 / V15.0 descriptio
 2. **Tracker status columns:** in `6. Committed & Spent Tracker` add two columns at the far right (inside the Table): `Push Status` and `Document Sync Status`. Nobody types in them. (Optional: warning-only protection and grey shading.)
 3. **System - Configuration:** add rows (Active = Yes) `PROTECTION_EDITORS` = `team@goalkeep.net, <Anagha's email>`; check `CENTRAL_ADMIN_FOLDER_ID` is the production Admin folder id.
 4. Optional, by hand: delete the settings rows the code never reads (`WORKSPACE_FOLDER_PATTERN`, `ORGANISATION_ID_PATTERN`, `GRANT_ID_PATTERN`, `SHARING_METHOD`, `TECHNICAL_REGISTRY_SHEET`, `DATA_SYNC_SCHEMA_VERSION`, `OUTCOME_PROGRESS_SCHEMA_VERSION`, `SUPPORT_CATEGORY_OPTIONS`, `SUPPORT_STATUS_OPTIONS`). Also delete any `LIST_…`, `FIRST_FY` or `FY_YEARS_AHEAD` rows if you added them; nothing reads them any more. `TIME_ZONE` is only needed to override the default.
-5. Run **`runPreflightChecks`** → expect **PASS**. Warnings are fine (extra columns; settings the code does not read, which you can delete). Any FAIL: stop and send me the text.
+5. Run **`runPreflightChecks`** → expect **PASS**. Warnings are fine (settings the code does not read, which you can delete; email disabled). Any FAIL: stop and send me the text.
 6. Run the **Backup** button once (`uiBackupCentralAdministration`) and confirm a copy appears in `Backups`.
 
 ## 5. Smoke test on production (use YOUR OWN email as the grantee email)
