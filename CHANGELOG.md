@@ -4,6 +4,19 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Speed step 3 — table headroom, cheaper maturity rows, no repeat pre-share verification
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**
+
+- **Measured:** Grant Registry write ~6 s per grant, Share folder 21.9 s for a full grant, Technical Registry saves ~1 s each.
+- **Table headroom** (`Utilities.js` `appendObject_`, `RegistryAndIDs.js`): when a registry Table (Grant Registry, Maturity, …) is full it now grows by the rows needed **plus 100**, so the slow Table-extension call happens rarely
+  instead of on nearly every new grant.
+- **Maturity rows** (`RegistryAndIDs.js`): existing indicator rows are rewritten only when a value actually differs (was 11 read+write calls on every save).
+- **Share folder** (`ProtectionIntegrity.js`): the "before sharing" check no longer repeats the links / protections / time-zone verification of a workbook that the **same run** just finalised and verified
+  (tracked per run only, never across runs). The grantee-access check still runs, and the "after sharing" check always does the full verification, so the fail-closed gate is unchanged.
+- **Finer timers** for the Grant Registry save (row / organisation entry / maturity rows); the alert now lists the 12 slowest steps.
+- Tests: table headroom, per-run verification skip (and that the after-sharing check never skips). 94 tests pass.
+
 ## Buttons never write an Action; statuses for Transactional / Discretionary; faster protection editors
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **TEST only**

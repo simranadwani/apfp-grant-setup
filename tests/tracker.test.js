@@ -78,3 +78,23 @@ test('upsertTrackerRowsByKey_ does not grow the table while there is room', () =
   project.get('upsertTrackerRowsByKey_')(trackerSheet([]), 4, [['G1', 'O1', 'x', '']], [0, 1], true);
   assert.deepEqual(grown, []);
 });
+
+test('appendObject_ grows a full admin table with headroom, so the slow Table extension is rare', () => {
+  const project = loadProject();
+  const extended = [];
+  let inserted = 0, maxRows = 5;
+  const range = { getDisplayValues: () => [['Grant ID', 'Note']], setValues() { return range; }, setFontFamily() { return range; } };
+  const sheet = {
+    getLastColumn: () => 2, getLastRow: () => 5, getMaxRows: () => maxRows,
+    getRange: () => range, getName: () => 'x',
+    insertRowsAfter: (_after, n) => { inserted = n; maxRows += n; }
+  };
+  project.override('sheet_', () => sheet);
+  project.override('isAdminTableSheet_', () => true);
+  project.override('extendAdminTableRows_', name => extended.push(name));
+  project.override('setByHeaders_', () => true);
+  const row = project.get('appendObject_')('9. Grant Registry', 1, { 'Grant ID': 'G1' });
+  assert.equal(row, 6);
+  assert.equal(inserted, 1 + 100, 'one row needed plus 100 rows of headroom');
+  assert.deepEqual(extended, ['9. Grant Registry']);
+});

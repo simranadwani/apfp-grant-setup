@@ -104,3 +104,42 @@ test('the owner/actor lookup happens once per workbook, not once per protection'
   for (let i = 0; i < 13; i++) p.get('hardenProtectionEditors_')(fakeProtection(['owner@example.org', 'tester@example.org']), wb);
   assert.equal(lookups, 1);
 });
+
+function shareAssertSetup() {
+  const calls = [];
+  const p = loadProject();
+  const wb = id => ({ getId: () => id });
+  const books = { setup: wb('setup'), outcome: wb('outcome') };
+  p.override('techByRequest_', () => ({ record: { 'Grant Type': 'Restricted', 'Setup Workbook URL': 'https://x/d/setup/edit',
+    'Outcome Progress Workbook URL': 'https://x/d/outcome/edit', 'Primary Contact Email': 'g@x.org' } }));
+  p.override('urlId_', url => (url.includes('/setup/') ? 'setup' : 'outcome'));
+  p.override('openSpreadsheetCached_', id => books[id]);
+  p.override('templateFieldConfigRows_', () => []);
+  ['verifyGeneratedLinks_', 'verifyTemplateProtections_', 'verifyOutcomeWorkbookLinks_', 'verifyOutcomeWorkbookProtections_', 'verifySpreadsheetTimeZone_', 'verifyGranteeProtectionAccess_']
+    .forEach(name => p.override(name, () => calls.push(name)));
+  p.override('setupWorkbookProtectionSpecs_', () => []);
+  p.override('outcomeWorkbookProtectionSpecs_', () => []);
+  return { p, calls, books };
+}
+
+test('pre-share check repeats the full verification unless this same run just verified the workbooks', () => {
+  const fresh = shareAssertSetup();
+  fresh.p.get('assertWorkspaceFilesSafeToShare_')('REQ1', {});
+  assert.equal(fresh.calls.filter(c => c === 'verifyTemplateProtections_').length, 1);
+  assert.equal(fresh.calls.filter(c => c === 'verifyOutcomeWorkbookProtections_').length, 1);
+
+  const warm = shareAssertSetup();
+  warm.p.get('markVerifiedThisRun_')(warm.books.setup);
+  warm.p.get('markVerifiedThisRun_')(warm.books.outcome);
+  warm.p.get('assertWorkspaceFilesSafeToShare_')('REQ1', {});
+  assert.deepEqual(warm.calls, ['verifyGranteeProtectionAccess_', 'verifyGranteeProtectionAccess_'], 'grantee-access check still runs');
+});
+
+test('the after-sharing check (email given) always does the full verification, even in the same run', () => {
+  const warm = shareAssertSetup();
+  warm.p.get('markVerifiedThisRun_')(warm.books.setup);
+  warm.p.get('markVerifiedThisRun_')(warm.books.outcome);
+  warm.p.get('assertWorkspaceFilesSafeToShare_')('REQ1', {}, 'g@x.org');
+  assert.equal(warm.calls.filter(c => c === 'verifyTemplateProtections_').length, 1);
+  assert.equal(warm.calls.filter(c => c === 'verifySpreadsheetTimeZone_').length, 2);
+});

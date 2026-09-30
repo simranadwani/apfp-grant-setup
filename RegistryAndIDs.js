@@ -354,11 +354,11 @@ function upsertGrantShellUntimed_(grantId, organisationId, request, setupUrl, ou
      'Setup Created At': registryOnly ? ((existing && existing.record['Setup Created At']) || '') : ((existing && existing.record['Setup Created At']) || timestamp),
      'Primary Contact Email': request.granteeEmail, 'Last Updated At': timestamp, 'Record Status': APFP.ACTIVE
    };
- const rowNumber = existing
+ const rowNumber = timed_('Grant Registry: write row', () => existing
    ? (setByHeaders_(APFP.SHEETS.GRANTS, 1, existing.rowNumber, patch), existing.rowNumber)
-   : appendObject_(APFP.SHEETS.GRANTS, 1, patch);
- refreshOrganisationRegistryEntry_(organisationId, request.organisationName);
- ensureOrganisationMaturityRowsForGrant_(grantId);
+   : appendObject_(APFP.SHEETS.GRANTS, 1, patch));
+ timed_('Grant Registry: organisation entry', () => refreshOrganisationRegistryEntry_(organisationId, request.organisationName));
+ timed_('Grant Registry: maturity rows', () => ensureOrganisationMaturityRowsForGrant_(grantId));
  return rowNumber;
 }
 function maturityCatalogue_() {
@@ -424,14 +424,14 @@ function ensureOrganisationMaturityRowsForGrant_(grantId) {
  catalogue.forEach(item => {
    const found = existing[key_(item.indicator)],
      patch = Object.assign({}, base, { 'Aspect': item.aspect, 'Indicator': item.indicator });
-   if (found) setByHeaders_(APFP.SHEETS.MATURITY, headerRow, found.rowNumber, patch);
+   if (found) { if (patchDiffersFromRecord_(found.record, patch)) setByHeaders_(APFP.SHEETS.MATURITY, headerRow, found.rowNumber, patch); }
    else missing.push(patch);
  });
  if (!missing.length) return 0;
  const startRow = Math.max(APFP.MATURITY.START_ROW, sheet.getLastRow() + 1),
    requiredLastRow = startRow + missing.length - 1;
  if (requiredLastRow > sheet.getMaxRows()) {
-   sheet.insertRowsAfter(sheet.getMaxRows(), requiredLastRow - sheet.getMaxRows());
+   sheet.insertRowsAfter(sheet.getMaxRows(), requiredLastRow - sheet.getMaxRows() + ADMIN_TABLE_GROWTH_ROWS_);
    extendAdminTableRows_(APFP.SHEETS.MATURITY);
  }
  const output = missing.map(record => headers.map(header =>

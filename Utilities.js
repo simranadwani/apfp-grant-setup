@@ -347,11 +347,13 @@ function setByHeaders_(sheetName, headerRow, rowNumber, patch) {
  if (changed) invalidateDataCachesForSheet_(sheetName, rowNumber, patch, false);
  return changed;
 }
+const ADMIN_TABLE_GROWTH_ROWS_ = 100;
 function appendObject_(sheetName, headerRow, object) {
  const sheet = sheet_(sheetName), headers = sheet.getRange(headerRow, 1, 1, sheet.getLastColumn()).getDisplayValues()[0],
    target = Math.max(headerRow + 1, sheet.getLastRow() + 1);
  if (target > sheet.getMaxRows()) {
-   sheet.insertRowsAfter(sheet.getMaxRows(), Math.max(1, target - sheet.getMaxRows()));
+   // Grow with headroom: extending a native Table is a slow API call, so do it rarely, not on every new row.
+   sheet.insertRowsAfter(sheet.getMaxRows(), Math.max(1, target - sheet.getMaxRows()) + ADMIN_TABLE_GROWTH_ROWS_);
    if (isAdminTableSheet_(sheetName)) extendAdminTableRows_(sheetName);
  }
  if (isAdminTableSheet_(sheetName)) {

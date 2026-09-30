@@ -322,6 +322,10 @@ function verifyTransactionalWorkbookProtections_(spreadsheet) {
   );
 }
 
+// Workbooks whose structure, links, protections and time zone were verified earlier in THIS execution (never across runs).
+const VERIFIED_THIS_RUN_ = {};
+function markVerifiedThisRun_(spreadsheet) { VERIFIED_THIS_RUN_[spreadsheet.getId()] = true; }
+function verifiedThisRun_(spreadsheet) { return VERIFIED_THIS_RUN_[spreadsheet.getId()] === true; }
 function finaliseSetupWorkbookIntegrity_(spreadsheet, fieldConfig) {
   const specs = setupWorkbookProtectionSpecs_(fieldConfig);
   timed_('Setup: remove admin sheets and set time zone', () => {
@@ -333,6 +337,7 @@ function finaliseSetupWorkbookIntegrity_(spreadsheet, fieldConfig) {
   timed_('Setup: verify links', () => verifyGeneratedLinks_(spreadsheet));
   timed_('Setup: verify protections', () => verifyWorkbookProtectionSpecs_(spreadsheet, specs));
   verifySpreadsheetTimeZone_(spreadsheet, 'Generated Grant Setup workbook');
+  markVerifiedThisRun_(spreadsheet);
   return true;
 }
 
@@ -346,6 +351,7 @@ function finaliseOutcomeWorkbookIntegrity_(spreadsheet) {
     verifyOutcomeWorkbookProtections_(spreadsheet);
   });
   verifySpreadsheetTimeZone_(spreadsheet, 'Generated Outcome Progress workbook');
+  markVerifiedThisRun_(spreadsheet);
   return true;
 }
 
@@ -421,17 +427,25 @@ function assertWorkspaceFilesSafeToShare_(requestId, config, emailOverride) {
   }
 
   const fieldConfig = templateFieldConfigRows_(clean_(effectiveConfig.SETUP_TEMPLATE_ID));
+  // The "after sharing" call (emailOverride given) always does the full check. The "before sharing" call skips only the
+  // structure/links/time-zone re-check for a workbook that this same run has just finalised and verified.
   const setup = openSpreadsheetCached_(urlId_(setupUrl));
-  verifyGeneratedLinks_(setup);
-  verifyTemplateProtections_(setup, fieldConfig);
+  const recentlyVerifiedSetup = !emailOverride && verifiedThisRun_(setup);
+  if (!recentlyVerifiedSetup) {
+    verifyGeneratedLinks_(setup);
+    verifyTemplateProtections_(setup, fieldConfig);
+  }
   verifyGranteeProtectionAccess_(setup, setupWorkbookProtectionSpecs_(fieldConfig), clean_(emailOverride || record['Primary Contact Email']));
-  verifySpreadsheetTimeZone_(setup, 'Grant Setup workbook');
+  if (!recentlyVerifiedSetup) verifySpreadsheetTimeZone_(setup, 'Grant Setup workbook');
 
   const outcome = openSpreadsheetCached_(urlId_(outcomeUrl));
-  verifyOutcomeWorkbookLinks_(outcome);
-  verifyOutcomeWorkbookProtections_(outcome);
+  const recentlyVerifiedOutcome = !emailOverride && verifiedThisRun_(outcome);
+  if (!recentlyVerifiedOutcome) {
+    verifyOutcomeWorkbookLinks_(outcome);
+    verifyOutcomeWorkbookProtections_(outcome);
+  }
   verifyGranteeProtectionAccess_(outcome, outcomeWorkbookProtectionSpecs_(), clean_(emailOverride || record['Primary Contact Email']));
-  verifySpreadsheetTimeZone_(outcome, 'Outcome Progress workbook');
+  if (!recentlyVerifiedOutcome) verifySpreadsheetTimeZone_(outcome, 'Outcome Progress workbook');
   return true;
 }
 

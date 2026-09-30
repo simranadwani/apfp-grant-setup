@@ -127,7 +127,7 @@ function processRequestedActions() {
  } finally {
    lock.releaseLock();
  }
- const note = ` Rows picked up: ${batch.slice(0, processed).map(row => row.rowNumber).join(', ')}. ${slowestStepsSummary_(8)}` + (stoppedForRuntime
+ const note = ` Rows picked up: ${batch.slice(0, processed).map(row => row.rowNumber).join(', ')}. ${slowestStepsSummary_(12)}` + (stoppedForRuntime
    ? ' The run stopped safely before the Apps Script time limit; remaining rows were left untouched. Run the workspace action again to continue.' : '');
  recordAutomationStatus_('Workspace Creation', needsAttention || stoppedForRuntime ? 'Needs attention' : 'Success',
    `${processed} processed; ${success} completed; ${needsAttention} need attention${stoppedForRuntime ? '; safely paused' : ''}`);
