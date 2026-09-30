@@ -172,19 +172,6 @@ function uiRefreshDisbursementOptions() {
   showToast_(`Organisation dropdowns refreshed for ${count} disbursement rows.`);
   return count;
 }
-function uiPushDisbursements() {
-  completeDisbursementRows_();
-  const count = syncDisbursementsToGranteeWorkbooks_();
-  recordAutomationStatus_('Disbursement Push', 'Success', `${count} rows pushed`);
-  showToast_(`${count} disbursement rows pushed to grantee workbooks.`);
-  return count;
-}
-function uiSyncDisbursements() {
-  const links = syncGranteeDisbursementLinksToCentral_();
-  recordAutomationStatus_('Disbursement Sync', 'Success', `${links} links synced`);
-  showToast_(`${links} grantee document links synced.`);
-  return links;
-}
 function uiCorrectWorkspaceDetails() {
   const selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW);
   const result = correctWorkspaceDetailsForRow_(selected.rowNumber);
@@ -192,4 +179,39 @@ function uiCorrectWorkspaceDetails() {
     `Workspace details corrected for ${result.grantId}. No IDs, folders, sharing permissions or historical rows were changed.`
   );
   return result;
+}
+function uiPushDisbursements() {
+  completeDisbursementRows_();
+  const result = pushDisbursements_();
+  const summary = `${result.changedRows} disbursement row(s) updated in ${result.pushedGrants} grantee workbook(s).`;
+  recordAutomationStatus_('Disbursement Push', result.failures.length ? 'Needs attention' : 'Success', summary);
+  showToast_(summary);
+  const notes = [];
+  if (result.stoppedEarly) notes.push('Paused before the time limit. Click Push Disbursements again to continue.');
+  if (result.failures.length) notes.push(failureSummary_(result.failures) + '\nSee the Push Status column for each row.');
+  if (notes.length) notifyAdmin_(`${summary}\n\n${notes.join('\n')}`);
+  return result.changedRows;
+}
+function runDisbursementLinkSync_(options) {
+  const result = syncDisbursementLinks_(options);
+  const summary = `${result.linkRows} document link(s) synced from ${result.checkedGrants} grantee workbook(s).`;
+  recordAutomationStatus_('Disbursement Sync', result.failures.length ? 'Needs attention' : 'Success', summary);
+  showToast_(summary);
+  const notes = [];
+  if (result.stoppedEarly) notes.push('Paused before the time limit. Click Sync Disbursement Links again to continue.');
+  if (result.failures.length) notes.push(failureSummary_(result.failures) + '\nSee the Document Sync Status column for each row.');
+  if (notes.length) notifyAdmin_(`${summary}\n\n${notes.join('\n')}`);
+  return result.linkRows;
+}
+function uiSyncDisbursements() { return runDisbursementLinkSync_(); }
+// Re-checks rows already marked Synced (a grantee may have replaced a link later).
+function uiSyncDisbursementsFullCheck() { return runDisbursementLinkSync_({ full: true }); }
+// Redo: blanks Push Status and Document Sync Status for the selected rows.
+function uiResetDisbursementStatuses() {
+  const sheet = disbTracker_(), range = sheet.getActiveRange();
+  if (ss_().getActiveSheet().getName() !== sheet.getName() || !range)
+    throw new Error('Select the rows to reset in 6. Committed & Spent Tracker, then run this action again.');
+  const count = clearDisbursementStatuses_(sheet, disbHeaderMap_(sheet), range.getRow(), range.getLastRow());
+  showToast_(`${count} row(s) will be pushed and synced again.`);
+  return count;
 }

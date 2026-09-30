@@ -4,6 +4,42 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Phase 3a — Push Status / Document Sync Status (requirement R1)
+
+**Date:** 2026-09-30 · **Affects Apps Script runtime:** yes · **Works with or without the new columns**
+
+### Added
+- **`DisbursementSync.js`** (new): the disbursement push and link-sync logic, moved out of `ReportingSupportDecisions.js` and rebuilt around two optional,
+  script-controlled columns at the end of `6. Committed & Spent Tracker`:
+  - `Push Status`: *(blank)* → `Pushed` / `Failed: <reason>` / `Not applicable` (Discretionary) / `Changed – push again`.
+  - `Document Sync Status`: `Waiting for push` → `Awaiting documents` → `Partial (1 of 2 links)` → `Synced` (or `Failed: <reason>` / `Not applicable`).
+  Operators never type in them. Names and values are in `Config.js` (`APFP.DISBURSEMENT_STATUS`).
+- Push visits only Disbursed rows that are not yet Pushed; Sync visits only pushed rows that are not yet Synced. **A grant with nothing left to do is not opened.**
+- Editing Actual Date / Actual Amount / Status / Grant ID on a Pushed row sets it to `Changed – push again` (`markEditedDisbursementsForRepush_`, called from the
+  existing edit handler), so a correction is never skipped.
+- **Each grant is processed independently**: a broken workbook is reported on its own rows and never stops the others; a run pauses cleanly before the
+  6-minute limit ("click again to continue"). Failures are shown in a message and in the row's status text.
+- New public functions (buttons optional): `uiSyncDisbursementsFullCheck` (re-verifies rows already Synced) and `uiResetDisbursementStatuses` (blanks both
+  statuses for the selected rows so they are redone).
+- `disbHeaderMap_` now reads the whole header row (previously only the first 16 columns) so extra trailing columns are visible to the edit handler.
+
+### Without the columns
+Exactly the previous behaviour: every row is checked on every run (`syncDisbursementsToGranteeWorkbooks_` / `syncGranteeDisbursementLinksToCentral_` keep their names and
+return values; Refresh Reporting still uses them). Failures now throw one summary message after all grants were tried, instead of stopping at the first.
+
+### Tests
+`tests/disbursement-status.test.js` (10 tests): second run opens nothing, only grants with pending rows are opened, failure isolation, time-guard pause and resume,
+Not applicable, Waiting/Partial/Synced flow and full check, missing-in-workbook flag, re-push marking, reset, and the no-columns path. `npm test` → **52 passing**.
+
+### Deploy / verify (TEST copy)
+```bash
+git pull origin claude/gifted-allen-0a626q
+clasp push
+```
+In the TEST sheet, add two columns at the END of the header row (row 2) of `6. Committed & Spent Tracker`, spelled exactly `Push Status` and `Document Sync Status`.
+Then with your existing "Zz Test Org" disbursement: Push (row → Pushed, sync → Awaiting documents), Sync Disbursement Links (→ Synced), then Push and Sync again
+(both should report 0 and finish instantly), change the Actual Amount (→ Changed – push again), Push (→ Pushed, amount updated, links kept).
+
 ## Notes — requirements and decisions recorded (no code change)
 
 **Date:** 2026-09-30 · **Affects Apps Script runtime:** no

@@ -20,7 +20,7 @@ Read this first when picking the project up again. Keep it current. Every code c
 
 ## 2. Status
 Done and verified on TEST: test harness (Phase 0), TEST copy + push safety (0b), V15 cleanup / dead code (1),
-Upload Folder layout fixes for disbursement push, link sync and outcome summary (2b). 42 tests passing.
+Upload Folder layout fixes for disbursement push, link sync and outcome summary (2b). 52 tests passing. R1 built (Phase 3a, `DisbursementSync.js`): waiting for the two columns to be added in TEST and tested.
 Next: R1/R2 below, then column-tolerant reading everywhere (plan Phase 2), config-driven lists (Phase 3), hardening (Phase 5).
 
 ## 3. Owner decisions (do not re-litigate without asking)

@@ -41,12 +41,6 @@ function disbTracker_() {
  if (!sheet) throw new Error(`Missing sheet: ${APFP.SHEETS.DISBURSEMENTS}`);
  return sheet;
 }
-function disbHeaderMap_(sheet) {
- const headers = sheet.getRange(disbHeaderRow_(), 1, 1, APFP.DISBURSEMENT_HEADERS.length).getDisplayValues()[0];
- const map = {};
- headers.forEach((header, i) => { if (clean_(header)) map[key_(header)] = i; });
- return map;
-}
 function disbColumn_(map, header) {
  const index = map[key_(header)];
  if (index == null) throw new Error(`Missing required Disbursement Tracker column: ${header}`);
@@ -73,4 +67,12 @@ function granteeDisbursementTable_(workbook, grantId) {
      return positions[key_(name)];
    }
  };
+}
+
+function disbHeaderMap_(sheet) {
+ const width = Math.max(APFP.DISBURSEMENT_HEADERS.length, sheet.getLastColumn());
+ const headers = sheet.getRange(disbHeaderRow_(), 1, 1, width).getDisplayValues()[0];
+ const map = {};
+ headers.forEach((header, i) => { if (clean_(header)) map[key_(header)] = i; });
+ return map;
 }

@@ -155,6 +155,7 @@ function handleDisbursementTrackerEdit_(e) {
    const column = disbColumn_(map, header);
    return column >= e.range.getColumn() && column <= e.range.getLastColumn();
  }));
+ markEditedDisbursementsForRepush_(sheet, map, e.range);
  if (!edited.size) return;
  if (edited.has('Financial Year')) {
    for (let rowNumber = Math.max(disbFirstDataRow_(), e.range.getRow()); rowNumber <= e.range.getLastRow(); rowNumber++)

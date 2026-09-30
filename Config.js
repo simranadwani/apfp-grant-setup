@@ -43,6 +43,13 @@ const APFP = Object.freeze({
  GRANT_STATUSES: ['Active', 'Discontinued', 'Complete'],
  DISBURSEMENT_TRACKER_SHEET: '6. Committed & Spent Tracker',
  DISBURSEMENT_STATUSES: ['Committed', 'Disbursed', 'Discontinued'],
+ // Optional trailing columns of the Committed & Spent Tracker. They are written only by the script (never typed by
+ // operators). Without them, push and sync check every row each time.
+ DISBURSEMENT_STATUS: {
+   PUSH_COLUMN: 'Push Status', SYNC_COLUMN: 'Document Sync Status',
+   PUSHED: 'Pushed', CHANGED: 'Changed – push again', FAILED: 'Failed', NOT_APPLICABLE: 'Not applicable',
+   WAITING: 'Waiting for push', AWAITING: 'Awaiting documents', PARTIAL: 'Partial (1 of 2 links)', SYNCED: 'Synced'
+ },
  DISBURSEMENT_HEADERS: [
    'Disbursement ID', 'Financial Year', 'Quarter', 'Organisation Name',
    'Grant Title', 'Planned Date', 'Planned Amount', 'Notes', 'Status',

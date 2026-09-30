@@ -13,7 +13,9 @@ const PUBLIC_ENTRY_POINTS = [
   'uiRefreshDecisionDocuments', 'uiRefreshDecisions', 'uiRefreshDisbursementOptions',
   'uiRefreshOutcomeProgress', 'uiRefreshSupport', 'uiReopenSetupForChanges', 'uiReshareWorkspace',
   'uiRetryOrReshareWorkspace', 'uiRetryWorkspace', 'uiSyncDisbursements', 'updateApprovedSetupData',
-  'validateDisbursementTracker'
+  'validateDisbursementTracker',
+  // added with the status columns (buttons optional):
+  'uiSyncDisbursementsFullCheck', 'uiResetDisbursementStatuses'
 ];
 
 test('all project files load together without redeclaration or syntax errors', () => {
