@@ -90,3 +90,35 @@ test('editing a grant date on a completed row is no longer reverted, but the org
   assert.equal(restored[0]['Organisation Name'], 'Org');
   assert.equal('Grant Start Date' in restored[0], false);
 });
+
+function withTargets(targets, row) {
+  const r = setup(row || Object.assign({}, base));
+  r.p.override('correctedWorkspaceWorkbookTargets_', () => targets);
+  return r;
+}
+const target = (label, current, onSet) => ({ label, range: { getDisplayValue: () => current, setValue: v => onSet(v) } });
+
+test('a correction that leaves the title unchanged writes nothing into the grantee workbooks', () => {
+  const written = [];
+  const { p } = withTargets([target('Setup workbook', 'T', v => written.push(v)), target('Outcome workbook', 'T', v => written.push(v))]);
+  const result = p.get('correctWorkspaceDetailsForRow_')(7);
+  assert.deepEqual(written, []);
+  assert.equal(result.warning, '');
+});
+
+test('a changed title is written to both workbooks, last', () => {
+  const written = [];
+  const { p } = withTargets([target('Setup workbook', 'Old', v => written.push(['S', v])), target('Outcome workbook', 'Old', v => written.push(['O', v]))],
+    Object.assign({}, base, { 'Grant Title': 'New' }));
+  p.get('correctWorkspaceDetailsForRow_')(7);
+  assert.deepEqual(written, [['S', 'New'], ['O', 'New']]);
+});
+
+test('a protected workbook cell becomes a warning and the registries and row stay corrected', () => {
+  const { p, calls } = withTargets([target('Setup workbook', 'Old', () => { throw new Error('You are trying to edit a protected cell or object.'); })],
+    Object.assign({}, base, { 'Grant Title': 'New', 'Grant End Date': d(2027, 2, 28) }));
+  const result = p.get('correctWorkspaceDetailsForRow_')(7);
+  assert.match(result.warning, /Grant Title in the Setup workbook could not be updated because the cell is protected/);
+  assert.equal(calls.tech[0]['Grant End Date'].getTime(), d(2027, 2, 28).getTime());
+  assert.equal(calls.intake.length, 1);
+});

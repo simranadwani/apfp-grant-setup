@@ -208,6 +208,7 @@ function uiCorrectWorkspaceDetails() {
   const selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW);
   const result = correctWorkspaceDetailsForRow_(selected.rowNumber);
   showToast_(`Workspace details corrected for ${result.grantId}.`);
+  if (result.warning) SpreadsheetApp.getUi().alert(`Corrected, with one follow-up:\n\n${result.warning}`);
   return result;
 }
 function uiPushDisbursements() {

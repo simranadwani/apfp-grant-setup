@@ -261,7 +261,7 @@ function correctedWorkspaceWorkbookTargets_(techRecord) {
     const setupSheet = setup.getSheetByName(clean_(titleField['Sheet Name']));
     if (!setupSheet)
       throw new Error(`Generated Setup workbook is missing ${titleField['Sheet Name']}.`);
-    targets.push(setupSheet.getRange(configValueRange_(titleField)));
+    targets.push({ label: 'Setup workbook', range: setupSheet.getRange(configValueRange_(titleField)) });
   }
 
   const outcomeId = clean_(techRecord['Outcome Progress Workbook URL'])
@@ -270,7 +270,7 @@ function correctedWorkspaceWorkbookTargets_(techRecord) {
     const outcome = openSpreadsheetCached_(outcomeId);
     const outcomeSheet = outcome.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.OUTCOMES);
     if (!outcomeSheet) throw new Error('Generated Outcome workbook is missing Outcome Progress.');
-    targets.push(outcomeSheet.getRange(APFP.PREFLIGHT_SCHEMA.OUTCOME_TEMPLATE.GRANT_TITLE_CELL));
+    targets.push({ label: 'Outcome workbook', range: outcomeSheet.getRange(APFP.PREFLIGHT_SCHEMA.OUTCOME_TEMPLATE.GRANT_TITLE_CELL) });
   }
   return targets;
 }
@@ -329,7 +329,6 @@ function correctWorkspaceDetailsForRow_(rowNumber) {
     'Last Error Code': '',
     'Last Error Message': ''
   }, datePatch));
-  workbookTargets.forEach(range => range.setValue(projectTitle));
   updateGrantTitleReferences_(grantId, projectTitle);
   ensureOrganisationMaturityRowsForGrant_(grantId);
   setIntake_(rowNumber, {
@@ -344,8 +343,19 @@ function correctWorkspaceDetailsForRow_(rowNumber) {
     'Last Updated': now_()
   });
 
+  // Workbook title cells are written LAST and only when they differ: they are protected, and a dates-only or amount-only
+  // correction must not touch the grantee workbooks. A protected cell becomes a warning, never a half-finished correction.
+  const warnings = [];
+  workbookTargets.forEach(target => {
+    try {
+      if (clean_(target.range.getDisplayValue()) !== projectTitle) target.range.setValue(projectTitle);
+    } catch (error) {
+      warnings.push(`The Grant Title in the ${target.label} could not be updated because the cell is protected (${error.message}). ` +
+        'Ask the workbook owner to update it, or add your account to PROTECTION_EDITORS, then run Correct Workspace Details again.');
+    }
+  });
   SpreadsheetApp.flush();
-  return { grantId: grantId, projectTitle: projectTitle };
+  return { grantId: grantId, projectTitle: projectTitle, warning: warnings.join(' ') };
 }
 
 function upsertGrantShell_(grantId, organisationId, request, setupUrl, outcomeWorkbookUrl) {
