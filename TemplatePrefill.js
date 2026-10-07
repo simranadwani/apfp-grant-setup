@@ -39,7 +39,6 @@ function configureGeneratedWorkbook_(setupSpreadsheet, request, organisationReco
   });
 
   writeGeneratedLinks_(setupSpreadsheet, links);
-  writeSetupUploadFolderLinks_(setupSpreadsheet);
   prefillGeneratedWorkbook_(setupSpreadsheet, request, organisationRecord, fieldConfig);
   SpreadsheetApp.flush();
   finaliseSetupWorkbookIntegrity_(setupSpreadsheet, fieldConfig);
@@ -211,38 +210,6 @@ function writeGeneratedLinks_(spreadsheet, links) {
      return [clean_(url) ? hyperlinkFormula_(label, url) : 'Not configured'];
    });
  target.setValues(values);
-}
-// The Setup template's "Upload Folder" cells test whether the text of a Links cell starts with https://, but the Links cells hold
-// =HYPERLINK(url, label) whose DISPLAYED text is the label, so every cell fell back to plain text with no link. This writes the real
-// =HYPERLINK(url, "Upload Folder") into each such cell. The URL is read from the workbook's own Links sheet, so it works for new and
-// existing workbooks alike. Returns the number of cells written; cells that already hold the right link are left alone.
-function writeSetupUploadFolderLinks_(spreadsheet) {
-  const schema = APFP.PREFLIGHT_SCHEMA.LINKS, linksSheet = spreadsheet.getSheetByName(APFP.TEMPLATE_SHEETS.LINKS);
-  if (!linksSheet) throw new Error('Links sheet is missing from the Setup workbook.');
-  const count = Math.max(0, linksSheet.getLastRow() - schema.HEADER_ROW);
-  if (!count) return 0;
-  const urlByRow = {}, formulas = linksSheet.getRange(schema.DATA_START_ROW, schema.LINK_COLUMN, count, 1).getFormulas().flat(),
-    shown = linksSheet.getRange(schema.DATA_START_ROW, schema.LINK_COLUMN, count, 1).getDisplayValues().flat();
-  formulas.forEach((formula, i) => {
-    const m = /HYPERLINK\(\s*"(https:\/\/[^"]+)"/i.exec(formula || '') || /^(https:\/\/\S+)$/.exec(clean_(shown[i]));
-    if (m) urlByRow[schema.DATA_START_ROW + i] = m[1];
-  });
-  const data = [];
-  spreadsheet.getSheets().forEach(sheet => {
-    if (sheet.getName() === APFP.TEMPLATE_SHEETS.LINKS) return;
-    const range = sheet.getDataRange(), top = range.getRow(), left = range.getColumn(), grid = range.getFormulas();
-    grid.forEach((row, r) => row.forEach((formula, c) => {
-      const m = /Links!\$?B\$?(\d+)/i.exec(formula || '');
-      if (!m || !/Upload Folder/.test(formula) || !urlByRow[Number(m[1])]) return;
-      const wanted = hyperlinkFormula_('Upload Folder', urlByRow[Number(m[1])]);
-      if (formula === wanted) return;
-      data.push({ range: quotedSheetA1_(sheet.getName(), `${columnLetters_(left + c)}${top + r}`), values: [[wanted]] });
-    }));
-  });
-  if (!data.length) return 0;
-  requireAdvancedSheetsService_();
-  Sheets.Spreadsheets.Values.batchUpdate({ valueInputOption: 'USER_ENTERED', data }, spreadsheet.getId());
-  return data.length;
 }
 // Structure, links and protections were just verified by finaliseSetupWorkbookIntegrity_ (nothing has been written since),
 // so this only checks that the sheets exist and that no invisible placeholder is left in a configured value range.
