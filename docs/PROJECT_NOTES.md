@@ -37,7 +37,7 @@ protected ranges of the grantee templates and the export block rows stay layout-
 - Central Administration must not stay link-shared "anyone – editor" (owner will restrict it).
 - **Completed grants:** Outcome / Support / Decision refresh covers **Active grants only**; a Complete/Discontinued grant is frozen at completion.
   Rows are never deleted. Disbursement rows of completed grants stay and still push/sync.
-- **Cleared cells:** central sheets **mirror** the grantee workbook, including blanks (current behaviour, kept). It also corrects Organisation Type (New / Returning): edit the cell on the completed row, then click the button; only the row and the Technical Registry change.
+- **Cleared cells:** central sheets **mirror** the grantee workbook, including blanks (current behaviour, kept). It also corrects the Grant Start / End Dates (start must stay inside the grant's financial year; the Setup workbook's own dates are not changed) and Organisation Type (New / Returning): edit the cell on the completed row, then click the button; only the row and the Technical Registry change.
 - **Title corrections:** "Correct Workspace Details" updates the Grant Title on all rows including old disbursement rows (current behaviour, kept).
 
 ## 4. Requirement R1 — "processed" status columns (disbursements)

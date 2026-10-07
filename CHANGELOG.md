@@ -4,6 +4,11 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round P — Correct Workspace Details also corrects the grant dates
+
+**Date:** 2026-10-07 · `RegistryAndIDs.js` `correctWorkspaceDetailsForRow_`, `ApprovalsAndAccess.js`, `Config.js` (CODE_VERSION round P).
+Grant Start Date and Grant End Date can now be edited on a completed row and applied with Correct Workspace Details. They update the row, the Technical Registry and the Grant Registry, and Grant Start Quarter is recalculated; nothing is written when the dates are unchanged. Rules: both dates valid, end not before start, and the start date must stay inside the grant's financial year (a date in another year is rejected: it needs a new workspace). IDs, folders, sharing and workbooks (including the Setup workbook's own dates) are not touched. Financial Year, Organisation Name, Grant Type and email stay locked. Tests added (141 pass).
+
 ## Round O — organisations never share a folder
 
 `Utilities.js` `organisationFolderFor_`, used by `WorkspaceCreation.js`: when no folder URL is saved yet and the plain-named organisation folder already belongs to a different organisation (its URL is on another organisation's Technical Registry row), the new organisation gets its own folder named `<name> (<Organisation ID>)`; a retry finds that folder again. Folders created by hand or by an aborted run of the same request are still reused. One grant per organisation per financial year (all types) is kept as decided. `CODE_VERSION` → round O. Tests: `tests/org-folders.test.js` (137 pass).

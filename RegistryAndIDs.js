@@ -297,24 +297,38 @@ function correctWorkspaceDetailsForRow_(rowNumber) {
   const organisationType = clean_(row['Organisation Type']);
   if (!['New Organisation', 'Returning Organisation'].includes(organisationType))
     throw new Error('Organisation Type must be New Organisation or Returning Organisation.');
-  const patch = {
+  // Dates: start and end may be corrected, but the start date must stay inside the grant's financial year
+  // (the Grant ID, folders and workbooks are built on it).
+  const startDate = dateValue_(row['Grant Start Date']), endDate = dateValue_(row['Grant End Date']);
+  if (!validDateValue_(startDate)) throw new Error('Grant Start Date is required and must be a valid date.');
+  if (!validDateValue_(endDate)) throw new Error('Grant End Date is required and must be a valid date.');
+  if (endDate < startDate) throw new Error('Grant End Date cannot be before Grant Start Date.');
+  const grantFy = clean_(tech.record['Financial Year'] || grant.record['Financial Year']);
+  if (key_(financialYearFromDate_(startDate)) !== key_(grantFy))
+    throw new Error(`The Grant Start Date must stay inside financial year ${grantFy}. A date in another financial year needs a new workspace.`);
+  const sameDate = (a, b) => { const x = dateValue_(a), y = dateValue_(b); return !!x && !!y && x.getTime() === y.getTime(); };
+  const datesChanged = !sameDate(startDate, tech.record['Grant Start Date']) || !sameDate(endDate, tech.record['Grant End Date']) ||
+    !sameDate(startDate, grant.record['Grant Start Date']) || !sameDate(endDate, grant.record['Grant End Date']);
+  const datePatch = datesChanged
+    ? { 'Grant Start Date': startDate, 'Grant End Date': endDate, 'Grant Start Quarter': grantQuarterFromDate_(startDate) } : {};
+  const patch = Object.assign({
     'Project Title': projectTitle,
     'Thematic Area': clean_(row['Thematic Area']),
     'Thematic Sub-area': clean_(row['Thematic Sub-area']),
     'Proximity to Children / Beneficiary': clean_(row['Proximity to Children / Beneficiary']),
     'Amount Approved': amountApproved,
     'Last Updated At': now_()
-  };
+  }, datePatch);
   const workbookTargets = correctedWorkspaceWorkbookTargets_(tech.record);
 
   setByHeaders_(APFP.SHEETS.GRANTS, 1, grant.rowNumber, patch);
-  saveTech_(requestId, {
+  saveTech_(requestId, Object.assign({
     'Project Title': projectTitle,
     'Amount Approved': amountApproved,
     'Organisation Type': organisationType,
     'Last Error Code': '',
     'Last Error Message': ''
-  });
+  }, datePatch));
   workbookTargets.forEach(range => range.setValue(projectTitle));
   updateGrantTitleReferences_(grantId, projectTitle);
   ensureOrganisationMaturityRowsForGrant_(grantId);
@@ -325,6 +339,8 @@ function correctWorkspaceDetailsForRow_(rowNumber) {
     'Proximity to Children / Beneficiary': patch['Proximity to Children / Beneficiary'],
     'Amount Approved': amountApproved,
     'Organisation Type': organisationType,
+    'Grant Start Date': startDate,
+    'Grant End Date': endDate,
     'Last Updated': now_()
   });
 
