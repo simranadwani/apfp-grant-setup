@@ -101,10 +101,8 @@ function resolveOrganisation_(request, existingTechRecord) {
   if (request.organisationType === 'Returning Organisation') {
     if (matches.length !== 1)
       throw new Error(`Returning Organisation must exactly match one Organisation Registry row. Found ${matches.length}.`);
-    const row = matches[0], patch = {
-      'Organisation Name': request.organisationName,
-      'Record Status': APFP.ACTIVE
-    };
+    // The registered name is kept exactly as it is (a Returning Organisation only has to match it); only the status is refreshed.
+    const row = matches[0], patch = { 'Record Status': APFP.ACTIVE };
     setByHeaders_(APFP.SHEETS.ORGANISATIONS, 1, row.rowNumber, patch);
     return Object.assign({}, row.record, patch);
   }
@@ -118,14 +116,13 @@ function resolveOrganisation_(request, existingTechRecord) {
   appendObject_(APFP.SHEETS.ORGANISATIONS, 1, patch);
   return patch;
 }
-function refreshOrganisationRegistryEntry_(organisationId, organisationName) {
+// An organisation's registered name is never changed by saving a grant or changing a Grant Status (an older grant's stored name
+// must not overwrite it). Only a blank Record Status is filled in.
+function refreshOrganisationRegistryEntry_(organisationId) {
   const existing = organisationById_(organisationId);
   if (!existing) return;
-  const patch = {};
-  if (organisationName && comparable_(existing.record['Organisation Name']) !== comparable_(organisationName))
-    patch['Organisation Name'] = organisationName;
-  if (!clean_(existing.record['Record Status'])) patch['Record Status'] = APFP.ACTIVE;
-  if (Object.keys(patch).length) setByHeaders_(APFP.SHEETS.ORGANISATIONS, 1, existing.rowNumber, patch);
+  if (!clean_(existing.record['Record Status']))
+    setByHeaders_(APFP.SHEETS.ORGANISATIONS, 1, existing.rowNumber, { 'Record Status': APFP.ACTIVE });
 }
 function organisationNameOptions_() {
  return [...new Set(organisationRegistryRows_()
@@ -393,7 +390,7 @@ function upsertGrantShell_(grantId, organisationId, request, setupUrl, outcomeWo
  const rowNumber = existing
    ? (setByHeaders_(APFP.SHEETS.GRANTS, 1, existing.rowNumber, patch), existing.rowNumber)
    : appendObject_(APFP.SHEETS.GRANTS, 1, patch);
- refreshOrganisationRegistryEntry_(organisationId, request.organisationName);
+ refreshOrganisationRegistryEntry_(organisationId);
  ensureOrganisationMaturityRowsForGrant_(grantId);
  return rowNumber;
 }
@@ -531,5 +528,5 @@ function updateGrantStatus_(grantId, status) {
  if (!grant) throw new Error(`Grant ID not found: ${grantId}`);
  if (key_(grant.record['Grant Status']) !== key_(status))
    setByHeaders_(APFP.SHEETS.GRANTS, 1, grant.rowNumber, { 'Grant Status': status, 'Last Updated At': now_() });
- refreshOrganisationRegistryEntry_(grant.record['Organisation ID'], grant.record['Organisation Name']);
+ refreshOrganisationRegistryEntry_(grant.record['Organisation ID']);
 }

@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round U — an organisation's registered name is never overwritten
+
+**Date:** 2026-10-07 · `RegistryAndIDs.js` (`refreshOrganisationRegistryEntry_`, `resolveOrganisation_`, `updateGrantStatus_` call), `Config.js` (round U). Changing a Grant Status, or saving a grant, used to copy that grant's stored organisation name over the Organisation Registry name, so an older grant could revert a renamed organisation; a Returning Organisation match also re-wrote the typed name. The registered name is now kept exactly as it is; only a blank Record Status is filled in. Tests: `tests/org-name-kept.test.js` (162 pass).
+
 ## Round S — no false "Input must fall within specified range" flag on new organisations
 
 **Date:** 2026-10-07 · `RegistryAndIDs.js` `applyWorkspaceOrganisationDropdown_`, `Config.js` (round S). On every sheet open the registry-names rule was re-applied to the whole Organisation Name column (warning only), so a New Organisation (not in the registry yet) showed a red flag. The open handler now applies the rule only to Returning Organisation and untyped rows and clears it on New Organisation rows (same as the per-row edit handler). Test: `tests/org-dropdown.test.js` (159 pass).

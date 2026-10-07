@@ -51,6 +51,7 @@ Two script-controlled columns at the end of `6. Committed & Spent Tracker` (nobo
 * **Add a column to a central sheet or Table:** add it anywhere; the code finds columns by header name and never overwrites columns it does not know. Preflight ignores extra columns.
 * **Add a value to a label dropdown:** edit the dropdown in the sheet. No code change and no other step.
 * **Change the time zone:** edit `TIME_ZONE` (System - Configuration).
+* **Organisation names:** the name in `9. Organisation Registry` is never changed by the automation (not by saving a grant, changing a Grant Status or a Returning Organisation match). Rename an organisation there by hand.
 * **Folder names:** if two organisations reduce to the same folder name, the second folder is named `<name> (<Organisation ID>)`; they never share a folder. One grant per organisation per financial year, whatever the type.
 * **Not configurable on purpose** (logic depends on the exact words): Grant Type, Grant Status, Action, Setup Review Status, Organisation Type, quarter labels, Yes/No.
 * **Still layout-driven (change together with the template):** the protected/editable ranges of the grantee templates (`F5:F14`, …), the export block rows in `System - Tracker Export` (2 / 15 / 58 / 161), and the `System - Configuration` column positions. `tests/api.test.js` freezes the public function names because buttons and triggers are bound to them.
