@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round T — Setup workbook "Upload Folder" links work
+
+**Date:** 2026-10-07 · `TemplatePrefill.js` (`writeSetupUploadFolderLinks_`), `ProtectionIntegrity.js` (repair path), `Config.js` (round T). Cause: each "Upload Folder" cell in the Setup template (A. Org Information, B. Grant & Funding, ...) is `IF(REGEXMATCH(Links!B5,"^https://"),HYPERLINK(Links!B5,"Upload Folder"),"Upload Folder")`, but the generated Links cells are `=HYPERLINK(url, label)` whose displayed text is the label, so the test failed and every cell stayed plain text. Now each such cell is rewritten as `=HYPERLINK(<folder url>,"Upload Folder")`, taking the URL from the workbook's own Links sheet (matched by the Links row the cell refers to); done at creation / Retry Workspace and, for existing workbooks, by Retry/Reshare (Retry Sharing repair). Archived (approved) Setup workbooks are skipped, and a protected cell the running account cannot edit never stops sharing. Outcome workbooks were not affected (their formula reads the URL out of the Links formula). Tests: `tests/setup-upload-links.test.js` (162 pass).
+
 ## Round S — no false "Input must fall within specified range" flag on new organisations
 
 **Date:** 2026-10-07 · `RegistryAndIDs.js` `applyWorkspaceOrganisationDropdown_`, `Config.js` (round S). On every sheet open the registry-names rule was re-applied to the whole Organisation Name column (warning only), so a New Organisation (not in the registry yet) showed a red flag. The open handler now applies the rule only to Returning Organisation and untyped rows and clears it on New Organisation rows (same as the per-row edit handler). Test: `tests/org-dropdown.test.js` (159 pass).

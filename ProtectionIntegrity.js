@@ -469,6 +469,11 @@ function repairWorkspaceFilesBeforeRetrySharing_(requestId, config) {
   const fieldConfig = templateFieldConfigRows_(clean_(effectiveConfig.SETUP_TEMPLATE_ID));
   const setup = openSpreadsheetCached_(urlId_(setupUrl));
   const outcome = openSpreadsheetCached_(urlId_(outcomeUrl));
+  // Existing workbooks created before the Upload Folder fix get their real links here. Approved (archived) Setup workbooks are read-only
+  // history, and a protected cell the running account cannot edit must never stop the sharing repair.
+  if (!clean_(record['Approved Setup Archive URL'])) {
+    try { writeSetupUploadFolderLinks_(setup); } catch (error) { console.warn(`Setup Upload Folder links not repaired: ${error.message}`); }
+  }
   finaliseSetupWorkbookIntegrity_(setup, fieldConfig);
   finaliseOutcomeWorkbookIntegrity_(outcome);
   removeGranteeProtectionAccess_(setup, setupWorkbookProtectionSpecs_(fieldConfig), record['Primary Contact Email']);
