@@ -8,7 +8,7 @@ const { loadProject, plain } = require('./harness');
 const PUBLIC_ENTRY_POINTS = [
   'completeDisbursementRows', 'handleCentralAdminEdit', 'handleCentralAdminOpen', 'handleEdit',
   'processRequestedActions', 'refreshReportingData', 'reopenSelectedSetup', 'runPreflightChecks',
-  'submitRetryReshareGrantFy', 'uiCorrectWorkspaceDetails',
+  'submitRetryReshareGrantFy', 'uiCorrectWorkspaceDetails', 'submitCorrectWorkspaceGrant',
   'uiCreateWorkspace', 'uiLockAndMigrateApprovedSetups', 'uiPushDisbursements', 'uiPushGrantStatus',
   'uiRefreshDecisionDocuments', 'uiRefreshDecisions', 'uiRefreshDisbursementOptions',
   'uiRefreshOutcomeProgress', 'uiRefreshSupport', 'uiReopenSetupForChanges',

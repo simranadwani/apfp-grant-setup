@@ -34,6 +34,17 @@ function intakeRowsWithActions_() {
    };
  }).filter(row => APFP.INTAKE.PROCESS_ACTIONS.includes(row.action));
 }
+// Rows whose Action equals `action` (used for Correct Workspace, which the Create Workspace / Retry buttons never run).
+function intakeRowsMarked_(action) {
+ const sheet = sheet_(APFP.SHEETS.INTAKE),
+   lastRow = Math.min(APFP.INTAKE.MAX_ROW, Math.max(APFP.INTAKE.HEADER_ROW, sheet.getLastRow()));
+ if (lastRow < APFP.INTAKE.START_ROW) return [];
+ const width = sheet.getLastColumn(),
+   headers = sheet.getRange(APFP.INTAKE.HEADER_ROW, 1, 1, width).getDisplayValues()[0],
+   rows = sheet.getRange(APFP.INTAKE.START_ROW, 1, lastRow - APFP.INTAKE.HEADER_ROW, width).getValues();
+ return rows.map((values, i) => ({ rowNumber: i + APFP.INTAKE.START_ROW, object: rowObjectFromArrays_(headers, values) }))
+   .filter(item => key_(item.object['Action']) === key_(action));
+}
 // A row with an Action but none of the grant details filled in: report it, but create no Request ID or Technical Registry record for it.
 function intakeRowIsBlank_(row) {
  return ![row.financialYear, row.grantStartDate, row.grantEndDate, row.organisationName, row.projectTitle, row.grantType,

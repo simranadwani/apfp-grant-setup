@@ -47,7 +47,7 @@ Do **not** run `clasp pull` in this folder right before updating: it overwrites 
 Leave the `DATA_SYNC_SCHEMA_VERSION` row in place for now (see step 0b); nothing reads it in the new code, and preflight only warns about it. Delete it after sign-off, together with any V14.1 / V15.0 description text.
 
 ## 4. One-time sheet changes in production (in this order)
-1. **Setup Review Status dropdown:** in `1. Workspace Creator`, edit the Table column *Setup Review Status* → dropdown → add the value `Not Applicable`.
+1. **Dropdowns in `1. Workspace Creator`** (Table column → dropdown): *Setup Review Status* → add `Not Applicable`; *Action* → add `Correct Workspace`. Do this BEFORE the push, or preflight reports the missing options.
 2. **Tracker status columns:** in `6. Committed & Spent Tracker` add two columns at the far right (inside the Table): `Push Status` and `Document Sync Status`. Nobody types in them. (Optional: warning-only protection and grey shading.)
 3. **System - Configuration:** add rows (Active = Yes) `PROTECTION_EDITORS` = `team@goalkeep.net, <Anagha's email>`; check `CENTRAL_ADMIN_FOLDER_ID` is the production Admin folder id.
 4. Optional, by hand: delete the settings rows the code never reads (`WORKSPACE_FOLDER_PATTERN`, `ORGANISATION_ID_PATTERN`, `GRANT_ID_PATTERN`, `SHARING_METHOD`, `TECHNICAL_REGISTRY_SHEET`, `OUTCOME_PROGRESS_SCHEMA_VERSION`, `SUPPORT_CATEGORY_OPTIONS`, `SUPPORT_STATUS_OPTIONS`; `DATA_SYNC_SCHEMA_VERSION` only after sign-off). Also delete any `LIST_…`, `FIRST_FY` or `FY_YEARS_AHEAD` rows if you added them; nothing reads them any more. `TIME_ZONE` is only needed to override the default.
@@ -60,7 +60,7 @@ Set `SEND_WORKSPACE_NOTIFICATION` to `No` first if you do not want real emails; 
 2. Click each refresh button (Outcome, Support, Decisions, Decision Documents) twice; the second run should be quick and say workbooks were skipped.
 3. Add one Disbursed row for a real grant; **Push** first (rows with a blank Push Status are "Waiting for push" until then), then **Sync**; Push Status → `Pushed`; a second Push finds nothing to do.
 4. On each existing Transactional row run **Retry Workspace** once (or use Retry/Reshare → same email): the Upload Folder cells become links to the Disbursement Documents folder. Then check Retry/Reshare → *Change the email* on a smoke grant with a second inbox of yours.
-5. Run **Correct Workspace Details** on a smoke grant: change its end date (no alert expected) and its Grant Title (an alert is expected if your account does not own the workbooks; that is the owner-only rule, not a failure).
+5. Set a smoke grant's Action to **Correct Workspace**, click **Correct Workspace Details**: one collapsible card per marked row; switch on *Change* for the end date, **Update details** (the card collapses, Action becomes Completed). A grant whose workbook you do not own appears locked. Then change its Grant Title the same way: change its end date (no alert expected) and its Grant Title (an alert is expected if your account does not own the workbooks; that is the owner-only rule, not a failure).
 6. Mark the three smoke grants `Complete` so they drop out of active refreshes (rows are never deleted).
 
 ## 6. Owner clean-up

@@ -19,7 +19,7 @@ Stable IDs join everything: Grant ID, Organisation ID, Request ID, Workspace ID,
 `Disbursement Only` is a display label; the Technical Registry keeps `Workspace Created` for Transactional so no rule changes.
 
 ## 3. Buttons and what they do
-Buttons are drawings assigned to these functions. A workspace button **never writes an Action**; it runs every row whose Action a person (or the system after a failure) set to *Create Workspace*, *Retry Workspace* or *Retry Sharing*. The end-of-run message lists `Rows picked up`, the reason for every row that needs attention, and nothing else.
+Buttons are drawings assigned to these functions. A workspace button **never writes an Action**; it runs every row whose Action a person (or the system after a failure) set to *Create Workspace*, *Retry Workspace* or *Retry Sharing*. *Correct Workspace* is a different Action: only the Correct Workspace Details button reads it. The end-of-run message lists `Rows picked up`, the reason for every row that needs attention, and nothing else.
 
 | Function | Purpose |
 |---|---|
@@ -31,7 +31,7 @@ Buttons are drawings assigned to these functions. A workspace button **never wri
 | `uiPushGrantStatus` | Mark the selected Decision Tracker grant Complete |
 | `uiRefreshDisbursementOptions`, `completeDisbursementRows` | Organisation dropdowns and ID/quarter completion in the Committed & Spent Tracker |
 | `uiPushDisbursements`, `uiSyncDisbursements`, `uiSyncDisbursementsFullCheck` | Push Disbursed rows to grantee workbooks; sync document links back (see §5) |
-| `uiCorrectWorkspaceDetails` | Correct a grant's title, amount, classification, Organisation Type and start/end dates (start must stay inside the grant's financial year) everywhere, including old disbursement rows. A new Grant Title is also written into the grantee Setup and Outcome workbooks; those cells are protected, so only the workbook's **owner** (or an approved editor who already has edit access to that file) can write them. Anyone else still gets every other correction and an alert naming the workbook to update by hand |
+| `uiCorrectWorkspaceDetails` | Opens ONE dialog for every row whose Action is **Correct Workspace** (the button never writes an Action; with no marked rows it tells you to mark some). Each grant is a collapsible card; each of Grant Title, Start Date, End Date, Amount Approved, Thematic Area, Sub-area, Proximity and Organisation Type has a *Change* toggle, the current value (read from the registries) and a new-value input in the sheet's own format (date picker; the live dropdown options). **Update details** applies that one grant (only the toggled fields), sets its Action to Completed and collapses the card. Dates: the start must stay inside the grant's financial year and the end cannot precede it. **Only the owner of the grant's workbook can correct it** (Setup workbook; Transactional: Disbursement workbook; Registry Only: the organisation folder); other cards are locked and the server re-checks. A new Grant Title is also written into the Setup and Outcome workbooks. Typing directly in those cells on a completed row is put back |
 | `uiBackupCentralAdministration` | Copy this sheet into `<CENTRAL_ADMIN_FOLDER_ID>/Backups` (do this before bulk operations) |
 | `runPreflightChecks` | Health check: settings, sheets, headers by name, Tables, dropdowns, templates, protections, time zones, email templates |
 

@@ -182,8 +182,11 @@ function guardCompletedIntakeIdentityEdit_(e) {
   const range = e.range;
   if (range.getRow() < APFP.INTAKE.START_ROW) return;
   const immutableHeaders = [
-    'Financial Year', 'Organisation Name', 'Grant Type', 'Primary Contact Email'
-  ]; // Organisation Type and the grant dates are correctable on a completed row (Correct Workspace Details).
+    'Financial Year', 'Organisation Name', 'Grant Type', 'Primary Contact Email',
+    // Correctable only through Action = Correct Workspace (the dialog), never by typing in a completed row.
+    'Grant Title', 'Grant Start Date', 'Grant End Date', 'Amount Approved', 'Thematic Area', 'Thematic Sub-area',
+    'Proximity to Children / Beneficiary', 'Organisation Type'
+  ];
   const sheet = range.getSheet();
   const map = headerMap_(sheet, APFP.INTAKE.HEADER_ROW);
   const touchesImmutable = immutableHeaders.some(header => {
@@ -199,15 +202,24 @@ function guardCompletedIntakeIdentityEdit_(e) {
     reverted = true;
     const tech = context.tech.record;
     const grant = context.grant.record;
+    const first = (...values) => { const v = values.find(value => value !== '' && value != null); return v === undefined ? '' : v; };
     setByHeaders_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, row, {
       'Financial Year': tech['Financial Year'],
       'Organisation Name': tech['Organisation Name'],
       'Grant Type': tech['Grant Type'] || grant['Grant Type'],
-      'Primary Contact Email': tech['Primary Contact Email']
+      'Primary Contact Email': tech['Primary Contact Email'],
+      'Grant Title': first(grant['Project Title'], tech['Project Title']),
+      'Grant Start Date': first(tech['Grant Start Date'], grant['Grant Start Date']),
+      'Grant End Date': first(tech['Grant End Date'], grant['Grant End Date']),
+      'Amount Approved': first(grant['Amount Approved'], tech['Amount Approved']),
+      'Thematic Area': grant['Thematic Area'] || '',
+      'Thematic Sub-area': grant['Thematic Sub-area'] || '',
+      'Proximity to Children / Beneficiary': grant['Proximity to Children / Beneficiary'] || '',
+      'Organisation Type': tech['Organisation Type'] || ''
     });
   }
   if (reverted) {
-    try { ss_().toast('Locked on a completed grant. Use Correct Workspace Details for the grant details, or Retry/Reshare to change the Primary Contact Email.', 'APFP', 8); }
+    try { ss_().toast('Locked on a completed grant. To correct it, set Action to "Correct Workspace" and click Correct Workspace Details (email changes: Retry/Reshare).', 'APFP', 8); }
     catch (error) { /* a toast is only a hint */ }
   }
 }

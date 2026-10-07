@@ -4,6 +4,15 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round R — Action "Correct Workspace" and the multi-grant correction dialog
+
+**Date:** 2026-10-07 · new `CorrectWorkspace.js`, `CorrectDetailsDialog.html`; `RegistryAndIDs.js` (`applyGrantCorrections_` replaces `correctWorkspaceDetailsForRow_`), `UiActions.js`, `IntakeValidation.js` (`intakeRowsMarked_`), `ApprovalsAndAccess.js`, `Config.js` (Action value, CODE_VERSION round R).
+- New Action value **Correct Workspace** (production: add it to the Action dropdown first). Create Workspace / Retry never process it; the **Correct Workspace Details** button opens one dialog with a collapsible card per marked grant, a *Change* toggle per field (current value pre-filled from the registries, new value in the sheet's own formats; dropdown options are read live from the Table dropdowns), and an **Update details** button per grant that applies only the toggled fields, sets the Action to Completed and collapses the card.
+- **Owner-only for every field**: only the Drive owner of the grant's workbook (Setup; Transactional: Disbursement workbook; Registry Only: organisation folder) can correct it; other cards are locked with the owner's address and `submitCorrectWorkspaceGrant` re-checks on the server.
+- Rules unchanged and enforced per field: title not blank, amount ≥ 0, dates valid, end ≥ start, start inside the grant's financial year, Organisation Type one of the two values. Values equal to the stored ones write nothing; the workbook title cells are written last and only when the title changed (protected cell → warning).
+- Typing in Grant Title, dates, Amount, classification or Organisation Type on a completed row is put back from the registries (the dialog is the only way).
+- Tests: `tests/correct-workspace-dialog.test.js`, rewritten `tests/correct-details.test.js` (158 pass).
+
 ## Round Q (note) — owner-only title writes
 
 Decision: writing a changed Grant Title into the grantee Setup/Outcome workbooks stays owner-only (approved editors only if they already have edit access to that file). Documented in `docs/OPERATING_MODEL.md` and the production smoke test. No code change.

@@ -204,12 +204,18 @@ function uiRefreshDisbursementOptions() {
   showToast_(`Organisation dropdowns refreshed for ${count} disbursement rows.`);
   return count;
 }
+// Opens one dialog with a collapsible card for every row whose Action is "Correct Workspace". The button never writes an Action.
 function uiCorrectWorkspaceDetails() {
-  const selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW);
-  const result = correctWorkspaceDetailsForRow_(selected.rowNumber);
-  showToast_(`Workspace details corrected for ${result.grantId}.`);
-  if (result.warning) SpreadsheetApp.getUi().alert(`Corrected, with one follow-up:\n\n${result.warning}`);
-  return result;
+  const context = correctWorkspaceContext_();
+  if (!context.grants.length) {
+    SpreadsheetApp.getUi().alert('Set the Action to "Correct Workspace" on the rows you want to correct, then click Correct Workspace Details again.');
+    return null;
+  }
+  const template = HtmlService.createTemplateFromFile('CorrectDetailsDialog');
+  // < is escaped so a grant title can never close the script tag.
+  template.contextJson = JSON.stringify(context).replace(/</g, '\\u003c');
+  SpreadsheetApp.getUi().showModalDialog(template.evaluate().setWidth(860).setHeight(660), 'Correct Workspace Details');
+  return context.grants.length;
 }
 function uiPushDisbursements() {
   completeDisbursementRows_();

@@ -275,87 +275,94 @@ function correctedWorkspaceWorkbookTargets_(techRecord) {
   return targets;
 }
 
-function correctWorkspaceDetailsForRow_(rowNumber) {
-  const row = rowObject_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, rowNumber);
-  const grantId = clean_(row['Grant ID']);
-  const requestId = clean_(row['Request ID']);
+// Applies ONLY the fields in `changes` (title, startDate, endDate, amount, thematicArea, subArea, proximity,
+// organisationType) to one created grant: Grant Registry, Technical Registry, central references and the Workspace Creator row.
+// Values already equal to the stored ones write nothing. Returns { grantId, projectTitle, applied: [labels], warning }.
+function applyGrantCorrections_(grantId, requestId, rowNumber, changes) {
   if (!grantId || !requestId) throw new Error('The selected row has no Grant ID or Request ID.');
-
-  const grant = grantById_(grantId);
-  const tech = techByRequest_(requestId);
+  const grant = grantById_(grantId), tech = techByRequest_(requestId);
   if (!grant || !tech || key_(tech.record['Grant ID']) !== key_(grantId))
     throw new Error('The selected row is not linked to one unambiguous created grant.');
   if (!['workspace created', 'registry only'].includes(key_(tech.record['Workspace Status'])))
-    throw new Error('Correct Workspace Details is available only after workspace or registry creation.');
-
-  const projectTitle = clean_(row['Grant Title']);
-  const amountApproved = parseAdminTableNumber_(row['Amount Approved']);
-  if (!projectTitle) throw new Error('Grant Title cannot be blank.');
-  if (amountApproved === '' || amountApproved == null || amountApproved < 0)
-    throw new Error('Amount Approved must be a non-negative amount.');
-
-  const organisationType = clean_(row['Organisation Type']);
-  if (!['New Organisation', 'Returning Organisation'].includes(organisationType))
-    throw new Error('Organisation Type must be New Organisation or Returning Organisation.');
-  // Dates: start and end may be corrected, but the start date must stay inside the grant's financial year
-  // (the Grant ID, folders and workbooks are built on it).
-  const startDate = dateValue_(row['Grant Start Date']), endDate = dateValue_(row['Grant End Date']);
-  if (!validDateValue_(startDate)) throw new Error('Grant Start Date is required and must be a valid date.');
-  if (!validDateValue_(endDate)) throw new Error('Grant End Date is required and must be a valid date.');
-  if (endDate < startDate) throw new Error('Grant End Date cannot be before Grant Start Date.');
-  const grantFy = clean_(tech.record['Financial Year'] || grant.record['Financial Year']);
-  if (key_(financialYearFromDate_(startDate)) !== key_(grantFy))
-    throw new Error(`The Grant Start Date must stay inside financial year ${grantFy}. A date in another financial year needs a new workspace.`);
+    throw new Error('A grant can be corrected only after its workspace or registry entry was created.');
+  const has = name => Object.prototype.hasOwnProperty.call(changes || {}, name);
+  const g = grant.record, t = tech.record;
   const sameDate = (a, b) => { const x = dateValue_(a), y = dateValue_(b); return !!x && !!y && x.getTime() === y.getTime(); };
-  const datesChanged = !sameDate(startDate, tech.record['Grant Start Date']) || !sameDate(endDate, tech.record['Grant End Date']) ||
-    !sameDate(startDate, grant.record['Grant Start Date']) || !sameDate(endDate, grant.record['Grant End Date']);
-  const datePatch = datesChanged
-    ? { 'Grant Start Date': startDate, 'Grant End Date': endDate, 'Grant Start Quarter': grantQuarterFromDate_(startDate) } : {};
-  const patch = Object.assign({
-    'Project Title': projectTitle,
-    'Thematic Area': clean_(row['Thematic Area']),
-    'Thematic Sub-area': clean_(row['Thematic Sub-area']),
-    'Proximity to Children / Beneficiary': clean_(row['Proximity to Children / Beneficiary']),
-    'Amount Approved': amountApproved,
-    'Last Updated At': now_()
-  }, datePatch);
-  const workbookTargets = correctedWorkspaceWorkbookTargets_(tech.record);
+  const grantPatch = {}, techPatch = {}, rowPatch = {}, applied = [];
+  let titleChanged = false;
 
-  setByHeaders_(APFP.SHEETS.GRANTS, 1, grant.rowNumber, patch);
-  saveTech_(requestId, Object.assign({
-    'Project Title': projectTitle,
-    'Amount Approved': amountApproved,
-    'Organisation Type': organisationType,
-    'Last Error Code': '',
-    'Last Error Message': ''
-  }, datePatch));
-  updateGrantTitleReferences_(grantId, projectTitle);
-  ensureOrganisationMaturityRowsForGrant_(grantId);
-  setIntake_(rowNumber, {
-    'Grant Title': projectTitle,
-    'Thematic Area': patch['Thematic Area'],
-    'Thematic Sub-area': patch['Thematic Sub-area'],
-    'Proximity to Children / Beneficiary': patch['Proximity to Children / Beneficiary'],
-    'Amount Approved': amountApproved,
-    'Organisation Type': organisationType,
-    'Grant Start Date': startDate,
-    'Grant End Date': endDate,
-    'Last Updated': now_()
+  if (has('title')) {
+    const title = clean_(changes.title);
+    if (!title) throw new Error('Grant Title cannot be blank.');
+    if (title !== clean_(g['Project Title'])) {
+      grantPatch['Project Title'] = title; techPatch['Project Title'] = title; rowPatch['Grant Title'] = title;
+      titleChanged = true; applied.push('Grant Title');
+    }
+  }
+  if (has('amount')) {
+    const amount = parseAdminTableNumber_(changes.amount);
+    if (amount === '' || amount == null || amount < 0) throw new Error('Amount Approved must be a non-negative amount.');
+    if (Number(g['Amount Approved']) !== amount) {
+      grantPatch['Amount Approved'] = amount; techPatch['Amount Approved'] = amount; rowPatch['Amount Approved'] = amount;
+      applied.push('Amount Approved');
+    }
+  }
+  [['thematicArea', 'Thematic Area', 'Thematic Area'], ['subArea', 'Thematic Sub-area', 'Thematic Sub-area'],
+   ['proximity', 'Proximity to Children / Beneficiary', 'Proximity']].forEach(([key, header, label]) => {
+    if (!has(key)) return;
+    const value = clean_(changes[key]);
+    if (value !== clean_(g[header])) { grantPatch[header] = value; rowPatch[header] = value; applied.push(label); }
   });
+  if (has('organisationType')) {
+    const type = clean_(changes.organisationType);
+    if (!['New Organisation', 'Returning Organisation'].includes(type))
+      throw new Error('Organisation Type must be New Organisation or Returning Organisation.');
+    if (type !== clean_(t['Organisation Type'])) { techPatch['Organisation Type'] = type; rowPatch['Organisation Type'] = type; applied.push('Organisation Type'); }
+  }
+  if (has('startDate') || has('endDate')) {
+    const start = has('startDate') ? dateValue_(changes.startDate) : dateValue_(t['Grant Start Date'] || g['Grant Start Date']),
+      end = has('endDate') ? dateValue_(changes.endDate) : dateValue_(t['Grant End Date'] || g['Grant End Date']);
+    if (!validDateValue_(start)) throw new Error('Grant Start Date is required and must be a valid date.');
+    if (!validDateValue_(end)) throw new Error('Grant End Date is required and must be a valid date.');
+    if (end < start) throw new Error('Grant End Date cannot be before Grant Start Date.');
+    const grantFy = clean_(t['Financial Year'] || g['Financial Year']);
+    if (key_(financialYearFromDate_(start)) !== key_(grantFy))
+      throw new Error(`The Grant Start Date must stay inside financial year ${grantFy}. A date in another financial year needs a new workspace.`);
+    const startChanged = !sameDate(start, t['Grant Start Date']) || !sameDate(start, g['Grant Start Date']),
+      endChanged = !sameDate(end, t['Grant End Date']) || !sameDate(end, g['Grant End Date']);
+    if (startChanged || endChanged) {
+      const quarter = grantQuarterFromDate_(start);
+      [grantPatch, techPatch].forEach(patch => { patch['Grant Start Date'] = start; patch['Grant End Date'] = end; patch['Grant Start Quarter'] = quarter; });
+      rowPatch['Grant Start Date'] = start; rowPatch['Grant End Date'] = end;
+      if (startChanged) applied.push('Grant Start Date');
+      if (endChanged) applied.push('Grant End Date');
+    }
+  }
+  if (!applied.length) return { grantId, projectTitle: clean_(g['Project Title']), applied, warning: '' };
 
-  // Workbook title cells are written LAST and only when they differ: they are protected, and a dates-only or amount-only
-  // correction must not touch the grantee workbooks. A protected cell becomes a warning, never a half-finished correction.
+  const workbookTargets = titleChanged ? correctedWorkspaceWorkbookTargets_(t) : [];
+  const projectTitle = titleChanged ? grantPatch['Project Title'] : clean_(g['Project Title']);
+  setByHeaders_(APFP.SHEETS.GRANTS, 1, grant.rowNumber, Object.assign({}, grantPatch, { 'Last Updated At': now_() }));
+  saveTech_(requestId, Object.assign({ 'Last Error Code': '', 'Last Error Message': '' }, techPatch));
+  if (titleChanged) {
+    updateGrantTitleReferences_(grantId, projectTitle);
+    ensureOrganisationMaturityRowsForGrant_(grantId);
+  }
+  if (rowNumber) setIntake_(rowNumber, Object.assign({}, rowPatch, { 'Last Updated': now_() }));
+
+  // Workbook title cells are written LAST and only when they differ: they are protected (owner only), and a correction that
+  // does not change the title must not touch the grantee workbooks. A protected cell becomes a warning, never a half-finished correction.
   const warnings = [];
   workbookTargets.forEach(target => {
     try {
       if (clean_(target.range.getDisplayValue()) !== projectTitle) target.range.setValue(projectTitle);
     } catch (error) {
       warnings.push(`The Grant Title in the ${target.label} could not be updated because the cell is protected (${error.message}). ` +
-        'Ask the workbook owner to update it, or add your account to PROTECTION_EDITORS, then run Correct Workspace Details again.');
+        'Ask the workbook owner to update it, then correct the title again.');
     }
   });
   SpreadsheetApp.flush();
-  return { grantId: grantId, projectTitle: projectTitle, warning: warnings.join(' ') };
+  return { grantId, projectTitle, applied, warning: warnings.join(' ') };
 }
 
 function upsertGrantShell_(grantId, organisationId, request, setupUrl, outcomeWorkbookUrl) {

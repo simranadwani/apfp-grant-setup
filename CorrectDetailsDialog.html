@@ -1,0 +1,167 @@
+<!doctype html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body { font: 14px Arial, sans-serif; color: #202124; margin: 0; }
+      header { position: sticky; top: 0; background: #fff; border-bottom: 1px solid #dadce0; padding: 12px 18px; display: flex; align-items: center; gap: 12px; z-index: 2; }
+      header .count { font-weight: bold; }
+      header .spacer { flex: 1; }
+      .link { color: #1a73e8; cursor: pointer; background: none; border: 0; padding: 0; font: inherit; }
+      main { padding: 12px 18px 24px; }
+      .card { border: 1px solid #dadce0; border-radius: 8px; margin-bottom: 10px; }
+      .card.done { border-color: #188038; }
+      .card.locked { background: #f8f9fa; }
+      .card-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; }
+      .card-head .title { flex: 1; }
+      .card-head .sub { color: #5f6368; font-size: 12px; }
+      .badge { font-size: 12px; border-radius: 10px; padding: 2px 9px; background: #e8eaed; color: #3c4043; }
+      .badge.ok { background: #e6f4ea; color: #137333; }
+      .badge.lock { background: #fce8e6; color: #b3261e; }
+      .card-body { padding: 4px 14px 14px; border-top: 1px solid #eee; }
+      .collapsed .card-body { display: none; }
+      .grid { display: grid; grid-template-columns: 110px 170px 1fr 1.3fr; gap: 6px 10px; align-items: center; margin-top: 8px; }
+      .grid .h { font-size: 12px; color: #5f6368; }
+      .grid label.toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+      input, select { box-sizing: border-box; width: 100%; padding: 7px; font: inherit; }
+      input[disabled], select[disabled] { background: #f1f3f4; color: #5f6368; }
+      .actions { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+      button.primary { background: #1a73e8; color: #fff; border: 0; border-radius: 4px; padding: 9px 16px; cursor: pointer; }
+      button.primary[disabled] { background: #9aa0a6; cursor: default; }
+      .msg { font-size: 13px; }
+      .msg.err { color: #b3261e; }
+      .msg.ok { color: #137333; }
+      .msg.warn { color: #b06000; }
+      .lockreason { color: #b3261e; padding: 8px 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="count" id="count"></span>
+      <span class="spacer"></span>
+      <button class="link" onclick="setAll(false)">Expand all</button>
+      <button class="link" onclick="setAll(true)">Collapse all</button>
+      <button class="link" onclick="google.script.host.close()">Close</button>
+    </header>
+    <main id="cards"></main>
+    <script>
+      const context = <?!= contextJson ?>;
+      const FIELDS = [
+        { key: 'title', label: 'Grant Title', type: 'text' },
+        { key: 'startDate', label: 'Grant Start Date', type: 'date' },
+        { key: 'endDate', label: 'Grant End Date', type: 'date' },
+        { key: 'amount', label: 'Amount Approved', type: 'amount' },
+        { key: 'thematicArea', label: 'Thematic Area', type: 'select', options: 'thematicArea' },
+        { key: 'subArea', label: 'Thematic Sub-area', type: 'select', options: 'subArea' },
+        { key: 'proximity', label: 'Proximity to Children / Beneficiary', type: 'select', options: 'proximity' },
+        { key: 'organisationType', label: 'Organisation Type', type: 'select', options: 'organisationType' }
+      ];
+      const cards = [];
+      function el(tag, attrs, text) {
+        const node = document.createElement(tag);
+        Object.keys(attrs || {}).forEach(k => { if (k === 'class') node.className = attrs[k]; else node.setAttribute(k, attrs[k]); });
+        if (text != null) node.textContent = text;
+        return node;
+      }
+      function pretty(field, value) {
+        if (value === '' || value == null) return '';
+        if (field.type === 'amount') return '₹ ' + Number(value).toLocaleString('en-IN');
+        if (field.type === 'date') { const p = String(value).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : value; }
+        return String(value);
+      }
+      function newInput(field, current) {
+        let input;
+        const options = field.type === 'select' ? (context.options[field.options] || []) : null;
+        if (field.type === 'select' && options.length) {
+          input = el('select');
+          const list = options.slice();
+          if (current && list.indexOf(current) < 0) list.unshift(current);
+          list.forEach(o => { const opt = el('option', { value: o }, o); input.appendChild(opt); });
+          input.value = current || list[0];
+        } else if (field.type === 'date') {
+          input = el('input', { type: 'date' }); input.value = current || '';
+        } else if (field.type === 'amount') {
+          input = el('input', { type: 'number', min: '0', step: '1' }); input.value = current === '' ? '' : current;
+        } else {
+          input = el('input', { type: 'text' }); input.value = current || '';
+        }
+        input.disabled = true;
+        return input;
+      }
+      function build(grant) {
+        const card = { grant, rows: {}, done: false };
+        const root = el('section', { class: 'card collapsed' + (grant.locked ? ' locked' : '') });
+        const head = el('div', { class: 'card-head' });
+        const titleBox = el('div', { class: 'title' });
+        titleBox.appendChild(el('div', {}, (grant.organisationName || '(no organisation)') + ' — ' + (grant.grantTitle || '')));
+        titleBox.appendChild(el('div', { class: 'sub' }, 'Row ' + grant.rowNumber + ' · ' + grant.grantId + ' · ' + grant.financialYear));
+        const badge = el('span', { class: 'badge' + (grant.locked ? ' lock' : '') }, grant.locked ? 'Locked' : 'Ready');
+        head.appendChild(titleBox); head.appendChild(badge);
+        head.onclick = () => root.classList.toggle('collapsed');
+        const body = el('div', { class: 'card-body' });
+        const status = el('div', { class: 'msg' });
+        if (grant.locked) {
+          body.appendChild(el('div', { class: 'lockreason' }, grant.lockReason || 'This grant cannot be corrected from here.'));
+        } else {
+          const grid = el('div', { class: 'grid' });
+          ['', 'Field', 'Current value', 'New value'].forEach(t => grid.appendChild(el('div', { class: 'h' }, t)));
+          FIELDS.forEach(field => {
+            const current = grant.values[field.key];
+            const toggle = el('label', { class: 'toggle' });
+            const box = el('input', { type: 'checkbox' }); box.style.width = 'auto';
+            toggle.appendChild(box); toggle.appendChild(document.createTextNode('Change'));
+            const oldBox = el('input', { type: 'text' }); oldBox.value = pretty(field, current); oldBox.disabled = true;
+            const input = newInput(field, current);
+            box.onchange = () => { input.disabled = !box.checked; if (box.checked) input.focus(); };
+            grid.appendChild(toggle); grid.appendChild(el('div', {}, field.label)); grid.appendChild(oldBox); grid.appendChild(input);
+            card.rows[field.key] = { box, input, oldBox, field };
+          });
+          body.appendChild(grid);
+          const actions = el('div', { class: 'actions' });
+          const button = el('button', { class: 'primary' }, 'Update details');
+          button.onclick = () => submit(card, button, status, badge, root);
+          actions.appendChild(button); actions.appendChild(status);
+          body.appendChild(actions);
+        }
+        root.appendChild(head); root.appendChild(body);
+        card.root = root; card.badge = badge;
+        document.getElementById('cards').appendChild(root);
+        return card;
+      }
+      function submit(card, button, status, badge, root) {
+        const changes = {};
+        Object.keys(card.rows).forEach(key => {
+          const r = card.rows[key];
+          if (r.box.checked) changes[key] = r.input.value;
+        });
+        if (!Object.keys(changes).length) { status.className = 'msg err'; status.textContent = 'Switch on "Change" for at least one field first.'; return; }
+        button.disabled = true; status.className = 'msg'; status.textContent = 'Updating…';
+        google.script.run
+          .withSuccessHandler(result => {
+            Object.keys(card.rows).forEach(key => {
+              const r = card.rows[key], value = result.values[key];
+              r.oldBox.value = pretty(r.field, value);
+              if (r.field.type === 'select' && r.input.tagName === 'SELECT' && value && !Array.from(r.input.options).some(o => o.value === value)) r.input.add(new Option(value, value));
+              r.input.value = value == null ? '' : value; r.box.checked = false; r.input.disabled = true;
+            });
+            card.done = true; root.classList.add('done', 'collapsed');
+            badge.className = 'badge ok'; badge.textContent = '✓ Updated';
+            status.className = 'msg ' + (result.warning ? 'warn' : 'ok');
+            status.textContent = result.message + (result.warning ? ' ' + result.warning : '');
+            button.disabled = false; refresh();
+          })
+          .withFailureHandler(error => {
+            button.disabled = false; status.className = 'msg err'; status.textContent = (error && error.message) || String(error);
+          })
+          .submitCorrectWorkspaceGrant({ rowNumber: card.grant.rowNumber, requestId: card.grant.requestId, grantId: card.grant.grantId, changes });
+      }
+      function refresh() {
+        const updated = cards.filter(c => c.done).length;
+        document.getElementById('count').textContent = updated + ' of ' + cards.length + ' updated';
+      }
+      function setAll(collapse) { cards.forEach(c => c.root.classList.toggle('collapsed', collapse)); }
+      context.grants.forEach((grant, index) => { const c = build(grant); cards.push(c); if (index === 0) c.root.classList.remove('collapsed'); });
+      refresh();
+    </script>
+  </body>
+</html>
