@@ -134,17 +134,21 @@ function organisationNameOptions_() {
    .filter(Boolean))]
    .sort((a, b) => key_(a).localeCompare(key_(b)));
 }
+// Keeps the Organisation Name dropdown live on sheet open. The registry list (warning only) is applied to rows that are Returning
+// Organisation or have no type yet; New Organisation rows get NO rule, because a new name is by definition not in the registry
+// and would show a red "Input must fall within specified range" flag.
 function applyWorkspaceOrganisationDropdown_() {
-  const intake = sheet_(APFP.SHEETS.INTAKE), organisations = sheet_(APFP.SHEETS.ORGANISATIONS);
-  const source = organisations.getRange(2, 2, Math.max(1, organisations.getMaxRows() - 1), 1);
-  const target = intake.getRange(
-    APFP.INTAKE.START_ROW, intakeColumn_('Organisation Name'),
-    APFP.INTAKE.MAX_ROW - APFP.INTAKE.START_ROW + 1, 1
-  );
-  target.setDataValidation(
-    SpreadsheetApp.newDataValidation().requireValueInRange(source, true).setAllowInvalid(true).build()
-  ).clearNote();
-  return target.getNumRows();
+  const intake = sheet_(APFP.SHEETS.INTAKE), organisations = sheet_(APFP.SHEETS.ORGANISATIONS),
+    first = APFP.INTAKE.START_ROW, count = APFP.INTAKE.MAX_ROW - APFP.INTAKE.START_ROW + 1,
+    nameColumn = intakeColumn_('Organisation Name'),
+    source = organisations.getRange(2, 2, Math.max(1, organisations.getMaxRows() - 1), 1),
+    types = intake.getRange(first, intakeColumn_('Organisation Type'), count, 1).getDisplayValues().map(row => key_(row[0])),
+    rule = SpreadsheetApp.newDataValidation().requireValueInRange(source, true).setAllowInvalid(true).build();
+  const withRule = [], withoutRule = [];
+  types.forEach((type, i) => (type === 'new organisation' ? withoutRule : withRule).push(first + i));
+  groupConsecutive_(withRule).forEach(run => intake.getRange(run[0], nameColumn, run.length, 1).setDataValidation(rule));
+  groupConsecutive_(withoutRule).forEach(run => intake.getRange(run[0], nameColumn, run.length, 1).clearDataValidations());
+  return count;
 }
 function returningOrganisationValidation_(options) {
  if (!options.length) return null;

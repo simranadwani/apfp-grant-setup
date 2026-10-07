@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round S — no false "Input must fall within specified range" flag on new organisations
+
+**Date:** 2026-10-07 · `RegistryAndIDs.js` `applyWorkspaceOrganisationDropdown_`, `Config.js` (round S). On every sheet open the registry-names rule was re-applied to the whole Organisation Name column (warning only), so a New Organisation (not in the registry yet) showed a red flag. The open handler now applies the rule only to Returning Organisation and untyped rows and clears it on New Organisation rows (same as the per-row edit handler). Test: `tests/org-dropdown.test.js` (159 pass).
+
 ## Round R — Action "Correct Workspace" and the multi-grant correction dialog
 
 **Date:** 2026-10-07 · new `CorrectWorkspace.js`, `CorrectDetailsDialog.html`; `RegistryAndIDs.js` (`applyGrantCorrections_` replaces `correctWorkspaceDetailsForRow_`), `UiActions.js`, `IntakeValidation.js` (`intakeRowsMarked_`), `ApprovalsAndAccess.js`, `Config.js` (Action value, CODE_VERSION round R).
