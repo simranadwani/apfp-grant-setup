@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round Q (note) — owner-only title writes
+
+Decision: writing a changed Grant Title into the grantee Setup/Outcome workbooks stays owner-only (approved editors only if they already have edit access to that file). Documented in `docs/OPERATING_MODEL.md` and the production smoke test. No code change.
+
 ## Round Q — Correct Workspace Details no longer trips on protected workbook cells
 
 **Date:** 2026-10-07 · `RegistryAndIDs.js`, `UiActions.js`, `Config.js` (round Q). The Grant Title was rewritten into the grantee Setup and Outcome workbooks on every correction, even when unchanged, and those cells are protected, so a dates-only correction failed with "You are trying to edit a protected cell or object" after the registries were already saved. Now: workbook cells are written only when the title differs, after the registries, central references and row are done; a protected cell becomes a warning (shown in an alert) and the rest of the correction stays applied. Tests added (144 pass).

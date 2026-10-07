@@ -60,7 +60,8 @@ Set `SEND_WORKSPACE_NOTIFICATION` to `No` first if you do not want real emails; 
 2. Click each refresh button (Outcome, Support, Decisions, Decision Documents) twice; the second run should be quick and say workbooks were skipped.
 3. Add one Disbursed row for a real grant; **Push** first (rows with a blank Push Status are "Waiting for push" until then), then **Sync**; Push Status → `Pushed`; a second Push finds nothing to do.
 4. On each existing Transactional row run **Retry Workspace** once (or use Retry/Reshare → same email): the Upload Folder cells become links to the Disbursement Documents folder. Then check Retry/Reshare → *Change the email* on a smoke grant with a second inbox of yours.
-5. Mark the three smoke grants `Complete` so they drop out of active refreshes (rows are never deleted).
+5. Run **Correct Workspace Details** on a smoke grant: change its end date (no alert expected) and its Grant Title (an alert is expected if your account does not own the workbooks; that is the owner-only rule, not a failure).
+6. Mark the three smoke grants `Complete` so they drop out of active refreshes (rows are never deleted).
 
 ## 6. Owner clean-up
 * Remove the **"Anyone with the link – Editor"** sharing on Central Administration (Share → General access → Restricted).

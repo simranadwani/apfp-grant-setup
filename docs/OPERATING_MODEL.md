@@ -31,7 +31,7 @@ Buttons are drawings assigned to these functions. A workspace button **never wri
 | `uiPushGrantStatus` | Mark the selected Decision Tracker grant Complete |
 | `uiRefreshDisbursementOptions`, `completeDisbursementRows` | Organisation dropdowns and ID/quarter completion in the Committed & Spent Tracker |
 | `uiPushDisbursements`, `uiSyncDisbursements`, `uiSyncDisbursementsFullCheck` | Push Disbursed rows to grantee workbooks; sync document links back (see §5) |
-| `uiCorrectWorkspaceDetails` | Correct a grant title / details everywhere, including old disbursement rows |
+| `uiCorrectWorkspaceDetails` | Correct a grant's title, amount, classification, Organisation Type and start/end dates (start must stay inside the grant's financial year) everywhere, including old disbursement rows. A new Grant Title is also written into the grantee Setup and Outcome workbooks; those cells are protected, so only the workbook's **owner** (or an approved editor who already has edit access to that file) can write them. Anyone else still gets every other correction and an alert naming the workbook to update by hand |
 | `uiBackupCentralAdministration` | Copy this sheet into `<CENTRAL_ADMIN_FOLDER_ID>/Backups` (do this before bulk operations) |
 | `runPreflightChecks` | Health check: settings, sheets, headers by name, Tables, dropdowns, templates, protections, time zones, email templates |
 
