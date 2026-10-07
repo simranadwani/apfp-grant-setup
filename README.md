@@ -7,4 +7,4 @@ Google Apps Script automation for the APFP grant workspace (Central Administrati
 * `docs/PROJECT_NOTES.md` — decisions, environments and status (read first when resuming)
 * `CHANGELOG.md` — every change: what, which files, why
 
-Local checks: `npm test` (Node 20+, no dependencies). Push to the TEST script with `clasp push`; production only with `clasp push -P .clasp.prod.json` after the runbook.
+Local checks: `npm test` (Node 20+, no dependencies). Push to the TEST script with `clasp push`; production only by following `docs/PRODUCTION_ROLLOUT.md` (it pushes from a small `../apfp-prod-push` folder, because newer `clasp` rejects `-P`).

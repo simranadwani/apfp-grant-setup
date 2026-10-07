@@ -9,7 +9,7 @@ Read this first when picking the project up again. Keep it current. Every code c
 | Apps Script project | id in `.clasp.prod.json` | id in `.clasp.json` (default) |
 | Drive root for workspaces | `1fGA38bOPAf4GAzumjdJj1qFonjV1Uh4n` | `1rUu4ULndFlMhktBVY1butW6ou5dPHHyd` |
 
-- `clasp push` goes to **TEST** by default. Production is pushed only deliberately: `clasp push -P .clasp.prod.json` (never before the change passed on TEST).
+- `clasp push` goes to **TEST** by default. Production is pushed only deliberately, following `docs/PRODUCTION_ROLLOUT.md` (push from `../apfp-prod-push`; newer `clasp` rejects `-P .clasp.prod.json`), and never before the change passed on TEST.
 - Rollback of production code: `git checkout 3346443 -- *.js *.html appsscript.json && clasp push --force -P .clasp.prod.json`.
   Sheet *data* is restored from File → Version history; sent emails and granted shares cannot be undone.
 - **TEST warning:** the 5 original organisations in the TEST sheet point at *production* workbooks. In TEST never use Retry/Reshare, change email,
