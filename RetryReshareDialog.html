@@ -3,59 +3,143 @@
   <head>
     <base target="_top">
     <style>
-      body { font: 14px Arial, sans-serif; color: #202124; margin: 22px; }
-      .context { background: #f6f8fc; border-radius: 8px; padding: 12px; line-height: 1.55; }
-      label.option { display: block; margin: 18px 0 8px; }
-      input[type=email] { box-sizing: border-box; width: 100%; padding: 9px; margin-top: 8px; }
+      body { font: 14px Arial, sans-serif; color: #202124; margin: 0; }
+      header { position: sticky; top: 0; background: #fff; border-bottom: 1px solid #dadce0; padding: 12px 18px; display: flex; align-items: center; gap: 12px; z-index: 2; }
+      header .count { font-weight: bold; }
+      header .spacer { flex: 1; }
+      .link { color: #1a73e8; cursor: pointer; background: none; border: 0; padding: 0; font: inherit; }
+      main { padding: 12px 18px 24px; }
+      .card { border: 1px solid #dadce0; border-radius: 8px; margin-bottom: 10px; }
+      .card.done { border-color: #188038; }
+      .card.locked { background: #f8f9fa; }
+      .card-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; }
+      .card-head .title { flex: 1; }
+      .card-head .sub { color: #5f6368; font-size: 12px; }
+      .badge { font-size: 12px; border-radius: 10px; padding: 2px 9px; background: #e8eaed; color: #3c4043; }
+      .badge.ok { background: #e6f4ea; color: #137333; }
+      .badge.lock { background: #fce8e6; color: #b3261e; }
+      .card-body { padding: 4px 14px 14px; border-top: 1px solid #eee; }
+      .collapsed .card-body { display: none; }
+      label.option { display: block; margin: 12px 0 4px; }
+      input[type=email] { box-sizing: border-box; width: 100%; padding: 8px; margin-top: 6px; font: inherit; }
+      input[disabled] { background: #f1f3f4; color: #5f6368; }
       .note { color: #5f6368; font-size: 12px; margin-top: 8px; }
-      .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
-      button { border: 0; border-radius: 4px; padding: 9px 16px; cursor: pointer; }
-      .primary { background: #1a73e8; color: white; }
-      #status { color: #b3261e; min-height: 18px; margin-top: 12px; }
+      .actions { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+      button.primary { background: #1a73e8; color: #fff; border: 0; border-radius: 4px; padding: 9px 16px; cursor: pointer; }
+      button.primary[disabled] { background: #9aa0a6; cursor: default; }
+      .msg { font-size: 13px; white-space: pre-wrap; }
+      .msg.err { color: #b3261e; }
+      .msg.ok { color: #137333; }
+      .msg.warn { color: #b06000; }
+      .lockreason { color: #b3261e; padding: 8px 0; }
     </style>
   </head>
   <body>
-    <div class="context">
-      <strong><?= context.organisationName ?></strong><br>
-      Financial year: <?= context.financialYear ?><br>
-      Grant ID: <?= context.grantId ?><br>
-      Current email: <?= context.currentEmail ?>
-    </div>
-    <label class="option"><input type="radio" name="mode" value="same" checked onchange="toggleEmail()"> Continue with the same email</label>
-    <label class="option"><input type="radio" name="mode" value="change" onchange="toggleEmail()"> Change the email for this Grant-FY only</label>
-    <input id="newEmail" type="email" placeholder="New primary contact email" disabled>
-    <div id="notifyBox" style="display:none"><label class="option"><input type="checkbox" id="notify" checked> Send the workspace email to the new address</label></div>
-    <div class="note">The change applies to this Grant-FY: workspace access, registries, the Setup workbook contact cell and (only when this is the organisation's latest grant) the organisation contact. Other grants are not changed.</div>
-    <div id="status"></div>
-    <div class="actions">
-      <button onclick="google.script.host.close()">Cancel</button>
-      <button id="run" class="primary" onclick="submitForm()">Retry / Reshare</button>
-    </div>
+    <header>
+      <span class="count" id="count"></span>
+      <span class="spacer"></span>
+      <button class="link" id="all" onclick="runAll()">Reshare all ready grants (same email)</button>
+      <button class="link" onclick="setAll(false)">Expand all</button>
+      <button class="link" onclick="setAll(true)">Collapse all</button>
+      <button class="link" onclick="google.script.host.close()">Close</button>
+    </header>
+    <main id="cards"></main>
     <script>
-      const context = <?!= JSON.stringify(context) ?>;
-      function mode() { return document.querySelector('input[name=mode]:checked').value; }
-      function toggleEmail() {
-        const input = document.getElementById('newEmail');
-        input.disabled = mode() !== 'change';
-        document.getElementById('notifyBox').style.display = input.disabled || context.registryOnly ? 'none' : 'block';
-        if (!input.disabled) input.focus();
+      const context = <?!= contextJson ?>;
+      const cards = [];
+      let busy = false;
+      function el(tag, attrs, text) {
+        const node = document.createElement(tag);
+        Object.keys(attrs || {}).forEach(k => { if (k === 'class') node.className = attrs[k]; else node.setAttribute(k, attrs[k]); });
+        if (text != null) node.textContent = text;
+        return node;
       }
-      function submitForm() {
-        const email = document.getElementById('newEmail').value.trim();
-        if (mode() === 'change' && !email) {
-          document.getElementById('status').textContent = 'Enter the new email address.';
+      let radioId = 0;
+      function build(grant) {
+        const card = { grant, done: false, run: null };
+        const root = el('section', { class: 'card collapsed' + (grant.locked ? ' locked' : '') });
+        const head = el('div', { class: 'card-head' });
+        const titleBox = el('div', { class: 'title' });
+        titleBox.appendChild(el('div', {}, grant.organisationName || '(no organisation)'));
+        titleBox.appendChild(el('div', { class: 'sub' }, 'Row ' + grant.rowNumber + ' · ' + grant.grantId + ' · ' + grant.financialYear + ' · ' + (grant.currentEmail || 'no email')));
+        const badge = el('span', { class: 'badge' + (grant.locked ? ' lock' : '') }, grant.locked ? 'Cannot run' : 'Ready');
+        head.appendChild(titleBox); head.appendChild(badge);
+        head.onclick = () => root.classList.toggle('collapsed');
+        const body = el('div', { class: 'card-body' });
+        const status = el('div', { class: 'msg' });
+        if (grant.locked) {
+          body.appendChild(el('div', { class: 'lockreason' }, grant.lockReason));
+        } else {
+          const name = 'mode' + (radioId++);
+          const same = el('input', { type: 'radio', name, value: 'same' }); same.checked = true;
+          const change = el('input', { type: 'radio', name, value: 'change' });
+          const l1 = el('label', { class: 'option' }); l1.appendChild(same); l1.appendChild(document.createTextNode(' Continue with the same email'));
+          const l2 = el('label', { class: 'option' }); l2.appendChild(change); l2.appendChild(document.createTextNode(' Change the email for this Grant-FY only'));
+          const email = el('input', { type: 'email', placeholder: 'New primary contact email' }); email.disabled = true;
+          const notifyBox = el('label', { class: 'option' }); notifyBox.style.display = 'none';
+          const notify = el('input', { type: 'checkbox' }); notify.checked = true;
+          notifyBox.appendChild(notify); notifyBox.appendChild(document.createTextNode(' Send the workspace email to the new address'));
+          const toggle = () => {
+            email.disabled = !change.checked;
+            notifyBox.style.display = change.checked && !grant.registryOnly ? 'block' : 'none';
+            if (change.checked) email.focus();
+          };
+          same.onchange = toggle; change.onchange = toggle;
+          body.appendChild(l1); body.appendChild(l2); body.appendChild(email); body.appendChild(notifyBox);
+          body.appendChild(el('div', { class: 'note' }, 'A change applies to this Grant-FY: workspace access, registries, the Setup workbook contact cell and (only when this is the organisation\'s latest grant) the organisation contact. Other grants are not changed.'));
+          const actions = el('div', { class: 'actions' });
+          const button = el('button', { class: 'primary' }, 'Retry / Reshare');
+          card.run = onDone => submit(card, { button, status, badge, root, same, change, email, notify }, onDone);
+          button.onclick = () => { if (!busy) card.run(); };
+          actions.appendChild(button); actions.appendChild(status);
+          body.appendChild(actions);
+          card.button = button;
+        }
+        root.appendChild(head); root.appendChild(body);
+        card.root = root;
+        document.getElementById('cards').appendChild(root);
+        return card;
+      }
+      function submit(card, ui, onDone) {
+        const mode = ui.change.checked ? 'change' : 'same', newEmail = ui.email.value.trim();
+        ui.root.classList.remove('collapsed');
+        if (mode === 'change' && !newEmail) {
+          ui.status.className = 'msg err'; ui.status.textContent = 'Enter the new email address.';
+          if (onDone) onDone(false);
           return;
         }
-        document.getElementById('run').disabled = true;
-        document.getElementById('status').textContent = 'Working…';
+        busy = true; ui.button.disabled = true; ui.status.className = 'msg'; ui.status.textContent = 'Working…';
         google.script.run
-          .withSuccessHandler(message => { alert(message); google.script.host.close(); })
-          .withFailureHandler(error => {
-            document.getElementById('run').disabled = false;
-            document.getElementById('status').textContent = error.message || String(error);
+          .withSuccessHandler(message => {
+            busy = false; card.done = true;
+            ui.root.classList.add('done', 'collapsed');
+            ui.badge.className = 'badge ok'; ui.badge.textContent = '✓ Done';
+            ui.status.className = 'msg ' + (/Needs a follow-up/.test(message) ? 'warn' : 'ok'); ui.status.textContent = message;
+            ui.button.disabled = true; refresh();
+            if (onDone) onDone(true);
           })
-          .submitRetryReshareGrantFy(Object.assign({}, context, { mode: mode(), newEmail: email, notify: document.getElementById('notify').checked }));
+          .withFailureHandler(error => {
+            busy = false; ui.button.disabled = false;
+            ui.status.className = 'msg err'; ui.status.textContent = (error && error.message) || String(error);
+            if (onDone) onDone(false);
+          })
+          .submitRetryReshareGrantFy({ rowNumber: card.grant.rowNumber, requestId: card.grant.requestId, grantId: card.grant.grantId, mode, newEmail, notify: ui.notify.checked });
       }
+      // Runs every ready card one after another with its current choice; stops at the first failure.
+      function runAll() {
+        if (busy) return;
+        const queue = cards.filter(c => c.run && !c.done);
+        const next = () => { const c = queue.shift(); if (c) c.run(ok => { if (ok) next(); }); };
+        next();
+      }
+      function refresh() {
+        const ready = cards.filter(c => c.run).length, done = cards.filter(c => c.done).length;
+        document.getElementById('count').textContent = done + ' of ' + ready + ' done' + (cards.length > ready ? ' (' + (cards.length - ready) + ' cannot run)' : '');
+        document.getElementById('all').style.display = ready > 1 ? '' : 'none';
+      }
+      function setAll(collapse) { cards.forEach(c => c.root.classList.toggle('collapsed', collapse)); }
+      context.cards.forEach((grant, index) => { const c = build(grant); cards.push(c); if (index === 0 || context.cards.length === 1) c.root.classList.remove('collapsed'); });
+      refresh();
     </script>
   </body>
 </html>

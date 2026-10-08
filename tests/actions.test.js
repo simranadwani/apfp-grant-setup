@@ -46,6 +46,7 @@ test('Create Workspace button never writes an Action into the selected row (only
 function retrySetup(selectedRow, rowObject, tech) {
   const { p, processed } = setup();
   const stamps = [], dialogs = [];
+  p.override('intakeRowsMarked_', () => []);
   p.override('selectedDataRow_', () => selectedRow);
   p.override('rowObject_', () => rowObject);
   p.override('techByRequest_', () => tech);

@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round V — Retry/Reshare Workspace: one dialog, one card per marked grant
+
+**Date:** 2026-10-08 · `UiActions.js` (`uiRetryOrReshareWorkspace`, new `retryReshareCard_`), `RetryReshareDialog.html` (rewritten), `Config.js` (`RETRY_SHARING_ACTION`, round V). Rows with Action = **Retry Sharing** each get a collapsible card (same style as Correct Workspace Details): *same email* or *change the email* (with the "send the workspace email" option) per grant, a **Retry / Reshare** button per card, **Expand all / Collapse all**, and **Reshare all ready grants (same email)** which runs the cards one after another and stops at the first failure. A marked row without a workspace shows as a locked card with the reason. With no row marked, the selected row still gets its single card as before; with nothing usable, the marked rows are run as before. `submitRetryReshareGrantFy` is unchanged. Tests: `tests/email-change.test.js`, `tests/actions.test.js` (163 pass).
+
 ## Round U — an organisation's registered name is never overwritten
 
 **Date:** 2026-10-07 · `RegistryAndIDs.js` (`refreshOrganisationRegistryEntry_`, `resolveOrganisation_`, `updateGrantStatus_` call), `Config.js` (round U). Changing a Grant Status, or saving a grant, used to copy that grant's stored organisation name over the Organisation Registry name, so an older grant could revert a renamed organisation; a Returning Organisation match also re-wrote the typed name. The registered name is now kept exactly as it is; only a blank Record Status is filled in. Tests: `tests/org-name-kept.test.js` (162 pass).

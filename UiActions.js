@@ -23,41 +23,45 @@ function retryDialogBlocker_(selected, selectionError, row, tech) {
     return 'The selected row has no workspace folder yet. Use Create Workspace or Retry Workspace first.';
   return '';
 }
-function uiRetryOrReshareWorkspace() {
-  let selected = null, selectionError = '';
-  try { selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW); } catch (error) { selectionError = error.message; }
-  const row = selected ? rowObject_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, selected.rowNumber) : null;
-  const requestId = row ? clean_(row['Request ID']) : '', grantId = row ? clean_(row['Grant ID']) : '';
-  const tech = requestId ? techByRequest_(requestId) : null;
-  // The facts decide (Request ID, workspace folder or Registry Only), not the Workspace Status text, which is display-only.
-  // A row that already has a workspace always opens the dialog, even if its Action is set (the dialog runs that row).
-  const blocker = retryDialogBlocker_(selected, selectionError, row, tech);
-  if (blocker) {
-    showToast_(`${blocker} Running the rows already marked instead.`);
-    processRequestedActions();
-    return;
-  }
-  if (!row || !tech) {
-    processRequestedActions();
-    return;
-  }
-  if (!grantId) throw new Error('The selected row has no Request ID or Grant ID.');
-  if (key_(tech.record['Grant ID']) !== key_(grantId))
-    throw new Error('The selected row is not linked to one unambiguous Grant-FY record.');
-  const template = HtmlService.createTemplateFromFile('RetryReshareDialog');
-  template.context = {
-    rowNumber: selected.rowNumber,
-    requestId,
-    grantId,
-    organisationName: clean_(row['Organisation Name']),
-    financialYear: clean_(row['Financial Year']),
-    currentEmail: clean_(tech.record['Primary Contact Email']),
-    registryOnly: isRegistryOnlyRecord_(tech.record)
+// One card of the Retry/Reshare dialog. A row that cannot be shared yet is shown locked with the reason.
+function retryReshareCard_(rowNumber, row) {
+  const requestId = clean_(row['Request ID']), grantId = clean_(row['Grant ID']), tech = requestId ? techByRequest_(requestId) : null;
+  let reason = retryDialogBlocker_({ rowNumber }, '', row, tech);
+  if (!reason && !grantId) reason = 'The row has no Grant ID.';
+  if (!reason && key_(tech.record['Grant ID']) !== key_(grantId)) reason = 'The row is not linked to one unambiguous Grant-FY record.';
+  return {
+    rowNumber, requestId, grantId, organisationName: clean_(row['Organisation Name']), financialYear: clean_(row['Financial Year']),
+    currentEmail: tech ? clean_(tech.record['Primary Contact Email']) : '', registryOnly: tech ? isRegistryOnlyRecord_(tech.record) : false,
+    locked: !!reason, lockReason: reason
   };
-  SpreadsheetApp.getUi().showModalDialog(
-    template.evaluate().setWidth(470).setHeight(430),
-    'Retry / Reshare Grant-FY workspace'
-  );
+}
+function uiRetryOrReshareWorkspace() {
+  // Rows marked Retry Sharing each get a card; with none marked, the selected row (if it has a workspace) gets the only card.
+  const marked = intakeRowsMarked_(APFP.INTAKE.RETRY_SHARING_ACTION);
+  let cards;
+  if (marked.length) cards = marked.map(item => retryReshareCard_(item.rowNumber, item.object));
+  else {
+    let selected = null, selectionError = '';
+    try { selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW); } catch (error) { selectionError = error.message; }
+    const row = selected ? rowObject_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, selected.rowNumber) : null;
+    const requestId = row ? clean_(row['Request ID']) : '', tech = requestId ? techByRequest_(requestId) : null;
+    // The facts decide (Request ID, workspace folder or Registry Only), not the Workspace Status text, which is display-only.
+    const blocker = retryDialogBlocker_(selected, selectionError, row, tech);
+    if (blocker) {
+      showToast_(`${blocker} Running the rows already marked instead.`);
+      processRequestedActions();
+      return;
+    }
+    if (!selected || !row || !tech) {
+      processRequestedActions();
+      return;
+    }
+    cards = [retryReshareCard_(selected.rowNumber, row)];
+  }
+  const template = HtmlService.createTemplateFromFile('RetryReshareDialog');
+  // < is escaped so a name can never close the script tag.
+  template.contextJson = JSON.stringify({ cards }).replace(/</g, '\\u003c');
+  SpreadsheetApp.getUi().showModalDialog(template.evaluate().setWidth(760).setHeight(600), 'Retry / Reshare Grant-FY workspaces');
 }
 function submitRetryReshareGrantFy(payload) {
  const lock = LockService.getScriptLock();
