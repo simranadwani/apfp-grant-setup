@@ -38,7 +38,7 @@ function actorEmail_() {
  }
 }
 function id_(prefix) {
- return `${prefix}-${Utilities.formatDate(now_(), APFP.TIME_ZONE, 'yyyyMMddHHmmss')}-${Math.floor(1000 + Math.random() * 9000)}`;
+ return `${prefix}-${Utilities.formatDate(now_(), timeZone_(), 'yyyyMMddHHmmss')}-${Math.floor(1000 + Math.random() * 9000)}`;
 }
 function validEmail_(email) {
  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean_(email));
@@ -114,6 +114,12 @@ function headerMap_(sheet, headerRow) {
  HEADER_CACHE_[cacheKey] = map;
  return map;
 }
+// 1-based column of a Workspace Creator header, looked up in the live header row (adding or moving columns needs no code change).
+function intakeColumn_(headerName) {
+ const index = headerMap_(sheet_(APFP.SHEETS.INTAKE), APFP.INTAKE.HEADER_ROW)[key_(headerName)];
+ if (index == null) throw new Error(`${APFP.SHEETS.INTAKE} is missing the column "${headerName}".`);
+ return index + 1;
+}
 function invalidateDataCachesForSheet_(sheetName, rowNumber, patch, isAppend) {
  if (typeof updateRegistryCacheForWrite_ === 'function') updateRegistryCacheForWrite_(sheetName, rowNumber, patch, !!isAppend);
  else if (typeof invalidateRegistryCacheForSheet_ === 'function') invalidateRegistryCacheForSheet_(sheetName);
@@ -178,6 +184,13 @@ function adminTablesSnapshot_() {
    fields: 'sheets(properties(sheetId,title),tables(tableId,name,range,columnProperties(columnIndex,columnName,columnType,dataValidationRule)))'
  });
 }
+function timeZone_() {
+ try {
+   return clean_(config_().TIME_ZONE) || APFP.TIME_ZONE;
+ } catch (error) {
+   return APFP.TIME_ZONE;
+ }
+}
 function tableColumnProperties_(spec) {
  return spec.COLUMNS.map((column, index) => {
    const out = { columnIndex: index, columnName: column.NAME, columnType: column.TYPE };
@@ -195,12 +208,20 @@ function tableColumnProperties_(spec) {
  });
 }
 function extendAdminTableRows_(sheetName) {
- const spec = adminTableSpecBySheet_(sheetName), sheet = sheet_(sheetName);
+ const spec = adminTableSpecBySheet_(sheetName);
  if (!spec) return;
- const snapshot = adminTablesSnapshot_(), item = (snapshot.sheets || []).find(entry =>
-   entry.properties && entry.properties.title === sheetName),
-   tables = item && item.tables || [], table = tables.find(entry => entry.name === spec.TABLE_NAME);
- if (!table) throw new Error(`${sheetName} is missing Google Sheets Table ${spec.TABLE_NAME}.`);
+ extendTableToSheetEnd_(sheetName, spec.TABLE_NAME);
+}
+// Grows a native Google Sheets Table so it covers every row of its sheet (used after rows were inserted at the bottom).
+// Without tableName the sheet must contain exactly one Table.
+function extendTableToSheetEnd_(sheetName, tableName) {
+ const sheet = sheet_(sheetName), snapshot = adminTablesSnapshot_(),
+   item = (snapshot.sheets || []).find(entry => entry.properties && entry.properties.title === sheetName),
+   tables = item && item.tables || [],
+   table = tableName ? tables.find(entry => entry.name === tableName) : (tables.length === 1 ? tables[0] : null);
+ if (!table) throw new Error(tableName
+   ? `${sheetName} is missing Google Sheets Table ${tableName}.`
+   : `${sheetName} must contain exactly one Google Sheets Table to grow it; found ${tables.length}.`);
  const range = Object.assign({}, table.range || {});
  if ((range.endRowIndex || 0) >= sheet.getMaxRows()) return;
  range.endRowIndex = sheet.getMaxRows();
@@ -208,20 +229,51 @@ function extendAdminTableRows_(sheetName) {
    updateTable: { table: { tableId: table.tableId, range }, fields: 'range' }
  }] }, ss_().getId());
 }
-
+// Column positions of any sheet, found from its header row (first match wins, so repeated headers such as
+// "Upload Folder" are harmless). col(name) throws a clear error only for a column the caller actually uses.
+// Compares a live header row with the REQUIRED header names: order and extra columns are allowed.
+function headerGaps_(actualRow, requiredHeaders) {
+ const actual = (actualRow || []).map(clean_).filter(Boolean), actualKeys = new Set(actual.map(key_)),
+   requiredKeys = new Set(requiredHeaders.map(key_).concat([APFP.DISBURSEMENT_STATUS.PUSH_COLUMN, APFP.DISBURSEMENT_STATUS.SYNC_COLUMN].map(key_)));
+ return {
+   missing: requiredHeaders.filter(header => !actualKeys.has(key_(header))),
+   extra: actual.filter(header => !requiredKeys.has(key_(header)))
+ };
+}
+function columnsByHeader_(sheet, headerRow, label) {
+ const width = sheet.getLastColumn(), positions = {};
+ sheet.getRange(headerRow, 1, 1, width).getDisplayValues()[0].forEach((header, index) => {
+   const name = key_(header);
+   if (name && positions[name] == null) positions[name] = index;
+ });
+ return {
+   width,
+   has(name) { return positions[key_(name)] != null; },
+   col(name) {
+     if (positions[key_(name)] == null) throw new Error(`${label} is missing the column "${name}".`);
+     return positions[key_(name)];
+   },
+   // A row as an object keyed by lower-cased header ("financial year"), so callers never depend on column order.
+   record(row) {
+     const out = {};
+     Object.keys(positions).forEach(name => { out[name] = row[positions[name]]; });
+     return out;
+   }
+ };
+}
 function dropdownValuesFromTableColumn_(column) {
  const condition = column && column.dataValidationRule && column.dataValidationRule.condition;
  if (!condition || condition.type !== 'ONE_OF_LIST') return [];
  return (condition.values || []).map(item => clean_(item.userEnteredValue));
 }
-function checkAdminTables_(errors) {
+function checkAdminTables_(errors, warnings, specs) {
  try {
    const snapshot = adminTablesSnapshot_(), bySheet = {};
    (snapshot.sheets || []).forEach(item => {
      const title = item.properties && item.properties.title;
      if (title) bySheet[title] = item;
    });
-   APFP.ADMIN_TABLES.forEach(spec => {
+   (specs || APFP.ADMIN_TABLES).forEach(spec => {
      const item = bySheet[spec.SHEET_NAME];
      if (!item) { errors.push(`Missing Admin table sheet: ${spec.SHEET_NAME}`); return; }
      const table = (item.tables || []).find(t => t.name === spec.TABLE_NAME);
@@ -229,25 +281,28 @@ function checkAdminTables_(errors) {
      const range = table.range || {};
      const expectedStartRow = Number(spec.HEADER_ROW ||
        (spec.SHEET_NAME === APFP.SHEETS.INTAKE ? APFP.INTAKE.HEADER_ROW : 1)) - 1;
-     if ((range.startRowIndex || 0) !== expectedStartRow || range.startColumnIndex !== 0 || range.endColumnIndex !== spec.COLUMNS.length ||
+     // The Table must start in column A and be at least as wide as the required columns; extra columns are allowed.
+     if ((range.startRowIndex || 0) !== expectedStartRow || range.startColumnIndex !== 0 || range.endColumnIndex < spec.COLUMNS.length ||
          (range.endRowIndex || 0) < (spec.MIN_ROWS || 500))
        errors.push(`${spec.TABLE_NAME} range does not match the expected ${spec.SHEET_NAME} table structure.`);
-     const columns = table.columnProperties || [], expectedColumns = tableColumnProperties_(spec);
+     const columns = table.columnProperties || [], expectedColumns = tableColumnProperties_(spec), requiredNames = new Set(spec.COLUMNS.map(c => key_(c.NAME)).concat([APFP.DISBURSEMENT_STATUS.PUSH_COLUMN, APFP.DISBURSEMENT_STATUS.SYNC_COLUMN].map(key_)));
      spec.COLUMNS.forEach((expected, index) => {
-       const actual = columns.find(c => Number(c.columnIndex) === index) || columns[index];
-       if (!actual) { errors.push(`${spec.TABLE_NAME} is missing column ${index + 1} (${expected.NAME}).`); return; }
-       if (clean_(actual.columnName) !== expected.NAME)
-         errors.push(`${spec.TABLE_NAME} column ${index + 1} should be "${expected.NAME}"; found "${clean_(actual.columnName)}".`);
+       const actual = columns.find(c => key_(c.columnName) === key_(expected.NAME));
+       if (!actual) { errors.push(`${spec.TABLE_NAME} is missing required column "${expected.NAME}".`); return; }
+       if (expected.ANY_TYPE) return;
        const reportedType = clean_(actual.columnType).toUpperCase(),
          actualType = !reportedType || reportedType === 'UNSPECIFIED'
            ? 'COLUMN_TYPE_UNSPECIFIED' : reportedType;
        if (actualType !== expected.TYPE)
          errors.push(`${spec.TABLE_NAME}.${expected.NAME} should be type ${expected.TYPE}; found ${actualType}.`);
-       if (expected.TYPE === 'DROPDOWN') {
+       // FREE dropdowns (thematic areas, financial year, ...) are edited freely in the sheet: only the column type is checked.
+       if (expected.TYPE === 'DROPDOWN' && !expected.FREE) {
          const expectedValues = dropdownValuesFromTableColumn_(expectedColumns[index]),
            actualValues = dropdownValuesFromTableColumn_(actual);
-         if (expectedValues.length !== actualValues.length || expectedValues.some((v, i) => v !== actualValues[i]))
-           errors.push(`${spec.TABLE_NAME}.${expected.NAME} dropdown options do not match the configured schema.`);
+         // Order and blanks do not matter, and extra values are allowed: every value the code relies on must be present.
+         const have = new Set(actualValues.map(key_)), missingValues = expectedValues.filter(v => v && !have.has(key_(v)));
+         if (missingValues.length)
+           errors.push(`${spec.TABLE_NAME}.${expected.NAME} dropdown is missing option(s): ${missingValues.join(', ')}.`);
        }
      });
    });
@@ -286,26 +341,32 @@ function comparable_(value) {
  if (value === true || value === false) return String(value);
  return clean_(value);
 }
+// Splits an ascending list into runs of consecutive numbers (by keyFn, default identity),
+// so contiguous cells/rows can be written with one setValues call.
+function groupConsecutive_(items, keyFn) {
+ const key = keyFn || (x => x), groups = [];
+ items.forEach((item, i) => {
+   if (i > 0 && key(item) === key(items[i - 1]) + 1) groups[groups.length - 1].push(item);
+   else groups.push([item]);
+ });
+ return groups;
+}
 function writeChangedSegments_(sheet, rowNumber, changes) {
  if (!changes.length) return false;
  changes.sort((a, b) => a.index - b.index);
- const segments = [];
- let segment = [changes[0]];
- for (let i = 1; i < changes.length; i++) {
-   if (changes[i].index === segment[segment.length - 1].index + 1) segment.push(changes[i]);
-   else { segments.push(segment); segment = [changes[i]]; }
- }
- segments.push(segment);
- segments.forEach(items => {
+ groupConsecutive_(changes, change => change.index).forEach(items => {
    const start = items[0].index, values = items.map(item => item.value);
    sheet.getRange(rowNumber, start + 1, 1, values.length).setValues([values]);
  });
  return true;
 }
-function setByHeaders_(sheetName, headerRow, rowNumber, patch) {
+// knownRecord (optional): the row's current values by header, from the registry cache. When given, the row is not re-read from the sheet.
+function setByHeaders_(sheetName, headerRow, rowNumber, patch, knownRecord) {
  const headers = Object.keys(patch || {});
  if (!headers.length) return false;
- const sheet = sheet_(sheetName), map = headerMap_(sheet, headerRow), width = sheet.getLastColumn(),
+ const sheet = sheet_(sheetName), map = headerMap_(sheet, headerRow);
+ if (knownRecord) return setByHeadersKnown_(sheet, sheetName, map, rowNumber, patch, knownRecord);
+ const width = sheet.getLastColumn(),
    range = sheet.getRange(rowNumber, 1, 1, width), current = range.getValues()[0],
    needsFormulaRead = headers.some(header => typeof patch[header] === 'string' && patch[header].charAt(0) === '='),
    formulas = needsFormulaRead ? range.getFormulas()[0] : null, changes = [];
@@ -321,11 +382,27 @@ function setByHeaders_(sheetName, headerRow, rowNumber, patch) {
  if (changed) invalidateDataCachesForSheet_(sheetName, rowNumber, patch, false);
  return changed;
 }
+const ADMIN_TABLE_GROWTH_ROWS_ = 100;
+function setByHeadersKnown_(sheet, sheetName, map, rowNumber, patch, knownRecord) {
+ const known = {};
+ Object.keys(knownRecord).forEach(name => { known[key_(name)] = knownRecord[name]; });
+ const changes = [];
+ Object.keys(patch).forEach(header => {
+   const index = map[key_(header)];
+   if (index == null) throw new Error(`Header ${header} not found on ${sheetName}`);
+   const next = isAdminTableSheet_(sheetName) ? coerceAdminTableValue_(sheetName, header, patch[header]) : patch[header];
+   if (comparable_(known[key_(header)]) !== comparable_(next)) changes.push({ index, value: next });
+ });
+ const changed = writeChangedSegments_(sheet, rowNumber, changes);
+ if (changed) invalidateDataCachesForSheet_(sheetName, rowNumber, patch, false);
+ return changed;
+}
 function appendObject_(sheetName, headerRow, object) {
  const sheet = sheet_(sheetName), headers = sheet.getRange(headerRow, 1, 1, sheet.getLastColumn()).getDisplayValues()[0],
    target = Math.max(headerRow + 1, sheet.getLastRow() + 1);
  if (target > sheet.getMaxRows()) {
-   sheet.insertRowsAfter(sheet.getMaxRows(), Math.max(1, target - sheet.getMaxRows()));
+   // Grow with headroom: extending a native Table is a slow API call, so do it rarely, not on every new row.
+   sheet.insertRowsAfter(sheet.getMaxRows(), Math.max(1, target - sheet.getMaxRows()) + ADMIN_TABLE_GROWTH_ROWS_);
    if (isAdminTableSheet_(sheetName)) extendAdminTableRows_(sheetName);
  }
  if (isAdminTableSheet_(sheetName)) {
@@ -377,6 +454,22 @@ function getOrCreateUniqueChildFolder_(parentFolder, name) {
  DRIVE_FOLDER_CACHE_[cacheKey] = folder;
  return folder;
 }
+// Organisation folders are found by name when no URL is saved yet. Two different organisations whose names reduce to the
+// same folder name must never share a folder: if the plain-named folder already belongs to another organisation
+// (its URL is recorded on another organisation's Technical Registry row), this one gets "<name> (<Organisation ID>)".
+function organisationFolderFor_(fyFolder, savedUrl, baseName, organisationId) {
+ if (clean_(savedUrl)) return folderFromSavedOrCreate_(fyFolder, savedUrl, baseName);
+ const matches = findExactChildFolders_(fyFolder, baseName);
+ if (matches.length) {
+   const takenByAnother = matches.every(folder => technicalRegistryRows_().some(item => {
+     const recorded = clean_(item.record['Organisation Folder URL'] || item.record['Grant Workspace URL']);
+     if (!recorded || key_(item.record['Organisation ID']) === key_(organisationId)) return false;
+     try { return urlId_(recorded) === folder.getId(); } catch (error) { return false; }
+   }));
+   if (takenByAnother && organisationId) return getOrCreateUniqueChildFolder_(fyFolder, `${baseName} (${organisationId})`);
+ }
+ return getOrCreateUniqueChildFolder_(fyFolder, baseName);
+}
 function folderFromSavedOrCreate_(parentFolder, savedUrl, name) {
  if (clean_(savedUrl)) {
    const id = urlId_(savedUrl), cacheKey = `id|${id}`;
@@ -410,25 +503,13 @@ function hyperlinkFormula_(label, url) {
 function writeException_(data) {
  appendObject_(APFP.SHEETS.EXCEPTIONS, 2, {
    'Exception ID': id_('EXC'), 'Detected At': now_(), 'Exception Type': data.type || 'Automation Error',
-   'Severity': data.severity || 'Medium', 'Status': 'Open', 'Organisation ID': data.organisationId || '',
+   'Severity': data.severity || 'Medium', 'Status': data.status || 'Open', 'Organisation ID': data.organisationId || '',
    'Grant ID': data.grantId || '', 'Workspace ID': data.workspaceId || '',
    'Sheet or Folder': data.location || '', 'Field or File': data.field || '',
    'Issue Description': data.message || '',
    'Recommended Action': data.recommendedAction || 'Review the issue, correct it, and retry the relevant action.',
-   'Assigned To': '', 'Resolved At': '', 'Resolution Notes': '', 'Run ID': data.runId || ''
+   'Assigned To': '', 'Resolved At': data.status === 'Resolved' ? now_() : '', 'Resolution Notes': '', 'Run ID': data.runId || ''
  });
-}
-function recordAutomationStatus_(automation, status, detail) {
- try {
-   const sheet = ss_().getSheetByName(APFP.SHEETS.START);
-   if (!sheet || sheet.getLastRow() < 17) return;
-   const labels = sheet.getRange(17, 1, Math.min(4, sheet.getLastRow() - 16), 1).getDisplayValues().flat(),
-     index = labels.findIndex(label => key_(label) === key_(automation));
-   if (index < 0) return;
-   sheet.getRange(17 + index, 2, 1, 2).setValues([[now_(), `${clean_(status)}${clean_(detail) ? ` — ${clean_(detail)}` : ''}`]]);
- } catch (error) {
-   console.warn(`Automation status write skipped: ${error.message}`);
- }
 }
 function friendlyErrorMessage_(code, error) {
  const message = clean_(error && error.message ? error.message : error), errorKey = key_(code);

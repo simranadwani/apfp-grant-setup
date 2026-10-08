@@ -101,10 +101,8 @@ function resolveOrganisation_(request, existingTechRecord) {
   if (request.organisationType === 'Returning Organisation') {
     if (matches.length !== 1)
       throw new Error(`Returning Organisation must exactly match one Organisation Registry row. Found ${matches.length}.`);
-    const row = matches[0], patch = {
-      'Organisation Name': request.organisationName,
-      'Record Status': APFP.ACTIVE
-    };
+    // The registered name is kept exactly as it is (a Returning Organisation only has to match it); only the status is refreshed.
+    const row = matches[0], patch = { 'Record Status': APFP.ACTIVE };
     setByHeaders_(APFP.SHEETS.ORGANISATIONS, 1, row.rowNumber, patch);
     return Object.assign({}, row.record, patch);
   }
@@ -118,52 +116,13 @@ function resolveOrganisation_(request, existingTechRecord) {
   appendObject_(APFP.SHEETS.ORGANISATIONS, 1, patch);
   return patch;
 }
-function normaliseOrganisationName_(value) {
- return clean_(value).toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
-}
-function levenshtein_(a, b) {
- a = normaliseOrganisationName_(a);
- b = normaliseOrganisationName_(b);
- if (a === b) return 0;
- if (!a.length) return b.length;
- if (!b.length) return a.length;
- const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
- for (let i = 1; i <= a.length; i++) {
-   const curr = [i];
-   for (let j = 1; j <= b.length; j++)
-     curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-   for (let j = 0; j < curr.length; j++) prev[j] = curr[j];
- }
- return prev[b.length];
-}
-function likelySameOrganisationName_(a, b) {
- const x = normaliseOrganisationName_(a), y = normaliseOrganisationName_(b);
- if (!x || !y) return false;
- if (x === y) return true;
- const longer = Math.max(x.length, y.length), shorter = Math.min(x.length, y.length);
- if ((x.includes(y) || y.includes(x)) && shorter >= 8 && shorter / longer >= 0.72) return true;
- const distance = levenshtein_(x, y);
- if (longer >= 8 && distance <= Math.max(2, Math.floor(longer * 0.08))) return true;
- const ax = new Set(x.split(' ')), ay = new Set(y.split(' ')),
-   intersection = [...ax].filter(t => ay.has(t)).length, union = new Set([...ax, ...ay]).size;
- return union >= 2 && intersection / union >= 0.8;
-}
-function likelyOrganisationMatches_(organisationName) {
-  if (!clean_(organisationName)) return [];
-  return organisationRegistryRows_().filter(item => {
-    const record = item.record;
-    return key_(record['Record Status']) !== 'inactive' &&
-      likelySameOrganisationName_(organisationName, record['Organisation Name']);
-  });
-}
-function refreshOrganisationRegistryEntry_(organisationId, organisationName) {
+// An organisation's registered name is never changed by saving a grant or changing a Grant Status (an older grant's stored name
+// must not overwrite it). Only a blank Record Status is filled in.
+function refreshOrganisationRegistryEntry_(organisationId) {
   const existing = organisationById_(organisationId);
   if (!existing) return;
-  const patch = {};
-  if (organisationName && comparable_(existing.record['Organisation Name']) !== comparable_(organisationName))
-    patch['Organisation Name'] = organisationName;
-  if (!clean_(existing.record['Record Status'])) patch['Record Status'] = APFP.ACTIVE;
-  if (Object.keys(patch).length) setByHeaders_(APFP.SHEETS.ORGANISATIONS, 1, existing.rowNumber, patch);
+  if (!clean_(existing.record['Record Status']))
+    setByHeaders_(APFP.SHEETS.ORGANISATIONS, 1, existing.rowNumber, { 'Record Status': APFP.ACTIVE });
 }
 function organisationNameOptions_() {
  return [...new Set(organisationRegistryRows_()
@@ -172,17 +131,21 @@ function organisationNameOptions_() {
    .filter(Boolean))]
    .sort((a, b) => key_(a).localeCompare(key_(b)));
 }
+// Keeps the Organisation Name dropdown live on sheet open. The registry list (warning only) is applied to rows that are Returning
+// Organisation or have no type yet; New Organisation rows get NO rule, because a new name is by definition not in the registry
+// and would show a red "Input must fall within specified range" flag.
 function applyWorkspaceOrganisationDropdown_() {
-  const intake = sheet_(APFP.SHEETS.INTAKE), organisations = sheet_(APFP.SHEETS.ORGANISATIONS);
-  const source = organisations.getRange(2, 2, Math.max(1, organisations.getMaxRows() - 1), 1);
-  const target = intake.getRange(
-    APFP.INTAKE.START_ROW, APFP.INTAKE.ORGANISATION_NAME_COLUMN,
-    APFP.INTAKE.MAX_ROW - APFP.INTAKE.START_ROW + 1, 1
-  );
-  target.setDataValidation(
-    SpreadsheetApp.newDataValidation().requireValueInRange(source, true).setAllowInvalid(true).build()
-  ).clearNote();
-  return target.getNumRows();
+  const intake = sheet_(APFP.SHEETS.INTAKE), organisations = sheet_(APFP.SHEETS.ORGANISATIONS),
+    first = APFP.INTAKE.START_ROW, count = APFP.INTAKE.MAX_ROW - APFP.INTAKE.START_ROW + 1,
+    nameColumn = intakeColumn_('Organisation Name'),
+    source = organisations.getRange(2, 2, Math.max(1, organisations.getMaxRows() - 1), 1),
+    types = intake.getRange(first, intakeColumn_('Organisation Type'), count, 1).getDisplayValues().map(row => key_(row[0])),
+    rule = SpreadsheetApp.newDataValidation().requireValueInRange(source, true).setAllowInvalid(true).build();
+  const withRule = [], withoutRule = [];
+  types.forEach((type, i) => (type === 'new organisation' ? withoutRule : withRule).push(first + i));
+  groupConsecutive_(withRule).forEach(run => intake.getRange(run[0], nameColumn, run.length, 1).setDataValidation(rule));
+  groupConsecutive_(withoutRule).forEach(run => intake.getRange(run[0], nameColumn, run.length, 1).clearDataValidations());
+  return count;
 }
 function returningOrganisationValidation_(options) {
  if (!options.length) return null;
@@ -194,8 +157,8 @@ function returningOrganisationValidation_(options) {
 function applyOrganisationValidationForRow_(rowNumber) {
   if (rowNumber < APFP.INTAKE.START_ROW || rowNumber > APFP.INTAKE.MAX_ROW) return;
   const intake = sheet_(APFP.SHEETS.INTAKE);
-  const type = clean_(intake.getRange(rowNumber, APFP.INTAKE.ORGANISATION_TYPE_COLUMN).getDisplayValue());
-  const cell = intake.getRange(rowNumber, APFP.INTAKE.ORGANISATION_NAME_COLUMN);
+  const type = clean_(intake.getRange(rowNumber, intakeColumn_('Organisation Type')).getDisplayValue());
+  const cell = intake.getRange(rowNumber, intakeColumn_('Organisation Name'));
   const options = type === 'Returning Organisation' ? organisationNameOptions_() : [];
   const rule = returningOrganisationValidation_(options);
   rule ? cell.setDataValidation(rule) : cell.clearDataValidations();
@@ -225,12 +188,12 @@ function prefillReturningGrantClassificationForRow_(rowNumber) {
   if (rowNumber < APFP.INTAKE.START_ROW || rowNumber > APFP.INTAKE.MAX_ROW) return false;
   const intake = sheet_(APFP.SHEETS.INTAKE);
   const type = clean_(
-    intake.getRange(rowNumber, APFP.INTAKE.ORGANISATION_TYPE_COLUMN).getDisplayValue()
+    intake.getRange(rowNumber, intakeColumn_('Organisation Type')).getDisplayValue()
   );
   if (type !== 'Returning Organisation') return false;
 
   const organisationName = clean_(
-    intake.getRange(rowNumber, APFP.INTAKE.ORGANISATION_NAME_COLUMN).getDisplayValue()
+    intake.getRange(rowNumber, intakeColumn_('Organisation Name')).getDisplayValue()
   );
   const matches = activeOrganisationRecordsByName_(organisationName);
   if (matches.length !== 1) return false;
@@ -241,11 +204,11 @@ function prefillReturningGrantClassificationForRow_(rowNumber) {
   );
   if (!latest) return false;
 
-  intake.getRange(rowNumber, APFP.INTAKE.THEMATIC_AREA_COLUMN, 1, 3).setValues([[
-    clean_(latest.record['Thematic Area']),
-    clean_(latest.record['Thematic Sub-area']),
-    clean_(latest.record['Proximity to Children / Beneficiary'])
-  ]]);
+  setByHeaders_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, rowNumber, {
+    'Thematic Area': clean_(latest.record['Thematic Area']),
+    'Thematic Sub-area': clean_(latest.record['Thematic Sub-area']),
+    'Proximity to Children / Beneficiary': clean_(latest.record['Proximity to Children / Beneficiary'])
+  });
   return true;
 }
 
@@ -299,7 +262,7 @@ function correctedWorkspaceWorkbookTargets_(techRecord) {
     const setupSheet = setup.getSheetByName(clean_(titleField['Sheet Name']));
     if (!setupSheet)
       throw new Error(`Generated Setup workbook is missing ${titleField['Sheet Name']}.`);
-    targets.push(setupSheet.getRange(configValueRange_(titleField)));
+    targets.push({ label: 'Setup workbook', range: setupSheet.getRange(configValueRange_(titleField)) });
   }
 
   const outcomeId = clean_(techRecord['Outcome Progress Workbook URL'])
@@ -308,66 +271,99 @@ function correctedWorkspaceWorkbookTargets_(techRecord) {
     const outcome = openSpreadsheetCached_(outcomeId);
     const outcomeSheet = outcome.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.OUTCOMES);
     if (!outcomeSheet) throw new Error('Generated Outcome workbook is missing Outcome Progress.');
-    targets.push(outcomeSheet.getRange(APFP.PREFLIGHT_SCHEMA.OUTCOME_TEMPLATE.GRANT_TITLE_CELL));
+    targets.push({ label: 'Outcome workbook', range: outcomeSheet.getRange(APFP.PREFLIGHT_SCHEMA.OUTCOME_TEMPLATE.GRANT_TITLE_CELL) });
   }
   return targets;
 }
 
-function correctWorkspaceDetailsForRow_(rowNumber) {
-  const row = rowObject_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, rowNumber);
-  const grantId = clean_(row['Grant ID']);
-  const requestId = clean_(row['Request ID']);
+// Applies ONLY the fields in `changes` (title, startDate, endDate, amount, thematicArea, subArea, proximity,
+// organisationType) to one created grant: Grant Registry, Technical Registry, central references and the Workspace Creator row.
+// Values already equal to the stored ones write nothing. Returns { grantId, projectTitle, applied: [labels], warning }.
+function applyGrantCorrections_(grantId, requestId, rowNumber, changes) {
   if (!grantId || !requestId) throw new Error('The selected row has no Grant ID or Request ID.');
-
-  const grant = grantById_(grantId);
-  const tech = techByRequest_(requestId);
+  const grant = grantById_(grantId), tech = techByRequest_(requestId);
   if (!grant || !tech || key_(tech.record['Grant ID']) !== key_(grantId))
     throw new Error('The selected row is not linked to one unambiguous created grant.');
   if (!['workspace created', 'registry only'].includes(key_(tech.record['Workspace Status'])))
-    throw new Error('Correct Workspace Details is available only after workspace or registry creation.');
+    throw new Error('A grant can be corrected only after its workspace or registry entry was created.');
+  const has = name => Object.prototype.hasOwnProperty.call(changes || {}, name);
+  const g = grant.record, t = tech.record;
+  const sameDate = (a, b) => { const x = dateValue_(a), y = dateValue_(b); return !!x && !!y && x.getTime() === y.getTime(); };
+  const grantPatch = {}, techPatch = {}, rowPatch = {}, applied = [];
+  let titleChanged = false;
 
-  const projectTitle = clean_(row['Grant Title']);
-  const amountApproved = parseAdminTableNumber_(row['Amount Approved']);
-  if (!projectTitle) throw new Error('Grant Title cannot be blank.');
-  if (amountApproved === '' || amountApproved == null || amountApproved < 0)
-    throw new Error('Amount Approved must be a non-negative amount.');
-
-  const patch = {
-    'Project Title': projectTitle,
-    'Thematic Area': clean_(row['Thematic Area']),
-    'Thematic Sub-area': clean_(row['Thematic Sub-area']),
-    'Proximity to Children / Beneficiary': clean_(row['Proximity to Children / Beneficiary']),
-    'Amount Approved': amountApproved,
-    'Last Updated At': now_()
-  };
-  const workbookTargets = correctedWorkspaceWorkbookTargets_(tech.record);
-
-  setByHeaders_(APFP.SHEETS.GRANTS, 1, grant.rowNumber, patch);
-  saveTech_(requestId, {
-    'Project Title': projectTitle,
-    'Amount Approved': amountApproved,
-    'Last Error Code': '',
-    'Last Error Message': ''
+  if (has('title')) {
+    const title = clean_(changes.title);
+    if (!title) throw new Error('Grant Title cannot be blank.');
+    if (title !== clean_(g['Project Title'])) {
+      grantPatch['Project Title'] = title; techPatch['Project Title'] = title; rowPatch['Grant Title'] = title;
+      titleChanged = true; applied.push('Grant Title');
+    }
+  }
+  if (has('amount')) {
+    const amount = parseAdminTableNumber_(changes.amount);
+    if (amount === '' || amount == null || amount < 0) throw new Error('Amount Approved must be a non-negative amount.');
+    if (Number(g['Amount Approved']) !== amount) {
+      grantPatch['Amount Approved'] = amount; techPatch['Amount Approved'] = amount; rowPatch['Amount Approved'] = amount;
+      applied.push('Amount Approved');
+    }
+  }
+  [['thematicArea', 'Thematic Area', 'Thematic Area'], ['subArea', 'Thematic Sub-area', 'Thematic Sub-area'],
+   ['proximity', 'Proximity to Children / Beneficiary', 'Proximity']].forEach(([key, header, label]) => {
+    if (!has(key)) return;
+    const value = clean_(changes[key]);
+    if (value !== clean_(g[header])) { grantPatch[header] = value; rowPatch[header] = value; applied.push(label); }
   });
-  workbookTargets.forEach(range => range.setValue(projectTitle));
-  updateGrantTitleReferences_(grantId, projectTitle);
-  ensureOrganisationMaturityRowsForGrant_(grantId);
-  setIntake_(rowNumber, {
-    'Grant Title': projectTitle,
-    'Thematic Area': patch['Thematic Area'],
-    'Thematic Sub-area': patch['Thematic Sub-area'],
-    'Proximity to Children / Beneficiary': patch['Proximity to Children / Beneficiary'],
-    'Amount Approved': amountApproved,
-    'Last Updated': now_()
-  });
+  if (has('organisationType')) {
+    const type = clean_(changes.organisationType);
+    if (!['New Organisation', 'Returning Organisation'].includes(type))
+      throw new Error('Organisation Type must be New Organisation or Returning Organisation.');
+    if (type !== clean_(t['Organisation Type'])) { techPatch['Organisation Type'] = type; rowPatch['Organisation Type'] = type; applied.push('Organisation Type'); }
+  }
+  if (has('startDate') || has('endDate')) {
+    const start = has('startDate') ? dateValue_(changes.startDate) : dateValue_(t['Grant Start Date'] || g['Grant Start Date']),
+      end = has('endDate') ? dateValue_(changes.endDate) : dateValue_(t['Grant End Date'] || g['Grant End Date']);
+    if (!validDateValue_(start)) throw new Error('Grant Start Date is required and must be a valid date.');
+    if (!validDateValue_(end)) throw new Error('Grant End Date is required and must be a valid date.');
+    if (end < start) throw new Error('Grant End Date cannot be before Grant Start Date.');
+    const grantFy = clean_(t['Financial Year'] || g['Financial Year']);
+    if (key_(financialYearFromDate_(start)) !== key_(grantFy))
+      throw new Error(`The Grant Start Date must stay inside financial year ${grantFy}. A date in another financial year needs a new workspace.`);
+    const startChanged = !sameDate(start, t['Grant Start Date']) || !sameDate(start, g['Grant Start Date']),
+      endChanged = !sameDate(end, t['Grant End Date']) || !sameDate(end, g['Grant End Date']);
+    if (startChanged || endChanged) {
+      const quarter = grantQuarterFromDate_(start);
+      [grantPatch, techPatch].forEach(patch => { patch['Grant Start Date'] = start; patch['Grant End Date'] = end; patch['Grant Start Quarter'] = quarter; });
+      rowPatch['Grant Start Date'] = start; rowPatch['Grant End Date'] = end;
+      if (startChanged) applied.push('Grant Start Date');
+      if (endChanged) applied.push('Grant End Date');
+    }
+  }
+  if (!applied.length) return { grantId, projectTitle: clean_(g['Project Title']), applied, warning: '' };
 
+  const workbookTargets = titleChanged ? correctedWorkspaceWorkbookTargets_(t) : [];
+  const projectTitle = titleChanged ? grantPatch['Project Title'] : clean_(g['Project Title']);
+  setByHeaders_(APFP.SHEETS.GRANTS, 1, grant.rowNumber, Object.assign({}, grantPatch, { 'Last Updated At': now_() }));
+  saveTech_(requestId, Object.assign({ 'Last Error Code': '', 'Last Error Message': '' }, techPatch));
+  if (titleChanged) {
+    updateGrantTitleReferences_(grantId, projectTitle);
+    ensureOrganisationMaturityRowsForGrant_(grantId);
+  }
+  if (rowNumber) setIntake_(rowNumber, Object.assign({}, rowPatch, { 'Last Updated': now_() }));
+
+  // Workbook title cells are written LAST and only when they differ: they are protected (owner only), and a correction that
+  // does not change the title must not touch the grantee workbooks. A protected cell becomes a warning, never a half-finished correction.
+  const warnings = [];
+  workbookTargets.forEach(target => {
+    try {
+      if (clean_(target.range.getDisplayValue()) !== projectTitle) target.range.setValue(projectTitle);
+    } catch (error) {
+      warnings.push(`The Grant Title in the ${target.label} could not be updated because the cell is protected (${error.message}). ` +
+        'Ask the workbook owner to update it, then correct the title again.');
+    }
+  });
   SpreadsheetApp.flush();
-  recordAutomationStatus_(
-    'Workspace Detail Correction',
-    'Success',
-    `Updated approved amount and grant classification for ${grantId}`
-  );
-  return { grantId: grantId, projectTitle: projectTitle };
+  return { grantId, projectTitle, applied, warning: warnings.join(' ') };
 }
 
 function upsertGrantShell_(grantId, organisationId, request, setupUrl, outcomeWorkbookUrl) {
@@ -394,7 +390,7 @@ function upsertGrantShell_(grantId, organisationId, request, setupUrl, outcomeWo
  const rowNumber = existing
    ? (setByHeaders_(APFP.SHEETS.GRANTS, 1, existing.rowNumber, patch), existing.rowNumber)
    : appendObject_(APFP.SHEETS.GRANTS, 1, patch);
- refreshOrganisationRegistryEntry_(organisationId, request.organisationName);
+ refreshOrganisationRegistryEntry_(organisationId);
  ensureOrganisationMaturityRowsForGrant_(grantId);
  return rowNumber;
 }
@@ -437,11 +433,17 @@ function ensureOrganisationMaturityRowsForGrant_(grantId) {
  const grant = grantById_(grantId);
  if (!grant) throw new Error(`Cannot create maturity rows because Grant ID was not found: ${grantId}`);
  const sheet = sheet_(APFP.SHEETS.MATURITY), headerRow = APFP.MATURITY.HEADER_ROW,
-   headers = APFP.MATURITY.HEADERS, map = headerMap_(sheet, headerRow),
+   required = APFP.MATURITY.HEADERS, width = sheet.getLastColumn(),
+   headers = sheet.getRange(headerRow, 1, 1, width).getDisplayValues()[0].map(clean_),
    catalogue = maturityCatalogue_(), existing = {}, lastRow = sheet.getLastRow();
+ // Columns are found by header name, so an added or moved column never garbles rows.
+ required.forEach(header => {
+   if (!headers.some(name => key_(name) === key_(header)))
+     throw new Error(`${APFP.SHEETS.MATURITY} is missing the column "${header}".`);
+ });
  if (lastRow >= APFP.MATURITY.START_ROW) {
    const values = sheet.getRange(APFP.MATURITY.START_ROW, 1,
-     lastRow - APFP.MATURITY.START_ROW + 1, headers.length).getValues();
+     lastRow - APFP.MATURITY.START_ROW + 1, width).getValues();
    values.forEach((row, offset) => {
      const record = rowObjectFromArrays_(headers, row);
      if (key_(record['Grant ID']) !== key_(grantId)) return;
@@ -461,19 +463,19 @@ function ensureOrganisationMaturityRowsForGrant_(grantId) {
  catalogue.forEach(item => {
    const found = existing[key_(item.indicator)],
      patch = Object.assign({}, base, { 'Aspect': item.aspect, 'Indicator': item.indicator });
-   if (found) setByHeaders_(APFP.SHEETS.MATURITY, headerRow, found.rowNumber, patch);
+   if (found) { if (patchDiffersFromRecord_(found.record, patch)) setByHeaders_(APFP.SHEETS.MATURITY, headerRow, found.rowNumber, patch); }
    else missing.push(patch);
  });
  if (!missing.length) return 0;
  const startRow = Math.max(APFP.MATURITY.START_ROW, sheet.getLastRow() + 1),
    requiredLastRow = startRow + missing.length - 1;
  if (requiredLastRow > sheet.getMaxRows()) {
-   sheet.insertRowsAfter(sheet.getMaxRows(), requiredLastRow - sheet.getMaxRows());
+   sheet.insertRowsAfter(sheet.getMaxRows(), requiredLastRow - sheet.getMaxRows() + ADMIN_TABLE_GROWTH_ROWS_);
    extendAdminTableRows_(APFP.SHEETS.MATURITY);
  }
  const output = missing.map(record => headers.map(header =>
-   Object.prototype.hasOwnProperty.call(record, header) ? record[header] : ''));
- sheet.getRange(startRow, 1, output.length, headers.length)
+   header && Object.prototype.hasOwnProperty.call(record, header) ? record[header] : ''));
+ sheet.getRange(startRow, 1, output.length, width)
    .setValues(output).setFontFamily(APFP.FONT_FAMILY);
  return missing.length;
 }
@@ -516,7 +518,8 @@ function saveTech_(requestId, patch) {
  if (!patchDiffersFromRecord_(found.record, base)) return found;
  const payload = Object.assign({}, base, { 'Last Updated At': now_() }),
    record = Object.assign({}, found.record, payload);
- setByHeaders_(APFP.SHEETS.TECHNICAL, 2, found.rowNumber, payload);
+ // The cached record is current (every write in this run updates it), so the row is not re-read from the sheet.
+ setByHeaders_(APFP.SHEETS.TECHNICAL, 2, found.rowNumber, payload, found.record);
  return { rowNumber: found.rowNumber, record };
 }
 function updateGrantStatus_(grantId, status) {
@@ -525,5 +528,5 @@ function updateGrantStatus_(grantId, status) {
  if (!grant) throw new Error(`Grant ID not found: ${grantId}`);
  if (key_(grant.record['Grant Status']) !== key_(status))
    setByHeaders_(APFP.SHEETS.GRANTS, 1, grant.rowNumber, { 'Grant Status': status, 'Last Updated At': now_() });
- refreshOrganisationRegistryEntry_(grant.record['Organisation ID'], grant.record['Organisation Name']);
+ refreshOrganisationRegistryEntry_(grant.record['Organisation ID']);
 }

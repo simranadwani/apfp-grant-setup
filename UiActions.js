@@ -1,0 +1,249 @@
+// UiActions.gs — thin, sheet-aware UI actions (button entry points) and dependent disbursement choices.
+function selectedDataRow_(sheetName, headerRow) {
+  const sheet = ss_().getActiveSheet();
+  const range = sheet && sheet.getActiveRange();
+  if (!sheet || sheet.getName() !== sheetName || !range || range.getRow() <= headerRow) {
+    throw new Error(`Select one data row in ${sheetName}, then run the action again.`);
+  }
+  if (range.getNumRows() !== 1) throw new Error('Select only one data row.');
+  return { sheet: sheet, rowNumber: range.getRow() };
+}
+function showToast_(message) {
+  SpreadsheetApp.getActive().toast(message, 'APFP', 6);
+}
+// Workspace buttons never write an Action. They run the rows a person (or the system, after a failure) has already marked.
+// Retry / Reshare additionally opens its dialog for the selected row when that row already has a workspace.
+function uiCreateWorkspace() { processRequestedActions(); }
+// Why the Retry / Reshare dialog was not opened, so the operator is never left guessing (empty = nothing worth saying).
+function retryDialogBlocker_(selected, selectionError, row, tech) {
+  if (!selected) return /only one/i.test(selectionError) ? 'More than one row is selected. Select a single row.' : '';
+  if (!row || !clean_(row['Request ID'])) return 'The selected row has no Request ID yet, so it has no workspace to share.';
+  if (!tech) return 'The selected row has no Technical Registry record.';
+  if (!clean_(tech.record['Organisation Folder URL'] || tech.record['Grant Workspace URL']) && !isRegistryOnlyRecord_(tech.record))
+    return 'The selected row has no workspace folder yet. Use Create Workspace or Retry Workspace first.';
+  return '';
+}
+function uiRetryOrReshareWorkspace() {
+  let selected = null, selectionError = '';
+  try { selected = selectedDataRow_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW); } catch (error) { selectionError = error.message; }
+  const row = selected ? rowObject_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, selected.rowNumber) : null;
+  const requestId = row ? clean_(row['Request ID']) : '', grantId = row ? clean_(row['Grant ID']) : '';
+  const tech = requestId ? techByRequest_(requestId) : null;
+  // The facts decide (Request ID, workspace folder or Registry Only), not the Workspace Status text, which is display-only.
+  // A row that already has a workspace always opens the dialog, even if its Action is set (the dialog runs that row).
+  const blocker = retryDialogBlocker_(selected, selectionError, row, tech);
+  if (blocker) {
+    showToast_(`${blocker} Running the rows already marked instead.`);
+    processRequestedActions();
+    return;
+  }
+  if (!row || !tech) {
+    processRequestedActions();
+    return;
+  }
+  if (!grantId) throw new Error('The selected row has no Request ID or Grant ID.');
+  if (key_(tech.record['Grant ID']) !== key_(grantId))
+    throw new Error('The selected row is not linked to one unambiguous Grant-FY record.');
+  const template = HtmlService.createTemplateFromFile('RetryReshareDialog');
+  template.context = {
+    rowNumber: selected.rowNumber,
+    requestId,
+    grantId,
+    organisationName: clean_(row['Organisation Name']),
+    financialYear: clean_(row['Financial Year']),
+    currentEmail: clean_(tech.record['Primary Contact Email']),
+    registryOnly: isRegistryOnlyRecord_(tech.record)
+  };
+  SpreadsheetApp.getUi().showModalDialog(
+    template.evaluate().setWidth(470).setHeight(430),
+    'Retry / Reshare Grant-FY workspace'
+  );
+}
+function submitRetryReshareGrantFy(payload) {
+ const lock = LockService.getScriptLock();
+ if (!lock.tryLock(30000)) throw new Error('Another APFP automation run is active. Try again shortly.');
+ try {
+   const rowNumber = Number(payload && payload.rowNumber);
+   const object = rowObject_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, rowNumber);
+   if (clean_(object['Request ID']) !== clean_(payload.requestId) ||
+       clean_(object['Grant ID']) !== clean_(payload.grantId))
+     throw new Error('The selected row changed while the dialog was open. Close it and try again.');
+   const row = intakeRowsWithActions_().find(item => item.rowNumber === rowNumber) || {
+     rowNumber,
+     requestId: clean_(object['Request ID']), grantId: clean_(object['Grant ID']),
+     granteeEmail: clean_(object['Primary Contact Email'])
+   };
+   const tech = techByRequest_(row.requestId);
+   if (!tech || key_(tech.record['Grant ID']) !== key_(row.grantId))
+     throw new Error('The selected Grant-FY record could not be verified.');
+   const mode = key_(payload && payload.mode);
+   const email = mode === 'change' ? clean_(payload.newEmail) : clean_(tech.record['Primary Contact Email']);
+   if (mode !== 'change' && isRegistryOnlyRecord_(tech.record))
+     throw new Error('This is a Registry Only grant: there is no workspace to reshare. Choose "Change the email" to update the contact.');
+   const ok = mode === 'change'
+     ? transferGrantFyPrimaryEmail_(row, email, config_(), { notify: !(payload && payload.notify === false) })
+     : retrySharingForIntakeRow_(row, config_(), { email });
+   if (!ok) throw new Error(row.failureReason || 'Retry/reshare needs attention. Review the selected row and try again.');
+   const done = isRegistryOnlyRecord_(tech.record)
+     ? `Primary Contact Email for Grant-FY ${row.grantId} is now ${email}.`
+     : `Grant-FY ${row.grantId} was shared successfully with ${email}.`;
+   return row.warning ? `${done}\n\nNeeds a follow-up: ${row.warning}` : done;
+ } finally {
+   lock.releaseLock();
+ }
+}
+function uiLockAndMigrateApprovedSetups() {
+  updateApprovedSetupData();
+}
+function uiReopenSetupForChanges() {
+  reopenSelectedSetup();
+}
+// Backward-compatible aliases: keep until the sheet buttons are confirmed not to use them.
+function uiRefreshOutcomeProgress() {
+  const count = refreshOutcomeProgressTracker_();
+  showToast_(`${count} outcome rows refreshed.${refreshNote_()}`);
+  return count;
+}
+function uiRefreshSupport() {
+  const count = refreshSupportTracker_();
+  showToast_(`${count} support rows refreshed.${refreshNote_()}`);
+  return count;
+}
+// Reads every Active workbook again (forgets which ones were unchanged) — use after fixing a workbook by hand or restoring central rows.
+function uiRefreshReportingForce() {
+  forgetReadMarks_();
+  const outcomes = refreshOutcomeProgressTracker_(), support = refreshSupportTracker_(), decisions = refreshDecisionTracker_();
+  showToast_(`Full re-read done: ${outcomes} outcome, ${support} support, ${decisions} decision row(s).${refreshNote_()}`);
+  return { outcomes, support, decisions };
+}
+function uiRefreshDecisions() {
+  const count = refreshDecisionTracker_();
+  showToast_(`${count} decision rows refreshed.${refreshNote_()}`);
+  return count;
+}
+function uiRefreshDecisionDocuments() {
+  const count = refreshDecisionDocumentLinks_();
+  showToast_(`${count} Decision Tracker row(s) refreshed with Annual Report, Fund Utilisation and 10BE links.`);
+  return count;
+}
+function uiPushGrantStatus() {
+  const headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DECISIONS;
+  const selected = selectedDataRow_(APFP.SHEETS.DECISIONS, headerRow);
+  const row = rowObject_(APFP.SHEETS.DECISIONS, headerRow, selected.rowNumber);
+  const grantId = clean_(row['Grant ID']);
+  if (!grantId) throw new Error('The selected Decision Tracker row has no Grant ID.');
+  if (!clean_(row['Decision Type']) || !clean_(row['Decision Status']))
+    throw new Error('Complete both Decision Type and Decision Status before pushing Grant Status.');
+  updateGrantStatus_(grantId, 'Complete');
+  findRows_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, 'Grant ID', grantId).forEach(rowNumber =>
+    setByHeaders_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, rowNumber, {
+      'Grant Status': 'Complete', 'Last Updated': now_()
+    }));
+  refreshWorkspaceCreatorRow_(grantId);
+  showToast_(`Grant ${grantId} marked Complete in Workspace Creator and Grant Registry.`);
+}
+function disbursementOrganisationsForFy_(fy) {
+  const wanted = key_(disbCanonicalFy_(fy));
+  if (!wanted) return [];
+  const seen = {};
+  return availableDisbursementGrantRecords_()
+    .filter(record => key_(disbCanonicalFy_(record['Financial Year'])) === wanted)
+    .map(record => clean_(record['Organisation Name']))
+    .filter(name => name && !seen[key_(name)] && (seen[key_(name)] = true))
+    .sort((a, b) => a.localeCompare(b));
+}
+function refreshDisbursementOrganisationOptionsForRow_(sheet, rowNumber, map) {
+  const fy = sheet.getRange(rowNumber, disbColumn_(map, 'Financial Year')).getDisplayValue();
+  const organisationCell = sheet.getRange(rowNumber, disbColumn_(map, 'Organisation Name'));
+  const options = disbursementOrganisationsForFy_(fy);
+  organisationCell.clearNote();
+  if (!options.length) {
+    organisationCell.clearDataValidations();
+    return 0;
+  }
+  const current = clean_(organisationCell.getValue());
+  organisationCell.setDataValidation(
+    SpreadsheetApp.newDataValidation().requireValueInList(options, true).setAllowInvalid(true).build()
+  );
+  if (current && !options.some(value => key_(value) === key_(current))) organisationCell.clearContent();
+  return options.length;
+}
+// Whole tracker in a few calls: two column reads, the option list once per financial year, and one write per run of consecutive rows
+// that share a financial year (it used to be ~6 calls per row).
+function refreshDisbursementOrganisationOptions_() {
+  const sheet = disbTracker_(), headerRow = disbHeaderRow_(), map = disbHeaderMap_(sheet),
+    fyColumn = disbColumn_(map, 'Financial Year'), organisationColumn = disbColumn_(map, 'Organisation Name'),
+    lastRow = Math.max(headerRow + 1, sheet.getLastRow()), count = lastRow - headerRow;
+  const fys = sheet.getRange(headerRow + 1, fyColumn, count, 1).getDisplayValues().map(row => clean_(row[0])),
+    organisations = sheet.getRange(headerRow + 1, organisationColumn, count, 1).getValues().map(row => clean_(row[0])),
+    optionsByFy = {};
+  const optionsFor = fy => optionsByFy[key_(fy)] || (optionsByFy[key_(fy)] = disbursementOrganisationsForFy_(fy));
+  const rowNumbers = fys.map((fy, i) => (fy ? headerRow + 1 + i : 0)).filter(Boolean);
+  // consecutive rows with the same financial year form one group
+  const groups = [];
+  rowNumbers.forEach(rowNumber => {
+    const fy = key_(disbCanonicalFy_(fys[rowNumber - headerRow - 1])), last = groups[groups.length - 1];
+    if (last && last.fy === fy && last.rows[last.rows.length - 1] === rowNumber - 1) last.rows.push(rowNumber);
+    else groups.push({ fy, rows: [rowNumber] });
+  });
+  groups.forEach(group => {
+    const first = group.rows[0], range = sheet.getRange(first, organisationColumn, group.rows.length, 1),
+      options = optionsFor(fys[first - headerRow - 1]);
+    range.clearNote();
+    if (!options.length) { range.clearDataValidations(); return; }
+    range.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(options, true).setAllowInvalid(true).build());
+    group.rows.forEach(rowNumber => {
+      const current = organisations[rowNumber - headerRow - 1];
+      if (current && !options.some(value => key_(value) === key_(current))) sheet.getRange(rowNumber, organisationColumn).clearContent();
+    });
+  });
+  return rowNumbers.length;
+}
+function uiRefreshDisbursementOptions() {
+  const count = refreshDisbursementOrganisationOptions_();
+  showToast_(`Organisation dropdowns refreshed for ${count} disbursement rows.`);
+  return count;
+}
+// Opens one dialog with a collapsible card for every row whose Action is "Correct Workspace". The button never writes an Action.
+function uiCorrectWorkspaceDetails() {
+  const context = correctWorkspaceContext_();
+  if (!context.grants.length) {
+    SpreadsheetApp.getUi().alert('Set the Action to "Correct Workspace" on the rows you want to correct, then click Correct Workspace Details again.');
+    return null;
+  }
+  const template = HtmlService.createTemplateFromFile('CorrectDetailsDialog');
+  // < is escaped so a grant title can never close the script tag.
+  template.contextJson = JSON.stringify(context).replace(/</g, '\\u003c');
+  SpreadsheetApp.getUi().showModalDialog(template.evaluate().setWidth(860).setHeight(660), 'Correct Workspace Details');
+  return context.grants.length;
+}
+function uiPushDisbursements() {
+  completeDisbursementRows_();
+  const result = pushDisbursements_();
+  const summary = `${result.changedRows} disbursement row(s) updated in ${result.pushedGrants} grantee workbook(s).`;
+  showToast_(summary);
+  const notes = [];
+  if (result.stoppedEarly) notes.push('Paused before the time limit. Click Push Disbursements again to continue.');
+  if (result.failures.length) notes.push(failureSummary_(result.failures) + '\nSee the Push Status column for each row.');
+  if (notes.length) notifyAdmin_(`${summary}\n\n${notes.join('\n')}`);
+  return result.changedRows;
+}
+function runDisbursementLinkSync_(options) {
+  const result = syncDisbursementLinks_(options);
+  const summary = `${result.linkRows} document link(s) synced from ${result.checkedGrants} grantee workbook(s).`;
+  showToast_(summary);
+  const notes = [];
+  if (result.stoppedEarly) notes.push('Paused before the time limit. Click Sync Disbursement Links again to continue.');
+  if (result.failures.length) notes.push(failureSummary_(result.failures) + '\nSee the Document Sync Status column for each row.');
+  if (notes.length) notifyAdmin_(`${summary}\n\n${notes.join('\n')}`);
+  return result.linkRows;
+}
+function uiSyncDisbursements() { return runDisbursementLinkSync_(); }
+// Re-checks rows already marked Synced (a grantee may have replaced a link later).
+function uiSyncDisbursementsFullCheck() { return runDisbursementLinkSync_({ full: true }); }
+function uiBackupCentralAdministration() {
+  const url = backupCentralAdministration_();
+  showToast_('Backup saved in the Central Administration Backups folder.');
+  notifyAdmin_(`Backup created:\n${url}`);
+  return url;
+}

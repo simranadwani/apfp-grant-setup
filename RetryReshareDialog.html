@@ -24,7 +24,8 @@
     <label class="option"><input type="radio" name="mode" value="same" checked onchange="toggleEmail()"> Continue with the same email</label>
     <label class="option"><input type="radio" name="mode" value="change" onchange="toggleEmail()"> Change the email for this Grant-FY only</label>
     <input id="newEmail" type="email" placeholder="New primary contact email" disabled>
-    <div class="note">Changing it here does not update the organisation-wide contact or any other grant.</div>
+    <div id="notifyBox" style="display:none"><label class="option"><input type="checkbox" id="notify" checked> Send the workspace email to the new address</label></div>
+    <div class="note">The change applies to this Grant-FY: workspace access, registries, the Setup workbook contact cell and (only when this is the organisation's latest grant) the organisation contact. Other grants are not changed.</div>
     <div id="status"></div>
     <div class="actions">
       <button onclick="google.script.host.close()">Cancel</button>
@@ -36,6 +37,7 @@
       function toggleEmail() {
         const input = document.getElementById('newEmail');
         input.disabled = mode() !== 'change';
+        document.getElementById('notifyBox').style.display = input.disabled || context.registryOnly ? 'none' : 'block';
         if (!input.disabled) input.focus();
       }
       function submitForm() {
@@ -52,7 +54,7 @@
             document.getElementById('run').disabled = false;
             document.getElementById('status').textContent = error.message || String(error);
           })
-          .submitRetryReshareGrantFy(Object.assign({}, context, { mode: mode(), newEmail: email }));
+          .submitRetryReshareGrantFy(Object.assign({}, context, { mode: mode(), newEmail: email, notify: document.getElementById('notify').checked }));
       }
     </script>
   </body>

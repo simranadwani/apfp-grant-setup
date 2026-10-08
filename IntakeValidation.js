@@ -14,8 +14,9 @@ function intakeRowsWithActions_() {
  const sheet = sheet_(APFP.SHEETS.INTAKE),
    lastRow = Math.min(APFP.INTAKE.MAX_ROW, Math.max(APFP.INTAKE.HEADER_ROW, sheet.getLastRow()));
  if (lastRow < APFP.INTAKE.START_ROW) return [];
- const headers = sheet.getRange(APFP.INTAKE.HEADER_ROW, 1, 1, APFP.INTAKE.HEADERS.length).getDisplayValues()[0],
-   rows = sheet.getRange(APFP.INTAKE.START_ROW, 1, lastRow - APFP.INTAKE.HEADER_ROW, APFP.INTAKE.HEADERS.length).getValues();
+ const width = sheet.getLastColumn(),
+   headers = sheet.getRange(APFP.INTAKE.HEADER_ROW, 1, 1, width).getDisplayValues()[0],
+   rows = sheet.getRange(APFP.INTAKE.START_ROW, 1, lastRow - APFP.INTAKE.HEADER_ROW, width).getValues();
  return rows.map((values, i) => {
    const object = rowObjectFromArrays_(headers, values), startDate = object['Grant Start Date'];
    return {
@@ -33,6 +34,22 @@ function intakeRowsWithActions_() {
    };
  }).filter(row => APFP.INTAKE.PROCESS_ACTIONS.includes(row.action));
 }
+// Rows whose Action equals `action` (used for Correct Workspace, which the Create Workspace / Retry buttons never run).
+function intakeRowsMarked_(action) {
+ const sheet = sheet_(APFP.SHEETS.INTAKE),
+   lastRow = Math.min(APFP.INTAKE.MAX_ROW, Math.max(APFP.INTAKE.HEADER_ROW, sheet.getLastRow()));
+ if (lastRow < APFP.INTAKE.START_ROW) return [];
+ const width = sheet.getLastColumn(),
+   headers = sheet.getRange(APFP.INTAKE.HEADER_ROW, 1, 1, width).getDisplayValues()[0],
+   rows = sheet.getRange(APFP.INTAKE.START_ROW, 1, lastRow - APFP.INTAKE.HEADER_ROW, width).getValues();
+ return rows.map((values, i) => ({ rowNumber: i + APFP.INTAKE.START_ROW, object: rowObjectFromArrays_(headers, values) }))
+   .filter(item => key_(item.object['Action']) === key_(action));
+}
+// A row with an Action but none of the grant details filled in: report it, but create no Request ID or Technical Registry record for it.
+function intakeRowIsBlank_(row) {
+ return ![row.financialYear, row.grantStartDate, row.grantEndDate, row.organisationName, row.projectTitle, row.grantType,
+   row.amountApproved, row.granteeEmail].some(value => clean_(value instanceof Date ? value.getTime() : value));
+}
 function runtimeGuard_() {
  [APFP.SHEETS.INTAKE, APFP.SHEETS.ORGANISATIONS, APFP.SHEETS.GRANTS, APFP.SHEETS.TECHNICAL, APFP.SHEETS.LEADERSHIP].forEach(name => {
    if (!ss_().getSheetByName(name)) throw new Error(`Required sheet is missing: ${name}`);
@@ -46,7 +63,7 @@ function setIntake_(rowNumber, patch) {
 }
 function setWorkspaceStatusNote_(rowNumber, message) {
  try {
-   sheet_(APFP.SHEETS.INTAKE).getRange(rowNumber, APFP.INTAKE.WORKSPACE_STATUS_COLUMN).clearNote();
+   sheet_(APFP.SHEETS.INTAKE).getRange(rowNumber, intakeColumn_('Workspace Status')).clearNote();
  } catch (error) {
    console.warn(`Could not clear Workspace Status note for row ${rowNumber}: ${error.message}`);
  }
@@ -61,9 +78,10 @@ function ensureRequestIdForRow_(row) {
 function intakeDuplicateState_() {
  const sheet = sheet_(APFP.SHEETS.INTAKE), last = Math.min(APFP.INTAKE.MAX_ROW, sheet.getLastRow()), counts = {};
  if (last < APFP.INTAKE.START_ROW) return { last, counts };
- const values = sheet.getRange(APFP.INTAKE.START_ROW, 1, last - APFP.INTAKE.START_ROW + 1, 5).getDisplayValues();
+ const fyIndex = intakeColumn_('Financial Year') - 1, orgIndex = intakeColumn_('Organisation Name') - 1,
+   values = sheet.getRange(APFP.INTAKE.START_ROW, 1, last - APFP.INTAKE.START_ROW + 1, Math.max(fyIndex, orgIndex) + 1).getDisplayValues();
  values.forEach(row => {
-   const fy = key_(row[0]), org = key_(row[4]);
+   const fy = key_(row[fyIndex]), org = key_(row[orgIndex]);
    if (fy && org) counts[`${org}|${fy}`] = (counts[`${org}|${fy}`] || 0) + 1;
  });
  return { last, counts };
@@ -71,36 +89,53 @@ function intakeDuplicateState_() {
 function refreshDuplicateFlagsForRows_(rowNumbers) {
  const uniqueRows = [...new Set((rowNumbers || []).filter(r => r >= APFP.INTAKE.START_ROW && r <= APFP.INTAKE.MAX_ROW))];
  if (!uniqueRows.length) return;
- const sheet = sheet_(APFP.SHEETS.INTAKE), state = intakeDuplicateState_();
+ const sheet = sheet_(APFP.SHEETS.INTAKE), state = intakeDuplicateState_(),
+   fyColumn = intakeColumn_('Financial Year'), orgColumn = intakeColumn_('Organisation Name');
  uniqueRows.forEach(rowNumber => {
    if (rowNumber > state.last) return;
-   const values = sheet.getRange(rowNumber, 1, 1, 5).getDisplayValues()[0], fy = key_(values[0]), org = key_(values[4]),
+   const fy = key_(sheet.getRange(rowNumber, fyColumn).getDisplayValue()), org = key_(sheet.getRange(rowNumber, orgColumn).getDisplayValue()),
      next = fy && org && state.counts[`${org}|${fy}`] > 1 ? 'Duplicate' : '';
    setByHeaders_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, rowNumber, { 'Duplicate?': next });
  });
 }
 function processRequestedActions() {
- const config = runtimeGuard_(), rows = intakeRowsWithActions_();
- if (!rows.length) {
-   SpreadsheetApp.getUi().alert('No workspaces are waiting to be created or retried.');
-   return;
- }
- const maxBatch = Math.max(1, Number(config.MAX_BATCH_SIZE || 35)), batch = rows.slice(0, maxBatch),
-   lock = LockService.getScriptLock();
+ const config = runtimeGuard_(), lock = LockService.getScriptLock();
  if (!lock.tryLock(30000)) {
    SpreadsheetApp.getUi().alert('Another APFP automation run is already active. Run this action again after it finishes.');
    return;
  }
+ // The queue is read only AFTER the lock is held, so a second click cannot re-process rows the first run just finished.
+ let rows;
+ try {
+   rows = intakeRowsWithActions_();
+ } catch (error) {
+   lock.releaseLock();
+   throw error;
+ }
+ if (!rows.length) {
+   lock.releaseLock();
+   SpreadsheetApp.getUi().alert('No workspaces are waiting to be created or retried.');
+   return;
+ }
+ const maxBatch = Math.max(1, Number(config.MAX_BATCH_SIZE || 35)), batch = rows.slice(0, maxBatch);
  let success = 0, needsAttention = 0, processed = 0, stoppedForRuntime = false;
+ const failures = [];
  const startedAt = Date.now();
  try {
    refreshDuplicateFlagsForRows_(batch.map(row => row.rowNumber));
    for (const row of batch) {
      if (processed > 0 && Date.now() - startedAt >= APFP.EXECUTION_GUARD_MS) { stoppedForRuntime = true; break; }
      try {
+       if (!clean_(row.requestId) && intakeRowIsBlank_(row)) {
+         needsAttention++;
+         failures.push(runFailure_(row, 'This row is empty. Fill in the grant details, or clear the Action.'));
+         processed++;
+         continue;
+       }
        ensureRequestIdForRow_(row);
        if (key_(row.action) === 'retry sharing') {
-         retrySharingForIntakeRow_(row, config) ? success++ : needsAttention++;
+         if (retrySharingForIntakeRow_(row, config)) success++;
+         else { needsAttention++; failures.push(runFailure_(row, row.failureReason)); }
          processed++;
          continue;
        }
@@ -108,24 +143,25 @@ function processRequestedActions() {
        if (!validation.ok) {
          needsAttention++;
          recordValidationFailure_(row, validation.errors);
+         failures.push(runFailure_(row, validation.errors.join(' ')));
          processed++;
          continue;
        }
-       processWorkspaceRequest_(row, config) ? success++ : needsAttention++;
+       if (processWorkspaceRequest_(row, config)) success++;
+       else { needsAttention++; failures.push(runFailure_(row, row.failureReason)); }
      } catch (e) {
        needsAttention++;
        markUnexpectedRowError_(row, e);
+       failures.push(runFailure_(row, friendlyErrorMessage_('PROCESSING_FAILED', e)));
      }
      processed++;
    }
  } finally {
    lock.releaseLock();
  }
- const note = stoppedForRuntime
-   ? ' The run stopped safely before the Apps Script time limit; remaining rows were left untouched. Run the workspace action again to continue.' : '';
- recordAutomationStatus_('Workspace Creation', needsAttention || stoppedForRuntime ? 'Needs attention' : 'Success',
-   `${processed} processed; ${success} completed; ${needsAttention} need attention${stoppedForRuntime ? '; safely paused' : ''}`);
- SpreadsheetApp.getUi().alert(`Processed ${processed} requested action(s). ${success} completed; ${needsAttention} need attention.${note}`);
+ const note = ` Rows picked up: ${batch.slice(0, processed).map(row => row.rowNumber).join(', ')}.` + (stoppedForRuntime
+   ? ' The run stopped safely before the Apps Script time limit; remaining rows were left untouched. Run the workspace action again to continue.' : '');
+ SpreadsheetApp.getUi().alert(runSummaryMessage_(processed, success, needsAttention, failures, note));
 }
 function validateIntakeRequest_(row) {
  const errors = [], tech = row.requestId ? techByRequest_(row.requestId) : null,
@@ -215,4 +251,21 @@ function markUnexpectedRowError_(row, error) {
    field: `Request ${requestId}`, message: error.message, recommendedAction: friendly,
    runId: existing ? existing.record['Run ID'] : ''
  });
+}
+function runFailure_(row, reason) {
+  return {
+    rowNumber: row.rowNumber, organisation: clean_(row.organisationName),
+    reason: clean_(reason) || 'See Last Error Message in the Technical Registry.'
+  };
+}
+// The end-of-run message names each row that needs attention and why (failure reasons are otherwise only in hidden sheets).
+function runSummaryMessage_(processed, success, needsAttention, failures, note) {
+  const lines = [`Processed ${processed} requested action(s). ${success} completed; ${needsAttention} need attention.${note || ''}`];
+  if (failures.length) {
+    lines.push('', 'Needs attention:');
+    failures.slice(0, 8).forEach(f => lines.push(`• Row ${f.rowNumber}${f.organisation ? ` (${f.organisation})` : ''}: ${f.reason}`));
+    if (failures.length > 8) lines.push(`• …and ${failures.length - 8} more (see the Technical Registry).`);
+  }
+  lines.push('', `Code version: ${APFP.CODE_VERSION}`);
+  return lines.join('\n');
 }

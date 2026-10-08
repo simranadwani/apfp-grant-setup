@@ -1,7 +1,9 @@
 // Config.gs — names, schemas, field positions, and controlled options.
 const APFP = Object.freeze({
- SCHEMA_VERSION: '2026-09-01-v15.0',
  FONT_FAMILY: 'Arial',
+ // Shown in the preflight result and at the end of each workspace run so anyone can see which code is deployed. Bump with every round.
+ CODE_VERSION: '2026-10-07 round U',
+ // Fallback when System - Configuration has no TIME_ZONE row.
  TIME_ZONE: 'Asia/Kolkata',
  HIDDEN_SYSTEM_SHEETS: [
    'System - Configuration',
@@ -44,6 +46,13 @@ const APFP = Object.freeze({
  GRANT_STATUSES: ['Active', 'Discontinued', 'Complete'],
  DISBURSEMENT_TRACKER_SHEET: '6. Committed & Spent Tracker',
  DISBURSEMENT_STATUSES: ['Committed', 'Disbursed', 'Discontinued'],
+ // Optional trailing columns of the Committed & Spent Tracker. They are written only by the script (never typed by
+ // operators). Without them, push and sync check every row each time.
+ DISBURSEMENT_STATUS: {
+   PUSH_COLUMN: 'Push Status', SYNC_COLUMN: 'Document Sync Status',
+   PUSHED: 'Pushed', CHANGED: 'Changed – push again', FAILED: 'Failed', NOT_APPLICABLE: 'Not applicable',
+   WAITING: 'Waiting for push', AWAITING: 'Awaiting documents', PARTIAL: 'Partial (1 of 2 links)', SYNCED: 'Synced'
+ },
  DISBURSEMENT_HEADERS: [
    'Disbursement ID', 'Financial Year', 'Quarter', 'Organisation Name',
    'Grant Title', 'Planned Date', 'Planned Amount', 'Notes', 'Status',
@@ -68,14 +77,21 @@ const APFP = Object.freeze({
    'Q4 Progress','Q4 Evidence Link','Q4 Support Type','Q4 Support Required','Q4 Status','Q4 Anagha Notes','Final Actual'
  ],
  PREFLIGHT_SCHEMA: {
+   // Every setting the code reads (used to warn about rows in System - Configuration that nothing uses).
+   KNOWN_CONFIG_KEYS: [
+     'BUDGET_UTILISATION_FOLDER_NAME', 'CENTRAL_ADMIN_FOLDER_ID', 'DISBURSEMENT_DOCUMENT_TEMPLATE_ID',
+     'DISBURSEMENT_WORKBOOK_PATTERN', 'FINANCIAL_YEAR_FOLDER_PATTERN', 'MAX_BATCH_SIZE', 'ORGANISATION_FOLDER_PATTERN',
+     'OUTCOME_PROGRESS_TEMPLATE_ID', 'OUTCOME_PROGRESS_WORKBOOK_PATTERN', 'PROTECTION_EDITORS', 'ROOT_FOLDER_ID',
+     'SEND_SHARING_NOTIFICATION', 'SEND_WORKSPACE_NOTIFICATION', 'SETUP_TEMPLATE_ID', 'SETUP_WORKBOOK_PATTERN',
+     'SUPPORTING_DOCUMENTS_FOLDER_NAME', 'WORKSPACE_EMAIL_TEMPLATE_DOC_ID', 'TIME_ZONE'
+   ],
    REQUIRED_CONFIG_KEYS: [
      'ROOT_FOLDER_ID', 'SETUP_TEMPLATE_ID',
      'OUTCOME_PROGRESS_TEMPLATE_ID', 'FINANCIAL_YEAR_FOLDER_PATTERN',
      'ORGANISATION_FOLDER_PATTERN', 'SETUP_WORKBOOK_PATTERN',
      'OUTCOME_PROGRESS_WORKBOOK_PATTERN', 'DISBURSEMENT_DOCUMENT_TEMPLATE_ID',
      'DISBURSEMENT_WORKBOOK_PATTERN', 'SUPPORTING_DOCUMENTS_FOLDER_NAME',
-     'BUDGET_UTILISATION_FOLDER_NAME', 'WORKSPACE_EMAIL_TEMPLATE_DOC_ID',
-     'DATA_SYNC_SCHEMA_VERSION'
+     'BUDGET_UTILISATION_FOLDER_NAME', 'WORKSPACE_EMAIL_TEMPLATE_DOC_ID'
    ],
    CENTRAL_HEADER_ROWS: {
      INTAKE: 2,
@@ -170,39 +186,6 @@ const APFP = Object.freeze({
  },
  INTAKE: {
    HEADER_ROW: 2, START_ROW: 3, MAX_ROW: 501,
-   FINANCIAL_YEAR_COLUMN: 1,
-   GRANT_START_DATE_COLUMN: 2,
-   GRANT_END_DATE_COLUMN: 3,
-   ORGANISATION_TYPE_COLUMN: 4,
-   ORGANISATION_NAME_COLUMN: 5,
-   THEMATIC_AREA_COLUMN: 6,
-   THEMATIC_SUBAREA_COLUMN: 7,
-   PROXIMITY_COLUMN: 8,
-   PROJECT_TITLE_COLUMN: 9,
-   GRANT_TYPE_COLUMN: 10,
-   AMOUNT_APPROVED_COLUMN: 11,
-   PRIMARY_CONTACT_EMAIL_COLUMN: 12,
-   GRANT_STATUS_COLUMN: 13,
-   ACTION_COLUMN: 14,
-   DUPLICATE_COUNT_COLUMN: 15,
-   WORKSPACE_STATUS_COLUMN: 16,
-   ORGANISATION_WORKSPACE_COLUMN: 17,
-   SETUP_WORKBOOK_COLUMN: 18,
-   OUTCOME_TRACKER_COLUMN: 19,
-   SUPPORTING_COLUMN: 20,
-   BUDGET_UTILISATION_COLUMN: 21,
-   REVIEW_STATUS_COLUMN: 22,
-   Q1_COLUMN: 23, Q2_COLUMN: 24, Q3_COLUMN: 25, Q4_COLUMN: 26,
-   DISBURSEMENT_COLUMN: 27,
-   LAST_UPDATED_COLUMN: 28,
-   REQUEST_ID_COLUMN: 29,
-   ORGANISATION_ID_COLUMN: 30,
-   GRANT_ID_COLUMN: 31,
-   WORKSPACE_ID_COLUMN: 32,
-   IDENTITY_START_COLUMN: 1,
-   IDENTITY_COLUMN_COUNT: 9,
-   HIDDEN_TECH_START_COLUMN: 29,
-   HIDDEN_TECH_COLUMN_COUNT: 4,
    HEADERS: [
      'Financial Year', 'Grant Start Date', 'Grant End Date', 'Organisation Type',
      'Organisation Name', 'Thematic Area', 'Thematic Sub-area', 'Proximity to Children / Beneficiary',
@@ -214,7 +197,9 @@ const APFP = Object.freeze({
      'Disbursement Documents', 'Last Updated', 'Request ID', 'Organisation ID', 'Grant ID', 'Workspace ID'
    ],
    PROCESS_ACTIONS: ['Create Workspace', 'Retry Workspace', 'Retry Sharing'],
-   ACTIONS: ['Create Workspace', 'Retry Workspace', 'Retry Sharing', 'Completed']
+   // Opens the Correct Workspace Details dialog; never run by the Create Workspace / Retry buttons.
+   CORRECT_ACTION: 'Correct Workspace',
+   ACTIONS: ['Create Workspace', 'Retry Workspace', 'Retry Sharing', 'Correct Workspace', 'Completed']
  },
  ORGANISATION_HEADERS: [
    'Organisation ID', 'Organisation Name', 'Name as per Registration Certificate',
@@ -229,7 +214,8 @@ const APFP = Object.freeze({
    'PAN Card Link', 'TAN Card Link', 'Latest Annual Report Link',
    'Financial Audit Report Link', 'CSR Registration Link', 'Registration Certificate Link',
    'Record Status', 'Source Setup Workbook URL', 'Master Data Synced At', 'Template Schema Version',
-   'FCRA Registration Expiry Date', 'Section 12A Registration Expiry Date', 'Section 80G Expiry Date'
+   'FCRA Registration Expiry Date', 'Section 12A Registration Expiry Date', 'Section 80G Expiry Date',
+   'FCRA Registration Status'
  ],
  GRANT_HEADERS: [
    'Grant ID', 'Financial Year', 'Grant Start Quarter', 'Organisation ID', 'Organisation Name',
@@ -249,7 +235,8 @@ const APFP = Object.freeze({
    'Setup Created At', 'Last Updated At', 'Source Setup Workbook URL', 'Master Data Synced At',
    'Template Schema Version', 'Team Size — Previous FY', 'Employee Attrition — Previous Snapshot',
    'Attrition Context / Notes — Previous Snapshot',
-   'Primary Beneficiary Group', 'Primary Beneficiary Count'
+   'Primary Beneficiary Group', 'Primary Beneficiary Count',
+   'Foreign Funding — Percentage of Total Annual Funding'
  ],
  LEADERSHIP_HEADERS: [
    'Organisation ID', 'Role', 'Name', 'Designation', 'Email', 'Contact', 'LinkedIn Profile',
@@ -276,20 +263,20 @@ const APFP = Object.freeze({
    {
      SHEET_NAME: '1. Workspace Creator', TABLE_NAME: 'WorkspaceCreator', MIN_ROWS: 500,
      COLUMNS: [
-       { NAME: 'Financial Year', TYPE: 'DROPDOWN', VALUES: ['2026-27', '2027-28', '2028-29', '2029-30'] },
+       { NAME: 'Financial Year', TYPE: 'DROPDOWN', FREE: true },
        { NAME: 'Grant Start Date', TYPE: 'DATE' },
        { NAME: 'Grant End Date', TYPE: 'DATE' },
        { NAME: 'Organisation Type', TYPE: 'DROPDOWN', VALUES: ['New Organisation', 'Returning Organisation'] },
        { NAME: 'Organisation Name', TYPE: 'COLUMN_TYPE_UNSPECIFIED' },
-       { NAME: 'Thematic Area', TYPE: 'DROPDOWN', VALUES: ['Miscellaneous', 'Capacity Building', 'Education', 'Public Leadership', 'Social Justice', 'Health', 'Animal Welfare'] },
-       { NAME: 'Thematic Sub-area', TYPE: 'DROPDOWN', VALUES: ['21st Century Skills', 'NA', 'Innovation', 'Personal Safety', 'Socio-Emotional Learning', 'Academics', 'Inclusion', 'Career Building', 'Early Childhood Education'] },
-       { NAME: 'Proximity to Children / Beneficiary', TYPE: 'DROPDOWN', VALUES: ['Direct School Support', 'NA', 'After-School Support', 'Ecosystem Capacity Building - Entrepreneurs/Teachers', 'Ecosystem Capacity Building - State', 'Alternate School Support'] },
+       { NAME: 'Thematic Area', TYPE: 'DROPDOWN', FREE: true },
+       { NAME: 'Thematic Sub-area', TYPE: 'DROPDOWN', FREE: true },
+       { NAME: 'Proximity to Children / Beneficiary', TYPE: 'DROPDOWN', FREE: true },
        { NAME: 'Grant Title', TYPE: 'TEXT' },
        { NAME: 'Grant Type', TYPE: 'DROPDOWN', VALUES: ['Restricted', 'Unrestricted', 'Transactional', 'Discretionary'] },
        { NAME: 'Amount Approved', TYPE: 'COLUMN_TYPE_UNSPECIFIED', FORMAT: 'INDIAN_CURRENCY' },
        { NAME: 'Primary Contact Email', TYPE: 'TEXT' },
        { NAME: 'Grant Status', TYPE: 'DROPDOWN', VALUES: ['Active', 'Discontinued', 'Complete'] },
-       { NAME: 'Action', TYPE: 'DROPDOWN', VALUES: ['Create Workspace', 'Retry Workspace', 'Retry Sharing', 'Completed'] },
+       { NAME: 'Action', TYPE: 'DROPDOWN', VALUES: ['Create Workspace', 'Retry Workspace', 'Retry Sharing', 'Correct Workspace', 'Completed'] },
        { NAME: 'Duplicate?', TYPE: 'TEXT' },
        { NAME: 'Workspace Status', TYPE: 'TEXT' },
        { NAME: 'Organisation Workspace', TYPE: 'TEXT' },
@@ -297,7 +284,7 @@ const APFP = Object.freeze({
        { NAME: 'Outcome, Support and Disbursement Tracker', TYPE: 'TEXT' },
        { NAME: 'Supporting & Compliance', TYPE: 'TEXT' },
        { NAME: 'Budget Allocation & Fund Utilisation', TYPE: 'TEXT' },
-       { NAME: 'Setup Review Status', TYPE: 'DROPDOWN', VALUES: ['', 'Awaiting Review', 'Changes Required', 'Approved', 'Retry Approval', 'Locked & Migrated'] },
+       { NAME: 'Setup Review Status', TYPE: 'DROPDOWN', VALUES: ['Awaiting Review', 'Changes Required', 'Approved', 'Retry Approval', 'Locked & Migrated', 'Not Applicable'] },
        { NAME: 'Progress Report Q1', TYPE: 'TEXT' },
        { NAME: 'Progress Report Q2', TYPE: 'TEXT' },
        { NAME: 'Progress Report Q3', TYPE: 'TEXT' },
@@ -353,7 +340,9 @@ const APFP = Object.freeze({
        { NAME: 'Template Schema Version', TYPE: 'TEXT' },
        { NAME: 'FCRA Registration Expiry Date', TYPE: 'DATE' },
        { NAME: 'Section 12A Registration Expiry Date', TYPE: 'DATE' },
-       { NAME: 'Section 80G Expiry Date', TYPE: 'DATE' }
+       { NAME: 'Section 80G Expiry Date', TYPE: 'DATE' },
+       // Required. Live Table type/dropdown may differ from TEXT, so the preflight only checks the column exists.
+       { NAME: 'FCRA Registration Status', TYPE: 'TEXT', ANY_TYPE: true }
      ]
    },
    {
@@ -362,15 +351,15 @@ const APFP = Object.freeze({
        { NAME: 'Grant ID', TYPE: 'TEXT' }, { NAME: 'Financial Year', TYPE: 'TEXT' },
        { NAME: 'Grant Start Quarter', TYPE: 'DROPDOWN', VALUES: ['Q1 (Apr-Jun)', 'Q2 (Jul-Sep)', 'Q3 (Oct-Dec)', 'Q4 (Jan-Mar)'] },
        { NAME: 'Organisation ID', TYPE: 'TEXT' }, { NAME: 'Organisation Name', TYPE: 'TEXT' },
-       { NAME: 'Thematic Area', TYPE: 'DROPDOWN', VALUES: ['Miscellaneous', 'Capacity Building', 'Education', 'Public Leadership', 'Social Justice', 'Health', 'Animal Welfare'] },
-       { NAME: 'Thematic Sub-area', TYPE: 'DROPDOWN', VALUES: ['21st Century Skills', 'NA', 'Innovation', 'Personal Safety', 'Socio-Emotional Learning', 'Academics', 'Inclusion', 'Career Building', 'Early Childhood Education'] },
-       { NAME: 'Proximity to Children / Beneficiary', TYPE: 'DROPDOWN', VALUES: ['Direct School Support', 'NA', 'After-School Support', 'Ecosystem Capacity Building - Entrepreneurs/Teachers', 'Ecosystem Capacity Building - State', 'Alternate School Support'] },
+       { NAME: 'Thematic Area', TYPE: 'DROPDOWN', FREE: true },
+       { NAME: 'Thematic Sub-area', TYPE: 'DROPDOWN', FREE: true },
+       { NAME: 'Proximity to Children / Beneficiary', TYPE: 'DROPDOWN', FREE: true },
        { NAME: 'Project Title', TYPE: 'TEXT' }, { NAME: 'Grant Start Date', TYPE: 'DATE' },
        { NAME: 'Grant End Date', TYPE: 'DATE' },
        { NAME: 'Grant Type', TYPE: 'DROPDOWN', VALUES: ['Restricted', 'Unrestricted', 'Transactional', 'Discretionary'] },
        { NAME: 'Amount Approved', TYPE: 'COLUMN_TYPE_UNSPECIFIED', FORMAT: 'INDIAN_CURRENCY' },
        { NAME: 'Grant Status', TYPE: 'DROPDOWN', VALUES: ['Active', 'Discontinued', 'Complete'] },
-       { NAME: 'Programme Status', TYPE: 'DROPDOWN', VALUES: ['Currently Operational', 'Starting Soon'] },
+       { NAME: 'Programme Status', TYPE: 'DROPDOWN', FREE: true },
        { NAME: 'Years Implemented', TYPE: 'DOUBLE' }, { NAME: 'Project Duration (Months)', TYPE: 'DOUBLE' },
        { NAME: 'Total Project Budget', TYPE: 'COLUMN_TYPE_UNSPECIFIED', FORMAT: 'INDIAN_CURRENCY' }, { NAME: 'States Covered', TYPE: 'TEXT' },
        { NAME: 'Districts Covered', TYPE: 'TEXT' }, { NAME: 'Amount Requested', TYPE: 'COLUMN_TYPE_UNSPECIFIED', FORMAT: 'INDIAN_CURRENCY' },
@@ -401,7 +390,8 @@ const APFP = Object.freeze({
        { NAME: 'Employee Attrition — Previous Snapshot', TYPE: 'DOUBLE' },
        { NAME: 'Attrition Context / Notes — Previous Snapshot', TYPE: 'TEXT' },
        { NAME: 'Primary Beneficiary Group', TYPE: 'TEXT' },
-       { NAME: 'Primary Beneficiary Count', TYPE: 'DOUBLE' }
+       { NAME: 'Primary Beneficiary Count', TYPE: 'DOUBLE' },
+       { NAME: 'Foreign Funding — Percentage of Total Annual Funding', TYPE: 'TEXT', ANY_TYPE: true }
      ]
    }
  ],
@@ -412,7 +402,7 @@ const APFP = Object.freeze({
  },
  STATUS: {
    VALIDATION_FAILED: 'Validation Failed', IN_PROGRESS: 'In Progress',
-   NEEDS_ATTENTION: 'Needs Attention', WORKSPACE_CREATED: 'Workspace Created', REGISTRY_ONLY: 'Registry Only',
+   NEEDS_ATTENTION: 'Needs Attention', WORKSPACE_CREATED: 'Workspace Created', REGISTRY_ONLY: 'Registry Only', DISBURSEMENT_ONLY: 'Disbursement Only', NOT_APPLICABLE: 'Not Applicable',
    SHARING_PENDING: 'Sharing Pending', COMPLETED: 'Completed', PENDING: 'Pending', FAILED: 'Failed'
  },
  STEP: {
@@ -429,6 +419,6 @@ const APFP = Object.freeze({
    BUDGET_UTILISATION: 'Budget Allocation & Fund Utilisation',
    DISBURSEMENT: 'Disbursement Documents', APPROVED_SETUPS: 'Approved Grant Setups'
  },
- EXECUTION_GUARD_MS: 270000,
+ EXECUTION_GUARD_MS: 210000,
  ACTIVE: 'Active'
 });

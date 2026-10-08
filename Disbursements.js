@@ -4,10 +4,10 @@
 function validateDisbursementRows_() {
  const sheet = disbTracker_(), map = disbHeaderMap_(sheet), last = sheet.getLastRow(),
    errors = [], warnings = [], seenIds = new Set();
- if (last < (APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS + 1)) return { errors, warnings };
- const rows = sheet.getRange((APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS + 1), 1, last - (APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS + 1) + 1, APFP.DISBURSEMENT_HEADERS.length).getValues();
+ if (last < disbFirstDataRow_()) return { errors, warnings };
+ const rows = sheet.getRange(disbFirstDataRow_(), 1, last - disbFirstDataRow_() + 1, disbWidth_(sheet)).getValues();
  rows.forEach((row, offset) => {
-   const rowNumber = (APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS + 1) + offset;
+   const rowNumber = disbFirstDataRow_() + offset;
    if (!row.some(value => clean_(value))) return;
    const get = header => row[disbColumn_(map, header) - 1],
      status = clean_(get('Status')), plannedDate = get('Planned Date'), plannedAmount = get('Planned Amount'),
@@ -98,16 +98,16 @@ function disbNextId_(sheet, map, fy) {
  if (!prefix) return '';
  let maximum = 0;
  const last = sheet.getLastRow();
- if (last >= (APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS + 1))
-   sheet.getRange((APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS + 1), disbColumn_(map, 'Disbursement ID'),
-     last - (APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS + 1) + 1, 1).getDisplayValues().forEach(([value]) => {
+ if (last >= disbFirstDataRow_())
+   sheet.getRange(disbFirstDataRow_(), disbColumn_(map, 'Disbursement ID'),
+     last - disbFirstDataRow_() + 1, 1).getDisplayValues().forEach(([value]) => {
        const match = clean_(value).match(new RegExp(`^${prefix}(\\d+)$`, 'i'));
        if (match) maximum = Math.max(maximum, Number(match[1]));
      });
  return `${prefix}${String(maximum + 1).padStart(4, '0')}`;
 }
 function processDisbursementRow_(sheet, rowNumber, map, identityEdited) {
- const read = () => sheet.getRange(rowNumber, 1, 1, APFP.DISBURSEMENT_HEADERS.length).getValues()[0];
+ const read = () => sheet.getRange(rowNumber, 1, 1, disbWidth_(sheet)).getValues()[0];
  let row = read(), get = header => row[disbColumn_(map, header) - 1],
    id = clean_(get('Disbursement ID')), grantId = clean_(get('Grant ID'));
  ['Financial Year', 'Organisation Name', 'Grant ID', 'Planned Date'].forEach(header =>
@@ -148,22 +148,23 @@ function processDisbursementRow_(sheet, rowNumber, map, identityEdited) {
 function handleDisbursementTrackerEdit_(e) {
  if (!e || !e.range) return;
  const sheet = e.range.getSheet();
- if (sheet.getName() !== APFP.SHEETS.DISBURSEMENTS || e.range.getLastRow() < (APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS + 1)) return;
+ if (sheet.getName() !== APFP.SHEETS.DISBURSEMENTS || e.range.getLastRow() < disbFirstDataRow_()) return;
  const map = disbHeaderMap_(sheet), watched = [
    'Financial Year', 'Organisation Name', 'Planned Date', 'Planned Amount', 'Actual Date', 'Actual Amount'
  ], edited = new Set(watched.filter(header => {
    const column = disbColumn_(map, header);
    return column >= e.range.getColumn() && column <= e.range.getLastColumn();
  }));
+ markEditedDisbursementsForRepush_(sheet, map, e.range);
  if (!edited.size) return;
  if (edited.has('Financial Year')) {
-   for (let rowNumber = Math.max((APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS + 1), e.range.getRow()); rowNumber <= e.range.getLastRow(); rowNumber++)
+   for (let rowNumber = Math.max(disbFirstDataRow_(), e.range.getRow()); rowNumber <= e.range.getLastRow(); rowNumber++)
      refreshDisbursementOrganisationOptionsForRow_(sheet, rowNumber, map);
  }
  const lock = LockService.getScriptLock();
  if (!lock.tryLock(30000)) throw new Error('Another Disbursement Tracker automation run is active. Try again.');
  try {
-   for (let rowNumber = Math.max((APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS + 1), e.range.getRow()); rowNumber <= e.range.getLastRow(); rowNumber++)
+   for (let rowNumber = Math.max(disbFirstDataRow_(), e.range.getRow()); rowNumber <= e.range.getLastRow(); rowNumber++)
      processDisbursementRow_(sheet, rowNumber, map,
        edited.has('Financial Year') || edited.has('Organisation Name'));
  } finally {
@@ -172,20 +173,23 @@ function handleDisbursementTrackerEdit_(e) {
 }
 
 function completeDisbursementRows_() {
- const sheet = disbTracker_(), map = disbHeaderMap_(sheet), last = sheet.getLastRow(),
-   totals = { resolved: 0, quarters: 0, ids: 0, locked: 0 };
- if (last < (APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS + 1)) return totals;
- for (let rowNumber = (APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS + 1); rowNumber <= last; rowNumber++) {
-   const row = sheet.getRange(rowNumber, 1, 1, APFP.DISBURSEMENT_HEADERS.length).getValues()[0];
-   if (!row.some(value => clean_(value))) continue;
-   const result = processDisbursementRow_(sheet, rowNumber, map, false);
-   Object.keys(totals).forEach(key => totals[key] += result[key] || 0);
+ const sheet = disbTracker_(), map = disbHeaderMap_(sheet), last = sheet.getLastRow(), startedAt = Date.now(),
+   totals = { resolved: 0, quarters: 0, ids: 0, locked: 0, stoppedEarly: false };
+ if (last < disbFirstDataRow_()) return totals;
+ // One read for the whole tracker instead of one per row (empty rows are skipped without a further call).
+ const rows = sheet.getRange(disbFirstDataRow_(), 1, last - disbFirstDataRow_() + 1, disbWidth_(sheet)).getValues();
+ for (let offset = 0; offset < rows.length; offset++) {
+   if (!rows[offset].some(value => clean_(value))) continue;
+   if (overRuntimeGuard_(startedAt)) { totals.stoppedEarly = true; break; }
+   const result = processDisbursementRow_(sheet, disbFirstDataRow_() + offset, map, false);
+   Object.keys(totals).forEach(key => { if (key !== 'stoppedEarly') totals[key] += result[key] || 0; });
  }
  return totals;
 }
 function completeDisbursementRows() {
  const result = completeDisbursementRows_();
- disbNotify_(`Disbursement rows completed.\n\nGrant rows resolved: ${result.resolved}\nQuarters updated: ${result.quarters}\nDisbursement IDs created: ${result.ids}`);
+ notifyAdmin_(`Disbursement rows completed.\n\nGrant rows resolved: ${result.resolved}\nQuarters updated: ${result.quarters}\nDisbursement IDs created: ${result.ids}` +
+   (result.stoppedEarly ? '\n\nThe run paused before the Apps Script time limit. Run it again to continue.' : ''));
  return result;
 }
 function validateDisbursementTracker() {

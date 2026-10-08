@@ -1,15 +1,9 @@
 // SharingAndEmail.gs — access control, archive access, and workspace email.
-function ensureWriterAccess_(folderId, email, config) {
- return ensureUserRole_(folderId, email, 'writer', config);
-}
-function ensureInitialWorkspaceSharing_(workspaceFolderId, email, config) {
- return ensureWriterAccess_(workspaceFolderId, email, config);
-}
 function ensureWorkspaceSharingSafe_(requestId, workspaceFolderId, email, config) {
  const permissionSnapshot = permissionForUser_(workspaceFolderId, email);
  assertWorkspaceFilesSafeToShare_(requestId, config);
  try {
-   ensureInitialWorkspaceSharing_(workspaceFolderId, email, config);
+   ensureUserRole_(workspaceFolderId, email, 'writer', config);
    removeWorkspaceGranteeProtectionAccess_(requestId, config, email);
    assertWorkspaceFilesSafeToShare_(requestId, config, email);
    return true;
@@ -180,24 +174,94 @@ function retrySharingForIntakeRow_(row, config, options) {
        'Last Updated': now_()
      }
    );
+   row.failureReason = friendly;
    return false;
  }
 }
 
-function transferGrantFyPrimaryEmail_(row, newEmail, config) {
+// A Registry Only grant (Discretionary) has records but no workspace: nothing is shared or emailed for it.
+function isRegistryOnlyRecord_(record) {
+ const hasWorkspace = !!clean_(record['Organisation Folder URL'] || record['Grant Workspace URL']);
+ return !hasWorkspace && (key_(record['Workspace Status']) === 'registry only' || isDiscretionaryGrantType_(record['Grant Type']));
+}
+// The organisation's own contact record only changes when this Grant-FY is the organisation's latest one.
+function updateOrganisationContactEmail_(organisationId, grantId, newEmail) {
+ const grant = grantById_(grantId), organisation = organisationById_(organisationId);
+ if (!grant || !organisation) return false;
+ const thisStart = financialYearStart_(grant.record['Financial Year']) || 0,
+   latestStart = Math.max.apply(null, grantRegistryRows_()
+     .filter(item => key_(item.record['Organisation ID']) === key_(organisationId) && key_(item.record['Record Status']) !== 'inactive')
+     .map(item => financialYearStart_(item.record['Financial Year']) || 0).concat([0]));
+ if (thisStart < latestStart) return false;
+ setByHeaders_(APFP.SHEETS.ORGANISATIONS, 1, organisation.rowNumber, { 'Primary Contact Email': newEmail });
+ return true;
+}
+// Keeps the grantee's Setup workbook in step, so a later approval does not write the old address back into the registries.
+// Archived (approved) Setup workbooks are read-only history and are left alone.
+function updateSetupContactEmail_(record, newEmail, config) {
+ const setupUrl = clean_(record['Setup Workbook URL']);
+ if (!setupUrl || clean_(record['Approved Setup Archive URL'])) return false;
+ const field = templateFieldConfigRows_(config.SETUP_TEMPLATE_ID).find(item => key_(item['Field Code']) === 'primary_contact_email');
+ if (!field) return false;
+ setConfiguredFields_(openSpreadsheetCached_(urlId_(setupUrl)), [{ row: field, value: newEmail }]);
+ return true;
+}
+function auditEmailChange_(record, oldEmail, newEmail) {
+ try {
+   writeException_({
+     type: 'Primary Contact Email Change', severity: 'Low', status: 'Resolved',
+     organisationId: record['Organisation ID'], grantId: record['Grant ID'], workspaceId: record['Workspace ID'],
+     location: APFP.SHEETS.INTAKE, field: 'Primary Contact Email',
+     message: `Primary Contact Email changed from ${oldEmail || '(blank)'} to ${newEmail} by ${actorEmail_()}.`,
+     recommendedAction: 'None. Recorded for audit.'
+   });
+ } catch (error) {
+   console.warn(`Email-change audit entry skipped: ${error.message}`);
+ }
+}
+// options.notify === false skips the workspace email to the new address. Sets row.warning when something needs a follow-up.
+function transferGrantFyPrimaryEmail_(row, newEmail, config, options) {
+ const notify = !(options && options.notify === false);
  if (!row.requestId || !row.grantId)
    throw new Error('The selected row must have both Request ID and Grant ID.');
  if (!validEmail_(newEmail)) throw new Error('Enter a valid new Primary Contact Email.');
  const tech = techByRequest_(row.requestId);
  if (!tech || key_(tech.record['Grant ID']) !== key_(row.grantId))
    throw new Error('The selected row is not linked to one unambiguous Grant-FY record.');
- const record = tech.record,
-   oldEmail = clean_(record['Primary Contact Email']),
-   workspaceId = urlId_(record['Organisation Folder URL'] || record['Grant Workspace URL']);
- if (!workspaceId) throw new Error('The selected Grant-FY workspace has not been created yet.');
+ const record = tech.record, oldEmail = clean_(record['Primary Contact Email']),
+   registryOnly = isRegistryOnlyRecord_(record),
+   workspaceUrl = clean_(record['Organisation Folder URL'] || record['Grant Workspace URL']);
+ if (!workspaceUrl && !registryOnly) throw new Error('The selected Grant-FY workspace has not been created yet.');
  if (key_(oldEmail) === key_(newEmail))
-   return retrySharingForIntakeRow_(row, config, { email: oldEmail });
+   return registryOnly ? true : retrySharingForIntakeRow_(row, config, { email: oldEmail });
 
+ const warnings = [];
+ // Records shared by both kinds of grant. Returns after the Grant Registry, row, organisation and Setup workbook agree.
+ const updateRecords = techPatch => {
+   saveTech_(row.requestId, Object.assign({ 'Primary Contact Email': newEmail }, techPatch || {}));
+   const grant = grantById_(row.grantId);
+   if (!grant) throw new Error(`Grant Registry record was not found for ${row.grantId}.`);
+   setByHeaders_(APFP.SHEETS.GRANTS, 1, grant.rowNumber, { 'Primary Contact Email': newEmail, 'Last Updated At': now_() });
+   setIntake_(row.rowNumber, { 'Primary Contact Email': newEmail, 'Last Updated': now_() });
+ };
+ const followUps = () => {
+   try { updateOrganisationContactEmail_(record['Organisation ID'], row.grantId, newEmail); }
+   catch (error) { warnings.push(`The organisation contact record could not be updated (${error.message}).`); }
+   if (!registryOnly) {
+     try { updateSetupContactEmail_(record, newEmail, config); }
+     catch (error) { warnings.push(`The Primary Contact Email cell in the Setup workbook could not be updated (${error.message}); update it by hand before approving.`); }
+   }
+   auditEmailChange_(record, oldEmail, newEmail);
+ };
+ if (registryOnly) {
+   updateRecords();
+   followUps();
+   row.warning = warnings.join(' ');
+   refreshWorkspaceCreatorRow_(row.grantId);
+   return true;
+ }
+
+ const workspaceId = urlId_(workspaceUrl);
  const resources = [{ id: workspaceId, role: 'writer', label: 'Grant-FY workspace' }];
  const setupId = clean_(record['Setup Workbook URL']) ? urlId_(record['Setup Workbook URL']) : '';
  if (setupId && clean_(record['Approved Setup Archive URL']))
@@ -216,33 +280,32 @@ function transferGrantFyPrimaryEmail_(row, newEmail, config) {
      if (!permission) throw new Error(`New access could not be verified on ${resource.label}.`);
    });
 
-   saveTech_(row.requestId, {
-     'Primary Contact Email': newEmail,
-     'Workspace Notification Status': '',
+   updateRecords({
+     'Workspace Notification Status': notify ? '' : 'Skipped',
      'Workspace Notification Sent At': '',
-     'Workspace Notification Recipient': '',
+     'Workspace Notification Recipient': notify ? '' : newEmail,
      'Sharing Status': APFP.STATUS.COMPLETED,
      'Current Step': APFP.STEP.NOTIFICATION,
      'Last Completed Step': APFP.STEP.SHARING,
      'Last Error Code': '',
      'Last Error Message': ''
    });
-   const grant = grantById_(row.grantId);
-   if (!grant) throw new Error(`Grant Registry record was not found for ${row.grantId}.`);
-   setByHeaders_(APFP.SHEETS.GRANTS, 1, grant.rowNumber, {
-     'Primary Contact Email': newEmail, 'Last Updated At': now_()
-   });
-   setIntake_(row.rowNumber, { 'Primary Contact Email': newEmail, 'Last Updated': now_() });
    committed = true;
 
-   if (validEmail_(oldEmail)) resources.forEach(resource =>
-     removeDirectUserPermission_(resource.id, oldEmail));
-   sendWorkspaceNotificationOnce_(row.requestId, config);
+   followUps();
+   const stillShared = [];
+   if (validEmail_(oldEmail)) resources.forEach(resource => {
+     try { removeDirectUserPermission_(resource.id, oldEmail); }
+     catch (error) { stillShared.push(resource.label); }
+   });
+   if (stillShared.length)
+     warnings.push(`${oldEmail} could not be removed from: ${stillShared.join(', ')}. Remove that access by hand in Drive.`);
+   if (notify) sendWorkspaceNotificationOnce_(row.requestId, config);
    saveTech_(row.requestId, {
      'Current Step': APFP.STEP.COMPLETED,
      'Last Completed Step': APFP.STEP.COMPLETED,
-     'Last Error Code': '',
-     'Last Error Message': ''
+     'Last Error Code': stillShared.length ? 'EMAIL_TRANSFER_CLEANUP_FAILED' : '',
+     'Last Error Message': stillShared.length ? warnings[warnings.length - 1] : ''
    });
    setIntake_(row.rowNumber, {
      'Action': APFP.STATUS.COMPLETED,
@@ -251,8 +314,7 @@ function transferGrantFyPrimaryEmail_(row, newEmail, config) {
    });
    setWorkspaceStatusNote_(row.rowNumber, '');
    refreshWorkspaceCreatorRow_(row.grantId);
-   recordAutomationStatus_('Workspace Creation', 'Success',
-     `Grant-FY ${row.grantId} primary email changed from ${oldEmail} to ${newEmail}`);
+   row.warning = warnings.join(' ');
    return true;
  } catch (error) {
    if (!committed) snapshots.forEach(snapshot => {

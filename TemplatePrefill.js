@@ -41,7 +41,6 @@ function configureGeneratedWorkbook_(setupSpreadsheet, request, organisationReco
   writeGeneratedLinks_(setupSpreadsheet, links);
   prefillGeneratedWorkbook_(setupSpreadsheet, request, organisationRecord, fieldConfig);
   SpreadsheetApp.flush();
-
   finaliseSetupWorkbookIntegrity_(setupSpreadsheet, fieldConfig);
   verifyConfiguredWorkbook_(setupSpreadsheet, fieldConfig);
 }
@@ -212,6 +211,28 @@ function writeGeneratedLinks_(spreadsheet, links) {
    });
  target.setValues(values);
 }
+// Structure, links and protections were just verified by finaliseSetupWorkbookIntegrity_ (nothing has been written since),
+// so this only checks that the sheets exist and that no invisible placeholder is left in a configured value range.
+// One Sheets API call reads every range (it used to be one call per Field Config row).
+function columnNumber_(letters) {
+ return String(letters).split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
+}
+function columnLetters_(number) {
+ let out = '';
+ for (let n = number; n > 0; n = Math.floor((n - 1) / 26)) out = String.fromCharCode(65 + (n - 1) % 26) + out;
+ return out;
+}
+// The Sheets API rejects ranges outside the sheet grid (SpreadsheetApp tolerated them). Shortens a simple A1 range to the grid,
+// returns '' when it lies wholly outside, and passes anything it cannot parse (whole columns, named ranges) through unchanged.
+function clipA1ToGrid_(a1, maxRows, maxCols) {
+ const m = /^\$?([A-Z]{1,3})\$?(\d+)(?::\$?([A-Z]{1,3})\$?(\d+))?$/.exec(clean_(a1).toUpperCase());
+ if (!m) return a1;
+ const c1 = columnNumber_(m[1]), r1 = Number(m[2]), c2 = m[3] ? columnNumber_(m[3]) : c1, r2 = m[4] ? Number(m[4]) : r1;
+ if (r1 > maxRows || c1 > maxCols) return '';
+ const lastRow = Math.min(r2, maxRows), lastCol = Math.min(c2, maxCols);
+ const first = `${columnLetters_(c1)}${r1}`, last = `${columnLetters_(lastCol)}${lastRow}`;
+ return first === last ? first : `${first}:${last}`;
+}
 function verifyConfiguredWorkbook_(spreadsheet, fieldConfig) {
  APFP.GENERATED_VISIBLE_SHEETS.forEach(
    name => {
@@ -219,21 +240,26 @@ function verifyConfiguredWorkbook_(spreadsheet, fieldConfig) {
        throw new Error(`Generated workbook sheet missing after configuration: ${name}`);
    }
  );
- fieldConfig.forEach(
-   row => {
-     const sheet = spreadsheet.getSheetByName(clean_(row['Sheet Name']));
-     if (!sheet)
-       throw new Error(`Field Config references missing generated sheet: ${row['Sheet Name']}`);
-     sheet.getRange(configValueRange_(row)).getDisplayValues().flat().forEach(
-       v => {
-         if (String(v).indexOf('\u00A0') >= 0)
-           throw new Error(`Invisible placeholder remained in ${row['Field Code']}.`);
-       }
-     );
-   }
- );
- verifyGeneratedLinks_(spreadsheet);
- verifyTemplateProtections_(spreadsheet, fieldConfig);
+ const checked = [];
+ fieldConfig.forEach(row => {
+   const sheetName = clean_(row['Sheet Name']);
+   const sheet = spreadsheet.getSheetByName(sheetName);
+   if (!sheet)
+     throw new Error(`Field Config references missing generated sheet: ${row['Sheet Name']}`);
+   const a1 = clipA1ToGrid_(configValueRange_(row), sheet.getMaxRows(), sheet.getMaxColumns());
+   if (a1) checked.push({ row, range: quotedSheetA1_(sheetName, a1) });
+ });
+ if (!checked.length) return;
+ requireAdvancedSheetsService_();
+ const result = Sheets.Spreadsheets.Values.batchGet(spreadsheet.getId(), {
+   ranges: checked.map(item => item.range), valueRenderOption: 'FORMATTED_VALUE'
+ });
+ (result.valueRanges || []).forEach((valueRange, i) => {
+   [].concat(...(valueRange.values || [])).forEach(v => {
+     if (String(v).indexOf('\u00A0') >= 0)
+       throw new Error(`Invisible placeholder remained in ${checked[i].row['Field Code']}.`);
+   });
+ });
 }
 function verifyResourceLinks_(sheet, requiredResources, optionalResources) {
  const schema = APFP.PREFLIGHT_SCHEMA.LINKS,
@@ -299,4 +325,19 @@ function removeGeneratedAdminSheet_(spreadsheet, sheetName) {
 function removeGeneratedAdminSheets_(spreadsheet) {
  [APFP.TEMPLATE_SHEETS.VALIDATION_MASTER, APFP.TEMPLATE_SHEETS.FIELD_CONFIG]
    .forEach(sheetName => removeGeneratedAdminSheet_(spreadsheet, sheetName));
+}
+// The Transactional template has no Links sheet, so each Upload Folder cell is written as a link to the grant's
+// "Disbursement Documents" folder. Idempotent; only the Upload Folder column (outside the grantee-editable range) is touched.
+function writeTransactionalUploadLinks_(spreadsheet, folderUrl) {
+  const url = clean_(folderUrl);
+  if (!url) throw new Error('Disbursement Folder URL is missing, so the Upload Folder links cannot be written.');
+  const schema = APFP.PREFLIGHT_SCHEMA.TRANSACTIONAL_TEMPLATE, sheet = spreadsheet.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.DISBURSEMENTS);
+  if (!sheet) throw new Error(`Transactional workbook is missing the ${APFP.OUTCOME_TEMPLATE_SHEETS.DISBURSEMENTS} sheet.`);
+  const columns = columnsByHeader_(sheet, schema.HEADER_ROW, 'Transactional Disbursement workbook'),
+    column = columns.col('Upload Folder') + 1,
+    formula = `=HYPERLINK("${url.replace(/"/g, '""')}","Upload Folder")`,
+    range = sheet.getRange(schema.DATA_START_ROW, column, schema.DATA_ROWS, 1);
+  if (range.getFormulas().every(row => row[0] === formula)) return false;
+  range.setFormulas(Array.from({ length: schema.DATA_ROWS }, () => [formula]));
+  return true;
 }

@@ -41,10 +41,8 @@ function checkDisbursementTrackerTable_(errors) {
     const sheet = ss_().getSheetByName(APFP.SHEETS.DISBURSEMENTS);
     if (!sheet) { errors.push(`Missing sheet: ${APFP.SHEETS.DISBURSEMENTS}`); return; }
     const headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DISBURSEMENTS,
-      headers = sheet.getRange(headerRow, 1, 1, APFP.DISBURSEMENT_HEADERS.length).getDisplayValues()[0];
-    APFP.DISBURSEMENT_HEADERS.forEach((header, index) => {
-      if (clean_(headers[index]) !== header) errors.push(`Disbursement header ${index + 1} must be ${header}.`);
-    });
+      gaps = headerGaps_(sheet.getRange(headerRow, 1, 1, sheet.getLastColumn()).getDisplayValues()[0], APFP.DISBURSEMENT_HEADERS);
+    if (gaps.missing.length) errors.push(`Disbursement tracker is missing required header(s): ${gaps.missing.join(', ')}.`);
   } catch (error) { errors.push(`Disbursement check failed: ${error.message}`); }
 }
 function grantRegistryRecords_() {
@@ -81,18 +79,82 @@ function writeChangedMatrixRows_(sheet, startRow, startColumn, current, desired)
   const changed = [];
   for (let i = 0; i < desired.length; i++) if (!rowValuesEqual_(current[i] || [], desired[i])) changed.push(i);
   if (!changed.length) return 0;
-  const groups = [];
-  let group = [changed[0]];
-  for (let i = 1; i < changed.length; i++) {
-    if (changed[i] === group[group.length - 1] + 1) group.push(changed[i]);
-    else { groups.push(group); group = [changed[i]]; }
-  }
-  groups.push(group);
-  groups.forEach(indexes => {
+  groupConsecutive_(changed).forEach(indexes => {
     const first = indexes[0], values = indexes.map(index => desired[index]);
     sheet.getRange(startRow + first, startColumn, values.length, desired[0].length).setValues(values);
   });
   return changed.length;
+}
+// Decides which sheet row each approved indicator lives in, so an outcome keeps its row (where the grantee types the
+// quarterly progress) and its Outcome ID even when the Setup lists the indicators in a different order.
+//   1. an indicator whose text already exists keeps that row;
+//   2. an edited indicator (text changed) at the same position keeps the row of the outcome it replaces;
+//   3. a new indicator takes a row that has never held an outcome (retired outcomes keep their row and ID).
+function planOutcomeRows_(existingRows, indicators) {
+  const norm = value => key_(String(value == null ? '' : value).replace(/\s+/g, ' ')),
+    wanted = indicators.map(norm), claimedBy = existingRows.map(() => -1), rowOf = indicators.map(() => -1);
+  wanted.forEach((text, s) => {
+    if (!text) return;
+    const row = existingRows.findIndex((r, i) => claimedBy[i] < 0 && r.id && norm(r.indicator) === text);
+    if (row >= 0) { claimedBy[row] = s; rowOf[s] = row; }
+  });
+  wanted.forEach((text, s) => {
+    if (!text || rowOf[s] >= 0 || s >= existingRows.length) return;
+    if (claimedBy[s] < 0 && existingRows[s].id && norm(existingRows[s].indicator)) { claimedBy[s] = s; rowOf[s] = s; }
+  });
+  wanted.forEach((text, s) => {
+    if (!text || rowOf[s] >= 0) return;
+    const row = existingRows.findIndex((r, i) => claimedBy[i] < 0 && !r.id);
+    if (row < 0) throw new Error(`Outcome Progress has no free row for the indicator "${clean_(indicators[s])}". ` +
+      'Retired outcomes keep their rows and IDs; ask an administrator to review the Outcome Progress sheet.');
+    claimedBy[row] = s;
+    rowOf[s] = row;
+  });
+  return claimedBy;
+}
+// Writes the five system columns of a grantee Outcome Progress sheet (by header name, changed cells only).
+function writeOutcomeSystemColumns_(table, grantId, projectTitle, indicators, targets) {
+  const cols = {
+    grantId: table.col('Grant ID'), title: table.col('Grant Title'), id: table.col('Outcome ID'),
+    indicator: table.col('Outcome / Indicator'), target: table.col('End-of-Program Cycle Target')
+  };
+  const existing = table.sheet.getRange(table.firstRow, 1, table.rows, table.width).getValues(), usedIds = new Set();
+  existing.forEach((row, i) => {
+    const id = clean_(row[cols.id]);
+    if (!id) return;
+    if (usedIds.has(key_(id))) throw new Error(`Duplicate Outcome ID ${id} found in Outcome Progress row ${table.firstRow + i}.`);
+    usedIds.add(key_(id));
+  });
+  const claimedBy = planOutcomeRows_(existing.map(row => ({ id: clean_(row[cols.id]), indicator: clean_(row[cols.indicator]) })), indicators);
+  let seq = 1, count = 0;
+  const desired = existing.map((row, i) => {
+    const out = row.slice(), s = claimedBy[i];
+    let outcomeId = clean_(row[cols.id]);
+    out[cols.grantId] = grantId;
+    out[cols.title] = projectTitle;
+    if (s >= 0) {
+      if (!outcomeId) {
+        const made = nextOutcomeId_(grantId, usedIds, seq);
+        outcomeId = made.id;
+        seq = made.next;
+      }
+      out[cols.indicator] = clean_(indicators[s]);
+      out[cols.target] = targets[s] == null ? '' : targets[s];
+      count++;
+    } else {
+      out[cols.indicator] = '';
+      out[cols.target] = '';
+    }
+    out[cols.id] = outcomeId;
+    return out;
+  });
+  Object.keys(cols).forEach(name => {
+    const column = cols[name], changed = [];
+    desired.forEach((row, i) => { if (comparable_(row[column]) !== comparable_(existing[i][column])) changed.push(i); });
+    groupConsecutive_(changed).forEach(run => table.sheet.getRange(table.firstRow + run[0], column + 1, run.length, 1)
+      .setValues(run.map(i => [desired[i][column]])));
+  });
+  return count;
 }
 function syncApprovedOutcomesToGranteeWorkbook_(grantId, sourceSetupId, deferCentralRefresh) {
   const grant = grantById_(grantId);
@@ -107,47 +169,23 @@ function syncApprovedOutcomesToGranteeWorkbook_(grantId, sourceSetupId, deferCen
     throw new Error('Setup Field Config is missing outcome_indicator or outcome_target.');
   const indicators = readTableConfigured_(source, byCode.outcome_indicator).flat(),
     targets = readTableConfigured_(source, byCode.outcome_target).flat(),
-    targetSheet = target.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.OUTCOMES);
-  if (!targetSheet) throw new Error(`Outcome Progress sheet is missing for Grant ID ${grantId}.`);
+    sheet = target.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.OUTCOMES);
+  if (!sheet) throw new Error(`Outcome Progress sheet is missing for Grant ID ${grantId}.`);
   const schema = APFP.PREFLIGHT_SCHEMA.OUTCOME_TEMPLATE,
-    existing = targetSheet.getRange(schema.DATA_START_ROW, 1, schema.DATA_ROWS, schema.SYSTEM_COLUMNS).getValues(),
-    usedIds = new Set();
-  existing.forEach((row, i) => {
-    const id = clean_(row[2]);
-    if (!id) return;
-    const idKey = key_(id);
-    if (usedIds.has(idKey)) throw new Error(`Duplicate Outcome ID ${id} found in Outcome Progress row ${i + 5}.`);
-    usedIds.add(idKey);
-  });
-  let seq = 1;
-  const output = [];
-  for (let i = 0; i < schema.DATA_ROWS; i++) {
-    const indicator = clean_(indicators[i]), old = existing[i] || Array(schema.SYSTEM_COLUMNS).fill('');
-    let outcomeId = clean_(old[2]);
-    if (indicator && !outcomeId) {
-      const made = nextOutcomeId_(grantId, usedIds, seq);
-      outcomeId = made.id;
-      seq = made.next;
-    }
-    if (!indicator) {
-      output.push([grantId, clean_(grant.record['Project Title']), outcomeId, '', '']);
-      continue;
-    }
-    output.push([
-      grantId, clean_(grant.record['Project Title']), outcomeId, indicator, targets[i] == null ? '' : targets[i]
-    ]);
-  }
-  writeChangedMatrixRows_(targetSheet, schema.DATA_START_ROW, 1, existing, output);
+    columns = columnsByHeader_(sheet, schema.DATA_START_ROW - 1, `Outcome Progress for Grant ID ${grantId}`),
+    table = { sheet, width: columns.width, col: columns.col, firstRow: schema.DATA_START_ROW, rows: schema.DATA_ROWS };
+  const count = writeOutcomeSystemColumns_(table, grantId, clean_(grant.record['Project Title']), indicators, targets);
   if (!deferCentralRefresh) refreshOutcomeProgressTracker_();
-  return output.filter(row => clean_(row[2]) && clean_(row[3])).length;
+  return count;
 }
 function trackerKey_(row, indexes) {
   const parts = indexes.map(index => key_(row[index]));
   return parts.every(Boolean) ? parts.join('|') : '';
 }
+// Extra rows added whenever a tracker table is full (history is never deleted, so tables must be able to grow).
+const TRACKER_GROWTH_ROWS_ = 100;
 function upsertTrackerRowsByKey_(sheet, width, desiredRows, keyIndexes, preserveUnmatched) {
   const headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS[Object.keys(APFP.SHEETS).find(key => APFP.SHEETS[key] === sheet.getName())] || 1, capacity = sheet.getMaxRows() - headerRow;
-  if (desiredRows.length > capacity) throw new Error(`${sheet.getName()} Table capacity is ${capacity}; ${desiredRows.length} rows are required.`);
   const existing = capacity > 0 ? sheet.getRange(headerRow + 1, 1, capacity, width).getValues() : [],
     existingByKey = {}, emptyIndexes = [];
   existing.forEach((row, i) => {
@@ -159,6 +197,21 @@ function upsertTrackerRowsByKey_(sheet, width, desiredRows, keyIndexes, preserve
       emptyIndexes.push(i);
     }
   });
+  // Grow the sheet and its Table (with headroom) when there are more new keys than empty rows.
+  const newKeys = new Set();
+  desiredRows.forEach(row => {
+    const key = trackerKey_(row, keyIndexes);
+    if (key && existingByKey[key] == null) newKeys.add(key);
+  });
+  if (newKeys.size > emptyIndexes.length) {
+    const extra = newKeys.size - emptyIndexes.length + TRACKER_GROWTH_ROWS_;
+    sheet.insertRowsAfter(sheet.getMaxRows(), extra);
+    extendTableToSheetEnd_(sheet.getName());
+    for (let i = 0; i < extra; i++) {
+      emptyIndexes.push(existing.length);
+      existing.push(Array(width).fill(''));
+    }
+  }
   const finalRows = existing.map(row => row.slice()), desiredKeys = new Set(), assigned = new Set();
   desiredRows.forEach(row => {
     const key = trackerKey_(row, keyIndexes);
@@ -171,7 +224,8 @@ function upsertTrackerRowsByKey_(sheet, width, desiredRows, keyIndexes, preserve
       if (!emptyIndexes.length) throw new Error(`${sheet.getName()} has no empty Table rows available.`);
       index = emptyIndexes.shift();
     }
-    finalRows[index] = row.slice();
+    // undefined = "not ours" (a column the code does not know): keep whatever is in the sheet.
+    finalRows[index] = row.map((value, i) => value === undefined ? existing[index][i] : value);
     assigned.add(index);
   });
   existing.forEach((row, index) => {
@@ -180,27 +234,42 @@ function upsertTrackerRowsByKey_(sheet, width, desiredRows, keyIndexes, preserve
   });
   return writeChangedMatrixRows_(sheet, headerRow + 1, 1, existing, finalRows);
 }
-function existingOutcomeManualMap_(sheet) {
-  const out = {}, headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.OUTCOMES,
-    count = sheet.getMaxRows() - headerRow, width = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.OUTCOMES.length;
+// Central tracker rows are built as objects keyed by header name and written by the sheet's live column positions, so
+// adding, moving or renaming-around columns in a central tracker (or in a grantee export block) needs no code change.
+// Columns the code does not know are never overwritten.
+function upsertTrackerObjects_(sheet, headerRow, label, desiredObjects, keyHeaders, requiredHeaders) {
+  const cols = columnsByHeader_(sheet, headerRow, label);
+  requiredHeaders.forEach(header => cols.col(header));
+  const keyIndexes = keyHeaders.map(header => cols.col(header));
+  const rows = desiredObjects.map(object => {
+    const row = new Array(cols.width).fill(undefined);
+    // undefined leaves the cell as it is (used when a source could not be read this time); null / '' clear it.
+    Object.keys(object).forEach(header => { if (cols.has(header) && object[header] !== undefined) row[cols.col(header)] = object[header] === null ? '' : object[header]; });
+    return row;
+  });
+  return upsertTrackerRowsByKey_(sheet, cols.width, rows, keyIndexes, true);
+}
+function trackerManualMap_(sheet, headerRow, label, keyHeaders, manualHeaders) {
+  const out = {}, cols = columnsByHeader_(sheet, headerRow, label), count = sheet.getMaxRows() - headerRow;
   if (count <= 0) return out;
-  sheet.getRange(headerRow + 1, 1, count, width).getValues().forEach(row => {
-    const stable = trackerKey_(row, [3, 4]);
-    if (stable) out[stable] = {
-      statuses: [row[9], row[13], row[17], row[21]],
-      notes: [row[10], row[14], row[18], row[22]]
-    };
+  const keyIndexes = keyHeaders.map(header => cols.col(header));
+  sheet.getRange(headerRow + 1, 1, count, cols.width).getValues().forEach(row => {
+    const stable = trackerKey_(row, keyIndexes);
+    if (!stable) return;
+    const manual = {};
+    manualHeaders.forEach(header => { manual[header] = cols.has(header) ? row[cols.col(header)] : ''; });
+    out[stable] = manual;
   });
   return out;
 }
-function trackerExportRows_(workbook, section, headers) {
+// A block of the hidden System - Tracker Export sheet as objects keyed by lower-cased header. Extra or reordered columns are fine;
+// a missing REQUIRED header stops the refresh with a message naming it.
+function trackerExportObjects_(workbook, section, requiredHeaders) {
   const sheet = workbook.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.TRACKER_EXPORT);
   if (!sheet || !sheet.isSheetHidden()) throw new Error('Protected System - Tracker Export is missing or visible.');
-  const actual = sheet.getRange(section.HEADER_ROW, 1, 1, headers.length).getDisplayValues()[0];
-  headers.forEach((header, index) => {
-    if (clean_(actual[index]) !== header) throw new Error(`Tracker Export ${section.LABEL} column ${index + 1} should be "${header}".`);
-  });
-  return sheet.getRange(section.DATA_START_ROW, 1, section.DATA_ROWS, headers.length).getValues();
+  const cols = columnsByHeader_(sheet, section.HEADER_ROW, `Tracker Export ${section.LABEL}`);
+  requiredHeaders.forEach(header => cols.col(header));
+  return sheet.getRange(section.DATA_START_ROW, 1, section.DATA_ROWS, cols.width).getValues().map(row => cols.record(row));
 }
 
 function activeReportingGrants_() {
@@ -208,80 +277,145 @@ function activeReportingGrants_() {
     key_(grant['Record Status']) === 'active' && key_(grant['Grant Status']) === 'active');
 }
 
+// ---- Refresh safety: one broken workbook never stops the others, and unchanged workbooks are not re-read ----
+// Per grant and per kind of read, the workbook's Drive "last updated" time from the last successful read is kept in Script Properties
+// (no sheet column needed). A workbook that has not changed since is skipped; its central rows simply stay as they are.
+// uiRefreshReportingForce clears the memory so everything is read again.
+let REFRESH_ISSUES_ = [];
+let REFRESH_SKIPPED_ = 0;
+let READ_STATE_CACHE_ = null;
+let FORCE_FULL_REFRESH_ = false;
+function beginRefresh_() { REFRESH_ISSUES_ = []; REFRESH_SKIPPED_ = 0; return Date.now(); }
+function refreshNote_() {
+  const parts = [];
+  if (REFRESH_SKIPPED_) parts.push(`${REFRESH_SKIPPED_} unchanged workbook(s) skipped.`);
+  if (REFRESH_ISSUES_.length) parts.push(`${REFRESH_ISSUES_.length} grant(s) skipped because of a problem: ` +
+    REFRESH_ISSUES_.slice(0, 3).map(item => `${item.grantId} — ${item.message}`).join('; ') + (REFRESH_ISSUES_.length > 3 ? '; …' : ''));
+  return parts.length ? ` ${parts.join(' ')}` : '';
+}
+function readState_() {
+  if (!READ_STATE_CACHE_) {
+    try { READ_STATE_CACHE_ = PropertiesService.getScriptProperties().getProperties() || {}; } catch (error) { READ_STATE_CACHE_ = {}; }
+  }
+  return READ_STATE_CACHE_;
+}
+function readStateKey_(kind, grantId) { return `rd|${kind}|${key_(grantId)}`; }
+// { changed, stamp } for one grant's workbook; anything unknown counts as changed (never skips by mistake).
+function workbookChanged_(kind, grantId, url) {
+  if (FORCE_FULL_REFRESH_) return { changed: true, stamp: 0 };
+  try {
+    const stamp = DriveApp.getFileById(urlId_(url)).getLastUpdated().getTime(), last = Number(readState_()[readStateKey_(kind, grantId)] || 0);
+    return { changed: !last || stamp > last, stamp };
+  } catch (error) {
+    return { changed: true, stamp: 0 };
+  }
+}
+function commitReadMarks_(marks) {
+  const keys = Object.keys(marks).filter(key => marks[key]);
+  if (!keys.length) return;
+  const values = {};
+  keys.forEach(key => { values[key] = String(marks[key]); readState_()[key] = String(marks[key]); });
+  try { PropertiesService.getScriptProperties().setProperties(values); } catch (error) { console.warn(`Could not remember read times: ${error.message}`); }
+}
+function forgetReadMarks_() {
+  READ_STATE_CACHE_ = {};
+  try {
+    const store = PropertiesService.getScriptProperties();
+    Object.keys(store.getProperties()).filter(key => /^rd\|/.test(key)).forEach(key => store.deleteProperty(key));
+  } catch (error) { console.warn(`Could not clear read times: ${error.message}`); }
+}
+// Runs one grant's read; a failure or a paused run is remembered for the message and returns null (nothing is marked as read).
+function guardedGrantRead_(grantId, startedAt, read) {
+  if (overRuntimeGuard_(startedAt)) {
+    REFRESH_ISSUES_.push({ grantId, message: 'not read yet: the run paused before the time limit — run the refresh again' });
+    return null;
+  }
+  try {
+    return read();
+  } catch (error) {
+    REFRESH_ISSUES_.push({ grantId, message: clean_(error.message).replace(/\s+/g, ' ').slice(0, 140) });
+    return null;
+  }
+}
+const OUTCOME_MANUAL_HEADERS_ = ['Q1', 'Q2', 'Q3', 'Q4'].reduce((list, quarter) => list.concat([`${quarter} Status`, `${quarter} Anagha Notes`]), []);
 function refreshOutcomeProgressTracker_() {
   const sheet = ss_().getSheetByName(APFP.SHEETS.OUTCOMES);
   if (!sheet) throw new Error('Outcome Progress tab is missing from Central Administration.');
-  const manualByOutcome = existingOutcomeManualMap_(sheet), desired = [], section = APFP.PREFLIGHT_SCHEMA.OUTCOME_EXPORT_SECTIONS[0];
+  const headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.OUTCOMES, required = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.OUTCOMES,
+    exportRequired = required.filter(header => !OUTCOME_MANUAL_HEADERS_.includes(header)),
+    manualByOutcome = trackerManualMap_(sheet, headerRow, 'Outcome Progress', ['Grant ID', 'Outcome ID'], OUTCOME_MANUAL_HEADERS_),
+    desired = [], marks = {}, startedAt = beginRefresh_(), section = APFP.PREFLIGHT_SCHEMA.OUTCOME_EXPORT_SECTIONS[0];
   activeReportingGrants_().forEach(grant => {
     if (isTransactionalGrantType_(grant['Grant Type']) || isDiscretionaryGrantType_(grant['Grant Type'])) return;
     const url = outcomeProgressWorkbookUrlForGrant_(grant['Grant ID']);
     if (!url) return;
-    trackerExportRows_(openSpreadsheetCached_(url), section, APFP.OUTCOME_EXPORT_HEADERS).forEach(row => {
-      const outcomeId = clean_(row[4]);
-      if (!outcomeId || !clean_(row[5])) return;
-      const stable = `${key_(grant['Grant ID'])}|${key_(outcomeId)}`,
-        manual = manualByOutcome[stable] || { statuses: ['', '', '', ''], notes: ['', '', '', ''] };
-      desired.push([
-        row[0] || grant['Financial Year'], row[1] || grant['Organisation Name'], row[2] || grant['Project Title'],
-        row[3] || grant['Grant ID'], outcomeId, row[5], row[6],
-        row[7], row[8], manual.statuses[0], manual.notes[0],
-        row[13], row[14], manual.statuses[1], manual.notes[1],
-        row[19], row[20], manual.statuses[2], manual.notes[2],
-        row[25], row[26], manual.statuses[3], manual.notes[3], row[31]
-      ]);
+    const check = workbookChanged_('outcome', grant['Grant ID'], url);
+    if (!check.changed) { REFRESH_SKIPPED_++; return; }
+    const records = guardedGrantRead_(grant['Grant ID'], startedAt, () => trackerExportObjects_(openSpreadsheetCached_(url), section, exportRequired));
+    if (!records) return;
+    marks[readStateKey_('outcome', grant['Grant ID'])] = check.stamp;
+    records.forEach(record => {
+      const outcomeId = clean_(record['outcome id']);
+      if (!outcomeId || !clean_(record['outcome / indicator'])) return;
+      const stable = `${key_(grant['Grant ID'])}|${key_(outcomeId)}`, manual = manualByOutcome[stable] || {}, object = {};
+      required.forEach(header => {
+        object[header] = OUTCOME_MANUAL_HEADERS_.includes(header) ? (manual[header] == null ? '' : manual[header]) : record[key_(header)];
+      });
+      object['Financial Year'] = record['financial year'] || grant['Financial Year'];
+      object['Organisation Name'] = record['organisation name'] || grant['Organisation Name'];
+      object['Grant Title'] = record['grant title'] || grant['Project Title'];
+      object['Grant ID'] = record['grant id'] || grant['Grant ID'];
+      object['Outcome ID'] = outcomeId;
+      desired.push(object);
     });
   });
-  upsertTrackerRowsByKey_(sheet, APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.OUTCOMES.length, desired, [3, 4], true);
+  upsertTrackerObjects_(sheet, headerRow, 'Outcome Progress', desired, ['Grant ID', 'Outcome ID'], required);
+  commitReadMarks_(marks);
   return desired.length;
-}
-function existingSupportManualMap_(sheet) {
-  const out = {}, headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.SUPPORT, count = sheet.getMaxRows() - headerRow;
-  if (count <= 0) return out;
-  sheet.getRange(headerRow + 1, 1, count, APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.SUPPORT.length).getValues().forEach(row => {
-    const stable = trackerKey_(row, [3, 5, 6]);
-    if (stable) out[stable] = { status: row[10], notes: row[11] };
-  });
-  return out;
 }
 function refreshSupportTracker_() {
   const support = ss_().getSheetByName(APFP.SHEETS.SUPPORT);
   if (!support) throw new Error('Support tab is missing from Central Administration.');
-  const existing = existingSupportManualMap_(support), desired = [], section = APFP.PREFLIGHT_SCHEMA.OUTCOME_EXPORT_SECTIONS[1];
+  const headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.SUPPORT, required = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.SUPPORT,
+    keyHeaders = ['Grant ID', 'Outcome ID', 'Quarter'],
+    existing = trackerManualMap_(support, headerRow, 'Support', keyHeaders, ['Status', 'Anagha Notes']),
+    desired = [], marks = {}, startedAt = beginRefresh_(), section = APFP.PREFLIGHT_SCHEMA.OUTCOME_EXPORT_SECTIONS[1];
   activeReportingGrants_().forEach(grant => {
     if (isTransactionalGrantType_(grant['Grant Type']) || isDiscretionaryGrantType_(grant['Grant Type'])) return;
     const url = outcomeProgressWorkbookUrlForGrant_(grant['Grant ID']);
     if (!url) return;
-    trackerExportRows_(openSpreadsheetCached_(url), section, APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.SUPPORT).forEach(row => {
-      const grantId = clean_(row[3]) || clean_(grant['Grant ID']), outcomeId = clean_(row[5]), quarter = clean_(row[6]),
-        type = clean_(row[7]), required = clean_(row[8]);
-      if (!grantId || !outcomeId || !quarter || (!type && !required)) return;
+    const check = workbookChanged_('support', grant['Grant ID'], url);
+    if (!check.changed) { REFRESH_SKIPPED_++; return; }
+    const records = guardedGrantRead_(grant['Grant ID'], startedAt, () => trackerExportObjects_(openSpreadsheetCached_(url), section, required));
+    if (!records) return;
+    marks[readStateKey_('support', grant['Grant ID'])] = check.stamp;
+    records.forEach(record => {
+      const grantId = clean_(record['grant id']) || clean_(grant['Grant ID']), outcomeId = clean_(record['outcome id']), quarter = clean_(record['quarter']),
+        type = clean_(record['support type']), requiredText = clean_(record['support required']);
+      if (!grantId || !outcomeId || !quarter || (!type && !requiredText)) return;
       const stable = [key_(grantId), key_(outcomeId), key_(quarter)].join('|'), manual = existing[stable] || {};
-      desired.push([
-        row[0] || grant['Financial Year'], row[1] || grant['Organisation Name'], row[2] || grant['Project Title'], grantId,
-        row[4], outcomeId, quarter, type, required, row[9], manual.status || row[10] || 'Open', manual.notes || row[11] || ''
-      ]);
+      desired.push({
+        'Financial Year': record['financial year'] || grant['Financial Year'],
+        'Organisation Name': record['organisation name'] || grant['Organisation Name'],
+        'Grant Title': record['grant title'] || grant['Project Title'],
+        'Grant ID': grantId, 'Outcome Indicator': record['outcome indicator'], 'Outcome ID': outcomeId, 'Quarter': quarter,
+        'Support Type': type, 'Support Required': requiredText, 'Evidence Link': record['evidence link'],
+        'Status': manual['Status'] || record['status'] || 'Open', 'Anagha Notes': manual['Anagha Notes'] || record['anagha notes'] || ''
+      });
     });
   });
-  upsertTrackerRowsByKey_(support, APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.SUPPORT.length, desired, [3, 5, 6], true);
+  upsertTrackerObjects_(support, headerRow, 'Support', desired, keyHeaders, required);
+  commitReadMarks_(marks);
   return desired.length;
 }
 function refreshReportingData() {
-  try {
-    const outcomes = refreshOutcomeProgressTracker_(),
-      support = refreshSupportTracker_(),
-      decisions = refreshDecisionTracker_(),
-      disbursements = syncDisbursementsToGranteeWorkbooks_(),
-      links = syncGranteeDisbursementLinksToCentral_()
-      detail = `${outcomes} outcomes; ${support} support; ${decisions} decisions; ${disbursements} disbursement rows; ${links} links`;
-    recordAutomationStatus_('Reporting, Support & Decisions', 'Success', detail);
-    recordAutomationStatus_('Disbursement Transfer', 'Success', `${disbursements} rows; ${links} links`);
-    notifyAdmin_(`Reporting refreshed: ${outcomes} outcomes, ${support} support items, ${decisions} decisions, ${disbursements} disbursement rows, ${links} document links.`);
-    return { outcomes, support, decisions, disbursements, links };
-  } catch (error) {
-    recordAutomationStatus_('Reporting, Support & Decisions', 'Failed', error.message);
-    recordAutomationStatus_('Disbursement Transfer', 'Failed', error.message);
-    throw error;
-  }
+  const outcomes = refreshOutcomeProgressTracker_(),
+    support = refreshSupportTracker_(),
+    decisions = refreshDecisionTracker_(),
+    disbursements = syncDisbursementsToGranteeWorkbooks_(),
+    links = syncGranteeDisbursementLinksToCentral_();
+  notifyAdmin_(`Reporting refreshed: ${outcomes} outcomes, ${support} support items, ${decisions} decisions, ${disbursements} disbursement rows, ${links} document links.`);
+  return { outcomes, support, decisions, disbursements, links };
 }
 function nextFinancialYear_(fy) {
   if (!validFinancialYear_(fy)) return '';
@@ -295,47 +429,76 @@ function outcomeSummaryForGrant_(grant) {
   try {
     const sheet = workbook.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.OUTCOMES), lines = [];
     if (!sheet) throw new Error(`Outcome Progress workbook is missing sheet ${APFP.OUTCOME_TEMPLATE_SHEETS.OUTCOMES}.`);
-    const schema = APFP.PREFLIGHT_SCHEMA.OUTCOME_TEMPLATE;
-    sheet.getRange(schema.DATA_START_ROW, 1, schema.DATA_ROWS, schema.TOTAL_COLUMNS).getDisplayValues().forEach(row => {
-      if (!clean_(row[2]) || !clean_(row[3])) return;
-      const latest = clean_(row[21]) || clean_(row[17]) || clean_(row[13]) || clean_(row[9]) || clean_(row[5]) || 'No progress reported yet';
-      lines.push(`${row[3]} — ${latest}`);
+    const schema = APFP.PREFLIGHT_SCHEMA.OUTCOME_TEMPLATE, headerRow = schema.DATA_START_ROW - 1,
+      values = sheet.getRange(headerRow, 1, schema.DATA_ROWS + 1, sheet.getLastColumn()).getDisplayValues(),
+      positions = {};
+    // Columns are found by header name: the sheet has several "Upload Folder" columns between the quarters.
+    values[0].forEach((header, index) => {
+      const name = key_(header);
+      if (name && positions[name] == null) positions[name] = index;
+    });
+    const col = name => {
+      if (positions[key_(name)] == null) throw new Error(`Outcome Progress is missing the column "${name}".`);
+      return positions[key_(name)];
+    };
+    const idCol = col('Outcome ID'), indicatorCol = col('Outcome / Indicator'),
+      progressCols = ['Final Actual', 'Q4 Progress', 'Q3 Progress', 'Q2 Progress', 'Q1 Progress'].map(col);
+    values.slice(1).forEach(row => {
+      if (!clean_(row[idCol]) || !clean_(row[indicatorCol])) return;
+      const latest = progressCols.map(c => clean_(row[c])).find(Boolean) || 'No progress reported yet';
+      lines.push(`${row[indicatorCol]} — ${latest}`);
     });
     return lines.join('\n');
   } catch (error) {
     throw new Error(`Could not build outcome summary for Grant ID ${clean_(grant['Grant ID']) || 'unknown'}: ${error.message}`);
   }
 }
+const DECISION_MANUAL_HEADERS_ = ['Decision Type', 'Decision Status', 'Decision Rationale', 'Proposed Amount', 'Decision Due Date',
+  'Annual Report Link', 'Fund Utilisation Link', '10BE Form Link', 'Maturity — Clarity RAG', 'Maturity — Capacity RAG', 'Maturity — Compliance RAG'];
 function refreshDecisionTracker_() {
   const tracker = openSpreadsheetCached_(ss_().getId()), sheet = tracker.getSheetByName(APFP.SHEETS.DECISIONS);
   if (!sheet) throw new Error('Decision Tracker is missing from Central Administration.');
-  const currentFy = financialYearFromDate_(now_()), decisionFy = nextFinancialYear_(currentFy), existing = {}, headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DECISIONS, count = sheet.getMaxRows() - headerRow;
-  if (count > 0) sheet.getRange(headerRow + 1, 1, count, APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.DECISIONS.length).getValues().forEach(row => {
-    if (clean_(row[5])) existing[key_(row[5])] = {
-      type: row[8], status: row[9], rationale: row[10], proposedAmount: row[11],
-      dueDate: row[12], annualReport: row[13], fundUtilisation: row[14], form10be: row[15],
-      clarity: row[16], capacity: row[17], compliance: row[18]
-    };
-  });
+  const currentFy = financialYearFromDate_(now_()), decisionFy = nextFinancialYear_(currentFy),
+    headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DECISIONS, required = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.DECISIONS,
+    existing = trackerManualMap_(sheet, headerRow, 'Decision Tracker', ['Grant ID'], DECISION_MANUAL_HEADERS_),
+    marks = {}, startedAt = beginRefresh_();
   const desired = grantRegistryRecords_().filter(item =>
     key_(item.record['Record Status']) === 'active' && key_(item.record['Grant Status']) === 'active' &&
     !isDiscretionaryGrantType_(item.record['Grant Type']) &&
     key_(item.record['Financial Year']) === key_(currentFy)
   ).map(item => {
-    const grant = item.record, manual = existing[key_(grant['Grant ID'])] || {}, transactional = isTransactionalGrantType_(grant['Grant Type']), discretionary = isDiscretionaryGrantType_(grant['Grant Type']),
-      noOutcomeWorkspace = transactional || discretionary,
+    const grant = item.record, manual = existing[key_(grant['Grant ID'])] || {},
+      noOutcomeWorkspace = isTransactionalGrantType_(grant['Grant Type']) || isDiscretionaryGrantType_(grant['Grant Type']),
       organisation = organisationById_(grant['Organisation ID']),
-      annualReport = manual.annualReport || (organisation ? clean_(organisation.record['Latest Annual Report Link']) : '');
-    return [
-      decisionFy, currentFy, clean_(grant['Organisation Name']), clean_(grant['Project Title']), clean_(grant['Grant Type']), clean_(grant['Grant ID']),
-      noOutcomeWorkspace ? '' : outcomeSummaryForGrant_(grant), noOutcomeWorkspace ? '' : outcomeProgressWorkbookUrlForGrant_(grant['Grant ID']),
-      manual.type || '', manual.status || '', manual.rationale || '', manual.proposedAmount || '',
-      manual.dueDate || grant['Grant End Date'] || '', annualReport, manual.fundUtilisation || '', manual.form10be || '',
-      manual.clarity || '', manual.capacity || '', manual.compliance || ''
-    ];
+      annualReport = manual['Annual Report Link'] || (organisation ? clean_(organisation.record['Latest Annual Report Link']) : '');
+    return {
+      'Decision For FY': decisionFy, 'Previous Grant FY': currentFy,
+      'Organisation Name': clean_(grant['Organisation Name']), 'Grant Title': clean_(grant['Project Title']),
+      'Grant Type': clean_(grant['Grant Type']), 'Grant ID': clean_(grant['Grant ID']),
+      'Outcome Summary': noOutcomeWorkspace ? '' : decisionOutcomeSummary_(grant, startedAt, marks),
+      'Evidence / Workspace Link': noOutcomeWorkspace ? '' : outcomeProgressWorkbookUrlForGrant_(grant['Grant ID']),
+      'Decision Type': manual['Decision Type'] || '', 'Decision Status': manual['Decision Status'] || '',
+      'Decision Rationale': manual['Decision Rationale'] || '', 'Proposed Amount': manual['Proposed Amount'] || '',
+      'Decision Due Date': manual['Decision Due Date'] || grant['Grant End Date'] || '',
+      'Annual Report Link': annualReport, 'Fund Utilisation Link': manual['Fund Utilisation Link'] || '',
+      '10BE Form Link': manual['10BE Form Link'] || '',
+      'Maturity — Clarity RAG': manual['Maturity — Clarity RAG'] || '', 'Maturity — Capacity RAG': manual['Maturity — Capacity RAG'] || '',
+      'Maturity — Compliance RAG': manual['Maturity — Compliance RAG'] || ''
+    };
   });
-  upsertTrackerRowsByKey_(sheet, APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS.DECISIONS.length, desired, [5], true);
+  upsertTrackerObjects_(sheet, headerRow, 'Decision Tracker', desired, ['Grant ID'], required);
+  commitReadMarks_(marks);
   return desired.length;
+}
+// The outcome summary for one decision row. undefined = keep what the sheet already has (workbook unchanged, or it could not be read now).
+function decisionOutcomeSummary_(grant, startedAt, marks) {
+  const url = outcomeProgressWorkbookUrlForGrant_(grant['Grant ID']);
+  const check = url ? workbookChanged_('decision', grant['Grant ID'], url) : { changed: true, stamp: 0 };
+  if (!check.changed) { REFRESH_SKIPPED_++; return undefined; }
+  const summary = guardedGrantRead_(grant['Grant ID'], startedAt, () => outcomeSummaryForGrant_(grant));
+  if (summary === null) return undefined;
+  if (url) marks[readStateKey_('decision', grant['Grant ID'])] = check.stamp;
+  return summary;
 }
 function disbursementSheet_() {
   const tracker = openSpreadsheetCached_(ss_().getId()), sheet = tracker.getSheetByName(APFP.DISBURSEMENT_TRACKER_SHEET);
@@ -347,131 +510,43 @@ function externalHeaderMap_(sheet, headerRow) {
   headers.forEach((header, i) => { if (clean_(header)) map[key_(header)] = i; });
   return map;
 }
-function syncDisbursementsToGranteeWorkbooks_() {
-  const sheet = disbursementSheet_(), map = externalHeaderMap_(sheet, 2), last = sheet.getLastRow();
-  if (last < 3) return 0;
-  const rows = sheet.getRange(3, 1, last - 2, sheet.getLastColumn()).getValues(), byGrant = {};
-  rows.forEach(row => {
-    const grantId = clean_(row[map[key_('Grant ID')]]), id = clean_(row[map[key_('Disbursement ID')]]),
-      status = key_(row[map[key_('Status')]]), actualDate = row[map[key_('Actual Date')]], actualAmount = row[map[key_('Actual Amount')]];
-    if (!grantId || !id || status !== 'disbursed' || !actualDate || actualAmount === '' || actualAmount == null) return;
-    if (!byGrant[grantId]) byGrant[grantId] = [];
-    byGrant[grantId].push({
-      id,
-      date: actualDate || row[map[key_('Planned Date')]],
-      amount: actualAmount !== '' && actualAmount != null ? actualAmount : row[map[key_('Planned Amount')]]
-    });
-  });
-  let changedRows = 0;
-  Object.keys(byGrant).forEach(grantId => {
-    const workbook = disbursementWorkbookForGrant_(grantId);
-    if (!workbook) return;
-    const target = workbook.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.DISBURSEMENTS);
-    if (!target) throw new Error(`Disbursement Documents sheet is missing for Grant ID ${grantId}.`);
-    const disbSchema = APFP.PREFLIGHT_SCHEMA.TRANSACTIONAL_TEMPLATE,
-      existing = target.getRange(disbSchema.DATA_START_ROW, 1, disbSchema.DATA_ROWS, disbSchema.HEADERS.length).getValues(), byId = {}, empty = [];
-    existing.forEach((row, i) => {
-      const id = key_(row[1]);
-      if (id) byId[id] = i;
-      else if (!row.some(value => clean_(value))) empty.push(i);
-    });
-    const finalRows = existing.map(row => row.slice()), used = new Set();
-    byGrant[grantId].slice(0, disbSchema.DATA_ROWS).forEach(item => {
-      const idKey = key_(item.id);
-      let index = byId[idKey];
-      if (index == null) {
-        while (empty.length && used.has(empty[0])) empty.shift();
-        if (!empty.length) throw new Error(`Disbursement Documents workbook for ${grantId} has no empty rows remaining.`);
-        index = empty.shift();
-      }
-      const old = existing[index] || Array(6).fill('');
-      finalRows[index] = [grantId, item.id, item.date, item.amount, old[4] || '', old[5] || ''];
-      used.add(index);
-    });
-    changedRows += writeChangedMatrixRows_(target, disbSchema.DATA_START_ROW, 1, existing, finalRows);
-  });
-  return changedRows;
-}
-function syncGranteeDisbursementLinksToCentral_() {
-  const sheet = disbursementSheet_(), map = externalHeaderMap_(sheet, 2), last = sheet.getLastRow();
-  if (last < 3) return 0;
-  const width = sheet.getLastColumn(), rows = sheet.getRange(3, 1, last - 2, width).getValues(), central = {}, changes = {}, grantIds = new Set();
-  rows.forEach((row, i) => {
-    const id = clean_(row[map[key_('Disbursement ID')]]), grantId = clean_(row[map[key_('Grant ID')]]);
-    if (id) central[key_(id)] = {
-      rowNumber: i + 3, grantId,
-      receipt: row[map[key_('Donation Receipt Link')]], letter: row[map[key_('Donation Letter Link')]]
-    };
-    if (id && grantId) grantIds.add(grantId);
-  });
-  grantIds.forEach(grantId => {
-    const workbook = disbursementWorkbookForGrant_(grantId);
-    if (!workbook) return;
-    const source = workbook.getSheetByName(APFP.OUTCOME_TEMPLATE_SHEETS.DISBURSEMENTS);
-    if (!source) throw new Error(`Disbursement Documents sheet is missing for Grant ID ${grantId}.`);
-    const disbSchema = APFP.PREFLIGHT_SCHEMA.TRANSACTIONAL_TEMPLATE;
-    source.getRange(disbSchema.DATA_START_ROW, 1, disbSchema.DATA_ROWS, disbSchema.HEADERS.length).getValues().forEach(row => {
-      const id = clean_(row[1]), target = central[key_(id)];
-      if (!id || !target || key_(target.grantId) !== key_(grantId)) return;
-      const receipt = clean_(row[4]), letter = clean_(row[5]);
-      const nextReceipt = receipt || target.receipt || '', nextLetter = letter || target.letter || '';
-      if (comparable_(target.receipt) !== comparable_(nextReceipt) || comparable_(target.letter) !== comparable_(nextLetter))
-        changes[target.rowNumber] = [nextReceipt, nextLetter];
-    });
-  });
-  const rowNumbers = Object.keys(changes).map(Number).sort((a, b) => a - b);
-  if (!rowNumbers.length) return 0;
-  const groups = [];
-  let group = [rowNumbers[0]];
-  for (let i = 1; i < rowNumbers.length; i++) {
-    if (rowNumbers[i] === group[group.length - 1] + 1) group.push(rowNumbers[i]);
-    else { groups.push(group); group = [rowNumbers[i]]; }
-  }
-  groups.push(group);
-  groups.forEach(items => sheet.getRange(items[0], map[key_('Donation Receipt Link')] + 1, items.length, 2)
-    .setValues(items.map(rowNumber => changes[rowNumber])));
-  return rowNumbers.length;
-}
 function refreshDecisionDocumentLinks_() {
   const sheet = ss_().getSheetByName(APFP.SHEETS.DECISIONS);
   if (!sheet) throw new Error('Decision Tracker is missing from Central Administration.');
   const headerRow = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS.DECISIONS,
-    map = headerMap_(sheet, headerRow),
-    grantColumn = map[key_('Grant ID')] + 1,
-    annualColumn = map[key_('Annual Report Link')] + 1,
-    fundColumn = map[key_('Fund Utilisation Link')] + 1,
-    form10beColumn = map[key_('10BE Form Link')] + 1,
+    cols = columnsByHeader_(sheet, headerRow, 'Decision Tracker'),
+    grantColumn = cols.col('Grant ID'), annualColumn = cols.col('Annual Report Link'),
+    fundColumn = cols.col('Fund Utilisation Link'), form10beColumn = cols.col('10BE Form Link'),
     lastRow = Math.max(headerRow, sheet.getLastRow()),
     section = { HEADER_ROW: 161, DATA_START_ROW: 162, DATA_ROWS: 1, LABEL: 'Year-End Documents' };
-  if (!grantColumn || !annualColumn || !fundColumn || !form10beColumn ||
-      fundColumn !== annualColumn + 1 || form10beColumn !== fundColumn + 1)
-    throw new Error('Decision document-link columns are missing or out of order.');
-  let updated = 0;
-  for (let rowNumber = headerRow + 1; rowNumber <= lastRow; rowNumber++) {
-    const grantId = clean_(sheet.getRange(rowNumber, grantColumn).getValue());
-    if (!grantId) continue;
+  if (lastRow <= headerRow) return 0;
+  const values = sheet.getRange(headerRow + 1, 1, lastRow - headerRow, cols.width).getValues(), changes = [];
+  values.forEach((row, offset) => {
+    const grantId = clean_(row[grantColumn]);
+    if (!grantId) return;
     const grant = grantById_(grantId);
-    if (!grant || isTransactionalGrantType_(grant.record['Grant Type'])) continue;
-    const current = sheet.getRange(rowNumber, annualColumn, 1, 3).getValues()[0],
-      organisation = organisationById_(grant.record['Organisation ID']),
-      annualReport = organisation ? clean_(organisation.record['Latest Annual Report Link']) : current[0];
-    let utilisation = current[1], form10be = current[2];
+    if (!grant || isTransactionalGrantType_(grant.record['Grant Type'])) return;
+    const organisation = organisationById_(grant.record['Organisation ID']),
+      annualReport = organisation ? clean_(organisation.record['Latest Annual Report Link']) : row[annualColumn];
+    let utilisation = row[fundColumn], form10be = row[form10beColumn];
     const workbook = outcomeProgressWorkbookForGrant_(grantId);
     if (workbook) {
-      const exported = trackerExportRows_(workbook, section,
-        ['Grant ID', '10BE Form Link', 'Fund Utilisation Link'])[0] || [];
-      const exportedGrantId = clean_(exported[0]);
+      const exported = trackerExportObjects_(workbook, section, ['Grant ID', '10BE Form Link', 'Fund Utilisation Link'])[0] || {};
+      const exportedGrantId = clean_(exported['grant id']);
       if (exportedGrantId && key_(exportedGrantId) !== key_(grantId))
         throw new Error(`Year-end export Grant ID mismatch for ${grantId}.`);
-      form10be = clean_(exported[1]);
-      utilisation = clean_(exported[2]);
+      form10be = clean_(exported['10be form link']);
+      utilisation = clean_(exported['fund utilisation link']);
     }
-    if (comparable_(current[0]) === comparable_(annualReport) &&
-        comparable_(current[1]) === comparable_(utilisation) &&
-        comparable_(current[2]) === comparable_(form10be)) continue;
-    sheet.getRange(rowNumber, annualColumn, 1, 3)
-      .setValues([[annualReport, utilisation, form10be]]);
-    updated++;
-  }
-  return updated;
+    [[annualColumn, annualReport], [fundColumn, utilisation], [form10beColumn, form10be]].forEach(([column, value]) => {
+      if (comparable_(row[column]) !== comparable_(value)) changes.push({ column, rowNumber: headerRow + 1 + offset, value });
+    });
+  });
+  // Only the changed cells are written (consecutive rows of one column in one call).
+  [annualColumn, fundColumn, form10beColumn].forEach(column => {
+    const mine = changes.filter(change => change.column === column);
+    groupConsecutive_(mine, change => change.rowNumber).forEach(group =>
+      sheet.getRange(group[0].rowNumber, column + 1, group.length, 1).setValues(group.map(change => [change.value])));
+  });
+  return new Set(changes.map(change => change.rowNumber)).size;
 }

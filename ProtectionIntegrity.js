@@ -22,26 +22,44 @@ function workbookOwnerEmail_(spreadsheet) {
   }
 }
 
-function v15HardenProtectionEditors_(protection, spreadsheet) {
-  const owner = workbookOwnerEmail_(spreadsheet);
-  const actor = clean_(Session.getEffectiveUser().getEmail());
-  const allowed = Array.from(new Set([owner, actor].filter(validEmail_)));
-  if (!allowed.length) {
+// Extra people who must stay able to change protections (System - Configuration key PROTECTION_EDITORS:
+// e-mail addresses separated by commas, semicolons, spaces or |). Empty by default.
+function configuredProtectionEditors_() {
+  const raw = clean_(config_().PROTECTION_EDITORS);
+  return raw ? raw.split(/[\s,;|]+/).map(clean_).filter(validEmail_) : [];
+}
+// Owner, running account and configured editors are the same for every protection in a workbook, so they are resolved once per workbook per run
+// (the owner lookup is a Drive call). The end state is unchanged: only these people can edit; everyone else, and domain editing, is removed.
+const PROTECTION_EDITOR_CONTEXT_ = {};
+function protectionEditorContext_(spreadsheet) {
+  const id = spreadsheet && typeof spreadsheet.getId === 'function' ? spreadsheet.getId() : '';
+  if (id && PROTECTION_EDITOR_CONTEXT_[id]) return PROTECTION_EDITOR_CONTEXT_[id];
+  const owner = workbookOwnerEmail_(spreadsheet), actor = clean_(Session.getEffectiveUser().getEmail());
+  const required = [owner, actor].filter(validEmail_), extra = configuredProtectionEditors_();
+  if (!required.length) {
     throw new Error('The workbook owner or current user could not be identified for sheet protection.');
   }
-  protection.addEditors(allowed);
-  protection.getEditors().forEach(user => {
-    const email = clean_(user.getEmail());
-    if (email && !allowed.some(value => key_(value) === key_(email))) {
-      protection.removeEditor(user);
-    }
+  const allowed = [];
+  required.concat(extra).forEach(email => { if (!allowed.some(value => key_(value) === key_(email))) allowed.push(email); });
+  const context = { required, extra, allowedKeys: allowed.map(key_) };
+  if (id) PROTECTION_EDITOR_CONTEXT_[id] = context;
+  return context;
+}
+function hardenProtectionEditors_(protection, spreadsheet) {
+  const context = protectionEditorContext_(spreadsheet);
+  const current = protection.getEditors().map(user => ({ user, email: clean_(user.getEmail()) })).filter(item => item.email);
+  const currentKeys = current.map(item => key_(item.email));
+  const missing = context.required.filter(email => !currentKeys.includes(key_(email)));
+  if (missing.length) protection.addEditors(missing);
+  // A configured editor without access to this workbook cannot be added; skip it rather than fail the whole run.
+  context.extra.filter(email => !currentKeys.includes(key_(email))).forEach(email => {
+    try { protection.addEditor(email); } catch (error) { console.warn(`Protection editor ${email} was not added: ${error.message}`); }
   });
+  const unwanted = current.filter(item => !context.allowedKeys.includes(key_(item.email))).map(item => item.email);
+  if (unwanted.length) protection.removeEditors(unwanted);
   if (protection.canDomainEdit()) protection.setDomainEdit(false);
   return protection;
 }
-
-
-
 function verifyGranteeProtectionAccess_(spreadsheet, specs, granteeEmail) {
   const email = clean_(granteeEmail).toLowerCase();
   if (!email) return true;
@@ -127,7 +145,7 @@ function applyWorkbookProtectionSpecs_(spreadsheet, specs) {
       .setDescription(spec.description || `APFP client protection - ${spec.sheetName}`)
       .setWarningOnly(false)
       .setUnprotectedRanges(editableRanges);
-    v15HardenProtectionEditors_(protection, spreadsheet);
+    hardenProtectionEditors_(protection, spreadsheet);
 
     if (spec.hidden === true && !sheet.isSheetHidden()) sheet.hideSheet();
     if (spec.hidden === false && sheet.isSheetHidden()) sheet.showSheet();
@@ -265,14 +283,14 @@ function transactionalWorkbookProtectionSpecs_() {
 }
 
 function spreadsheetTimeZoneMatches_(actual) {
-  const wanted = APFP.TIME_ZONE;
+  const wanted = timeZone_();
   const equivalents = new Set([wanted, 'Asia/Calcutta']);
   return equivalents.has(clean_(actual));
 }
 
 function ensureSpreadsheetTimeZone_(spreadsheet) {
   if (!spreadsheetTimeZoneMatches_(spreadsheet.getSpreadsheetTimeZone())) {
-    spreadsheet.setSpreadsheetTimeZone(APFP.TIME_ZONE);
+    spreadsheet.setSpreadsheetTimeZone(timeZone_());
   }
 }
 
@@ -280,7 +298,7 @@ function verifySpreadsheetTimeZone_(spreadsheet, label) {
   const actual = spreadsheet.getSpreadsheetTimeZone();
   if (!spreadsheetTimeZoneMatches_(actual)) {
     throw new Error(
-      `${label || spreadsheet.getName()} timezone must be ${APFP.TIME_ZONE}; found ${actual}.`
+      `${label || spreadsheet.getName()} timezone must be ${timeZone_()}; found ${actual}.`
     );
   }
 }
@@ -304,6 +322,10 @@ function verifyTransactionalWorkbookProtections_(spreadsheet) {
   );
 }
 
+// Workbooks whose structure, links, protections and time zone were verified earlier in THIS execution (never across runs).
+const VERIFIED_THIS_RUN_ = {};
+function markVerifiedThisRun_(spreadsheet) { VERIFIED_THIS_RUN_[spreadsheet.getId()] = true; }
+function verifiedThisRun_(spreadsheet) { return VERIFIED_THIS_RUN_[spreadsheet.getId()] === true; }
 function finaliseSetupWorkbookIntegrity_(spreadsheet, fieldConfig) {
   const specs = setupWorkbookProtectionSpecs_(fieldConfig);
   removeGeneratedAdminSheets_(spreadsheet);
@@ -313,6 +335,7 @@ function finaliseSetupWorkbookIntegrity_(spreadsheet, fieldConfig) {
   verifyGeneratedLinks_(spreadsheet);
   verifyWorkbookProtectionSpecs_(spreadsheet, specs);
   verifySpreadsheetTimeZone_(spreadsheet, 'Generated Grant Setup workbook');
+  markVerifiedThisRun_(spreadsheet);
   return true;
 }
 
@@ -324,6 +347,7 @@ function finaliseOutcomeWorkbookIntegrity_(spreadsheet) {
   verifyOutcomeWorkbookLinks_(spreadsheet);
   verifyOutcomeWorkbookProtections_(spreadsheet);
   verifySpreadsheetTimeZone_(spreadsheet, 'Generated Outcome Progress workbook');
+  markVerifiedThisRun_(spreadsheet);
   return true;
 }
 
@@ -398,17 +422,25 @@ function assertWorkspaceFilesSafeToShare_(requestId, config, emailOverride) {
   }
 
   const fieldConfig = templateFieldConfigRows_(clean_(effectiveConfig.SETUP_TEMPLATE_ID));
+  // The "after sharing" call (emailOverride given) always does the full check. The "before sharing" call skips only the
+  // structure/links/time-zone re-check for a workbook that this same run has just finalised and verified.
   const setup = openSpreadsheetCached_(urlId_(setupUrl));
-  verifyGeneratedLinks_(setup);
-  verifyTemplateProtections_(setup, fieldConfig);
+  const recentlyVerifiedSetup = !emailOverride && verifiedThisRun_(setup);
+  if (!recentlyVerifiedSetup) {
+    verifyGeneratedLinks_(setup);
+    verifyTemplateProtections_(setup, fieldConfig);
+  }
   verifyGranteeProtectionAccess_(setup, setupWorkbookProtectionSpecs_(fieldConfig), clean_(emailOverride || record['Primary Contact Email']));
-  verifySpreadsheetTimeZone_(setup, 'Grant Setup workbook');
+  if (!recentlyVerifiedSetup) verifySpreadsheetTimeZone_(setup, 'Grant Setup workbook');
 
   const outcome = openSpreadsheetCached_(urlId_(outcomeUrl));
-  verifyOutcomeWorkbookLinks_(outcome);
-  verifyOutcomeWorkbookProtections_(outcome);
+  const recentlyVerifiedOutcome = !emailOverride && verifiedThisRun_(outcome);
+  if (!recentlyVerifiedOutcome) {
+    verifyOutcomeWorkbookLinks_(outcome);
+    verifyOutcomeWorkbookProtections_(outcome);
+  }
   verifyGranteeProtectionAccess_(outcome, outcomeWorkbookProtectionSpecs_(), clean_(emailOverride || record['Primary Contact Email']));
-  verifySpreadsheetTimeZone_(outcome, 'Outcome Progress workbook');
+  if (!recentlyVerifiedOutcome) verifySpreadsheetTimeZone_(outcome, 'Outcome Progress workbook');
   return true;
 }
 
@@ -422,6 +454,7 @@ function repairWorkspaceFilesBeforeRetrySharing_(requestId, config) {
     const workbookUrl = clean_(record['Disbursement Workbook URL']);
     if (!workbookUrl) throw new Error('Transactional Disbursement workbook is missing before sharing.');
     const workbook = openSpreadsheetCached_(urlId_(workbookUrl));
+    if (clean_(record['Disbursement Folder URL'])) writeTransactionalUploadLinks_(workbook, record['Disbursement Folder URL']);
     finaliseTransactionalWorkbookIntegrity_(workbook);
     removeGranteeProtectionAccess_(workbook, transactionalWorkbookProtectionSpecs_(), record['Primary Contact Email']);
     return assertWorkspaceFilesSafeToShare_(requestId, effectiveConfig);

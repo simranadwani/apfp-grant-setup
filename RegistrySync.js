@@ -87,8 +87,6 @@ function updateApprovedSetupData() {
    lock.releaseLock();
  }
  const suffix = stopped ? ' Remaining approved records were left untouched; run this menu action again to continue.' : '';
- recordAutomationStatus_('Setup Approval & Registry Sync', failed || stopped ? 'Needs attention' : 'Success',
-   `${completed} completed; ${failed} need attention${stopped ? '; safely paused' : ''}`);
  const failureLines = failures.filter(Boolean).slice(0, 5)
    .map(item => `• ${item.organisationName || item.grantId}: ${item.summary}`);
  const detail = failureLines.length ? `\n\nNeeds attention:\n${failureLines.join('\n')}` : '';
@@ -329,13 +327,21 @@ function setupRegistryExportRecords_(source) {
   // validated Field Config batch-read path. New workbooks must use the export.
   if (!sheet) return { organisation: {}, grant: {}, legacyFallback: true };
   if (!sheet.isSheetHidden()) throw new Error('System - Registry Export exists but is visible. Hide and protect it before migration.');
+  // Read by header name: extra or reordered export columns are fine; a required header that is missing is an error.
+  // Workbooks generated before the FCRA Registration Status / Foreign Funding fields existed lack them; those are left out of the result, so an existing registry value is never blanked.
+  const late = new Set(['fcra registration status', 'foreign funding — percentage of total annual funding']);
   const read = (headerRow, dataRow, headers) => {
-    const actual = sheet.getRange(headerRow, 1, 1, headers.length).getDisplayValues()[0];
-    headers.forEach((header, index) => {
-      if (clean_(actual[index]) !== header) throw new Error(`Registry Export column ${index + 1} should be "${header}".`);
+    const width = sheet.getLastColumn();
+    const actual = sheet.getRange(headerRow, 1, 1, width).getDisplayValues()[0].map(clean_);
+    const values = sheet.getRange(dataRow, 1, 1, width).getValues()[0], out = {};
+    headers.forEach(header => {
+      const index = actual.findIndex(name => key_(name) === key_(header));
+      if (index < 0) {
+        if (!late.has(key_(header))) throw new Error(`Registry Export is missing the column "${header}" (row ${headerRow}).`);
+        return;
+      }
+      out[header] = values[index];
     });
-    const values = sheet.getRange(dataRow, 1, 1, headers.length).getValues()[0], out = {};
-    headers.forEach((header, index) => out[header] = values[index]);
     return out;
   };
   return {
@@ -352,7 +358,7 @@ function syncOneMasterDataRow_(rowNumber) {
  if (['updated', 'updating'].includes(key_(record['Data Update Status'])))
    throw new Error('Approved Setup is already updated or currently updating.');
  const config = config_();
- requireConfig_(config, ['SETUP_TEMPLATE_ID', 'DATA_SYNC_SCHEMA_VERSION']);
+ requireConfig_(config, ['SETUP_TEMPLATE_ID']);
  const sourceUrl = clean_(record['Setup Workbook URL']), sourceId = sourceUrl ? urlId_(sourceUrl) : '',
    source = sourceId ? openSpreadsheetCached_(sourceId) : null;
  if (!source) throw new Error('Setup Workbook URL is missing from Technical Registry.');
@@ -365,7 +371,8 @@ function syncOneMasterDataRow_(rowNumber) {
    financialYear = clean_(record['Financial Year']),
    projectTitle = clean_(record['Project Title']) || readSingleConfigured_(source, byCode.project_title),
    organisationId = clean_(record['Organisation ID']), grantId = clean_(record['Grant ID']),
-   syncedAt = now_(), schema = clean_(config.DATA_SYNC_SCHEMA_VERSION),
+   syncedAt = now_(),
+  
    older = hasLaterApprovedCompletedSource_(organisationId, financialYear, grantId),
    exported = setupRegistryExportRecords_(source);
  if (!organisationId || !grantId || !organisationName || !projectTitle) throw new Error('Sync identity is incomplete.');
@@ -375,10 +382,10 @@ function syncOneMasterDataRow_(rowNumber) {
    'Last Error Code': '', 'Last Error Message': ''
  });
  if (!older) {
-   syncOrganisationMaster_(source, byCode, organisationId, organisationName, sourceUrl, syncedAt, schema, exported.organisation);
-   syncLeadershipMaster_(source, byCode, organisationId, sourceUrl, syncedAt, schema);
+   syncOrganisationMaster_(source, byCode, organisationId, organisationName, sourceUrl, syncedAt, exported.organisation);
+   syncLeadershipMaster_(source, byCode, organisationId, sourceUrl, syncedAt);
  }
- syncGrantMaster_(source, byCode, grantId, organisationId, organisationName, financialYear, projectTitle, sourceUrl, syncedAt, schema, exported.grant);
+ syncGrantMaster_(source, byCode, grantId, organisationId, organisationName, financialYear, projectTitle, sourceUrl, syncedAt, exported.grant);
  syncApprovedOutcomesToGranteeWorkbook_(grantId, sourceId, true);
  archiveApprovedSetup_(grantId);
  saveTech_(record['Request ID'], {
@@ -405,11 +412,11 @@ function configuredScalarDestinationPatch_(source, byCode, destinationTable, opt
  });
  return out;
 }
-function syncOrganisationMaster_(source, byCode, organisationId, organisationName, sourceUrl, syncedAt, schema, exported) {
+function syncOrganisationMaster_(source, byCode, organisationId, organisationName, sourceUrl, syncedAt, exported) {
  const patch = Object.assign({}, exported || {}, {
    'Organisation ID': organisationId, 'Organisation Name': organisationName,
    'Source Setup Workbook URL': sourceUrl, 'Master Data Synced At': syncedAt,
-   'Template Schema Version': schema, 'Record Status': APFP.ACTIVE
+   'Record Status': APFP.ACTIVE
  }, configuredScalarDestinationPatch_(source, byCode, 'Organisation Registry', {
    excludedCodes: ['org_name'],
    rawInputTypes: ['date', 'year']
@@ -419,7 +426,7 @@ function syncOrganisationMaster_(source, byCode, organisationId, organisationNam
    ? setByHeaders_(APFP.SHEETS.ORGANISATIONS, 1, existing.rowNumber, patch)
    : appendObject_(APFP.SHEETS.ORGANISATIONS, 1, patch);
 }
-function syncLeadershipMaster_(source, byCode, organisationId, sourceUrl, syncedAt, schema) {
+function syncLeadershipMaster_(source, byCode, organisationId, sourceUrl, syncedAt) {
  const names = readTableConfigured_(source, byCode.leadership_name),
    designations = readTableConfigured_(source, byCode.leadership_designation),
    emails = readTableConfigured_(source, byCode.leadership_email),
@@ -456,8 +463,7 @@ function syncLeadershipMaster_(source, byCode, organisationId, sourceUrl, synced
        'LinkedIn Profile': linkedIn,
        'Source Setup Workbook URL': sourceUrl,
        'Master Data Synced At': syncedAt,
-       'Template Schema Version': schema,
-       'Record Status': APFP.ACTIVE
+      'Record Status': APFP.ACTIVE
      };
    seen.add(slotKey);
    match
@@ -469,7 +475,7 @@ function syncLeadershipMaster_(source, byCode, organisationId, sourceUrl, synced
      setByHeaders_(APFP.SHEETS.LEADERSHIP, 2, x.rowNumber, { 'Record Status': 'Inactive', 'Master Data Synced At': syncedAt });
  });
 }
-function syncGrantMaster_(source, byCode, grantId, organisationId, organisationName, financialYear, projectTitle, sourceUrl, syncedAt, schema, exported) {
+function syncGrantMaster_(source, byCode, grantId, organisationId, organisationName, financialYear, projectTitle, sourceUrl, syncedAt, exported) {
  const g = grantById_(grantId), base = g ? g.record : {},
    primaryBeneficiary = primaryBeneficiaryFromSetup_(source, byCode.beneficiary_type, byCode.direct_beneficiary_count),
    p = Object.assign({}, exported || {}, {
@@ -492,8 +498,7 @@ function syncGrantMaster_(source, byCode, grantId, organisationId, organisationN
      'Primary Contact Email': readSingleConfigured_(source, byCode.primary_contact_email),
      'Master Data Sync Status': 'Completed', 'Record Status': APFP.ACTIVE,
      'Last Updated At': syncedAt, 'Source Setup Workbook URL': sourceUrl,
-
-     'Master Data Synced At': syncedAt, 'Template Schema Version': schema
+     'Master Data Synced At': syncedAt
    }, configuredScalarDestinationPatch_(source, byCode, 'Grant Registry', {
      excludedCodes: ['project_title'],
      rawAll: true

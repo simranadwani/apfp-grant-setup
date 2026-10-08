@@ -19,10 +19,9 @@ function handleOrganisationInputEdit_(e) {
   if (range.getRow() < APFP.INTAKE.START_ROW) return;
   const first = range.getColumn();
   const last = range.getLastColumn();
-  const touchesType = first <= APFP.INTAKE.ORGANISATION_TYPE_COLUMN &&
-    last >= APFP.INTAKE.ORGANISATION_TYPE_COLUMN;
-  const touchesName = first <= APFP.INTAKE.ORGANISATION_NAME_COLUMN &&
-    last >= APFP.INTAKE.ORGANISATION_NAME_COLUMN;
+  const typeColumn = intakeColumn_('Organisation Type'), nameColumn = intakeColumn_('Organisation Name');
+  const touchesType = first <= typeColumn && last >= typeColumn;
+  const touchesName = first <= nameColumn && last >= nameColumn;
   if (!touchesType && !touchesName) return;
 
   const sheet = range.getSheet();
@@ -38,7 +37,7 @@ function handleTrackerReviewEdit_(e) {
  const range = e.range;
  if (range.getRow() < APFP.INTAKE.START_ROW || range.getNumRows() !== 1 || range.getNumColumns() !== 1)
    return;
- const col = APFP.INTAKE.REVIEW_STATUS_COLUMN;
+ const col = intakeColumn_('Setup Review Status');
  if (col < range.getColumn() || col > range.getLastColumn())
    return;
  const status = clean_(range.getSheet().getRange(range.getRow(), col).getDisplayValue());
@@ -183,8 +182,10 @@ function guardCompletedIntakeIdentityEdit_(e) {
   const range = e.range;
   if (range.getRow() < APFP.INTAKE.START_ROW) return;
   const immutableHeaders = [
-    'Financial Year', 'Grant Start Date', 'Grant End Date',
-    'Organisation Type', 'Organisation Name', 'Grant Type', 'Primary Contact Email'
+    'Financial Year', 'Organisation Name', 'Grant Type', 'Primary Contact Email',
+    // Correctable only through Action = Correct Workspace (the dialog), never by typing in a completed row.
+    'Grant Title', 'Grant Start Date', 'Grant End Date', 'Amount Approved', 'Thematic Area', 'Thematic Sub-area',
+    'Proximity to Children / Beneficiary', 'Organisation Type'
   ];
   const sheet = range.getSheet();
   const map = headerMap_(sheet, APFP.INTAKE.HEADER_ROW);
@@ -194,19 +195,31 @@ function guardCompletedIntakeIdentityEdit_(e) {
   });
   if (!touchesImmutable) return;
 
+  let reverted = false;
   for (let row = range.getRow(); row <= range.getLastRow(); row++) {
     const context = completedWorkspaceIntakeContext_(sheet, map, row);
     if (!context) continue;
+    reverted = true;
     const tech = context.tech.record;
     const grant = context.grant.record;
+    const first = (...values) => { const v = values.find(value => value !== '' && value != null); return v === undefined ? '' : v; };
     setByHeaders_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, row, {
       'Financial Year': tech['Financial Year'],
-      'Grant Start Date': tech['Grant Start Date'],
-      'Grant End Date': tech['Grant End Date'],
-      'Organisation Type': tech['Organisation Type'],
       'Organisation Name': tech['Organisation Name'],
       'Grant Type': tech['Grant Type'] || grant['Grant Type'],
-      'Primary Contact Email': tech['Primary Contact Email']
+      'Primary Contact Email': tech['Primary Contact Email'],
+      'Grant Title': first(grant['Project Title'], tech['Project Title']),
+      'Grant Start Date': first(tech['Grant Start Date'], grant['Grant Start Date']),
+      'Grant End Date': first(tech['Grant End Date'], grant['Grant End Date']),
+      'Amount Approved': first(grant['Amount Approved'], tech['Amount Approved']),
+      'Thematic Area': grant['Thematic Area'] || '',
+      'Thematic Sub-area': grant['Thematic Sub-area'] || '',
+      'Proximity to Children / Beneficiary': grant['Proximity to Children / Beneficiary'] || '',
+      'Organisation Type': tech['Organisation Type'] || ''
     });
+  }
+  if (reverted) {
+    try { ss_().toast('Locked on a completed grant. To correct it, set Action to "Correct Workspace" and click Correct Workspace Details (email changes: Retry/Reshare).', 'APFP', 8); }
+    catch (error) { /* a toast is only a hint */ }
   }
 }

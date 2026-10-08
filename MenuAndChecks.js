@@ -1,18 +1,8 @@
-// MenuAndChecks.gs — Central Administration menu, protection checks, and preflight.
-function showAdminMenu_() {
-  // V15 uses assigned sheet buttons. No custom menu is added.
-}
+// MenuAndChecks.gs — Central Administration open handler, admin notices, sheet checks, and preflight.
 function handleCentralAdminOpen() {
-  // Keep the UI menu-free while ensuring Organisation Name always has a live Registry dropdown.
+  // No custom menu is added: actions run from assigned sheet buttons. Keep the Organisation Name dropdown live.
   applyWorkspaceOrganisationDropdown_();
 }
-
-function clearHeaderCache_() {
-  Object.keys(HEADER_CACHE_).forEach(key => delete HEADER_CACHE_[key]);
-}
-
-
-
 
 function notifyAdmin_(message) {
   const text = clean_(message);
@@ -55,11 +45,8 @@ function checkTransactionalDisbursementTemplate_(config) {
   const requiredLastRow = schema.DATA_START_ROW + schema.DATA_ROWS - 1;
   if (sheet.getMaxRows() < requiredLastRow || sheet.getMaxColumns() < schema.HEADERS.length)
     throw new Error(`Transactional template must provide ${schema.DATA_ROWS} data rows across ${schema.HEADERS.length} columns.`);
-  const actual = sheet.getRange(schema.HEADER_ROW, 1, 1, schema.HEADERS.length).getDisplayValues()[0];
-  schema.HEADERS.forEach((header, index) => {
-    if (clean_(actual[index]) !== header)
-      throw new Error(`Transactional template header ${index + 1} should be "${header}"; found "${actual[index]}".`);
-  });
+  const gaps = headerGaps_(sheet.getRange(schema.HEADER_ROW, 1, 1, sheet.getLastColumn()).getDisplayValues()[0], schema.HEADERS);
+  if (gaps.missing.length) throw new Error(`Transactional template is missing required header(s): ${gaps.missing.join(', ')}.`);
   return spreadsheet;
 }
 function checkExportFormulaCoverage_(sheet, section) {
@@ -82,11 +69,8 @@ function checkSetupRegistryExport_(spreadsheet) {
   APFP.PREFLIGHT_SCHEMA.SETUP_EXPORT_SECTIONS.forEach(section => {
     const headers = APFP[section.HEADERS_SOURCE];
     if (!headers) throw new Error(`Unknown Setup export header source: ${section.HEADERS_SOURCE}.`);
-    const actual = sheet.getRange(section.HEADER_ROW, 1, 1, headers.length).getDisplayValues()[0];
-    headers.forEach((header, index) => {
-      if (clean_(actual[index]) !== header)
-        throw new Error(`Setup Registry Export ${section.LABEL} column ${index + 1} should be "${header}".`);
-    });
+    const gaps = headerGaps_(sheet.getRange(section.HEADER_ROW, 1, 1, sheet.getLastColumn()).getDisplayValues()[0], headers);
+    if (gaps.missing.length) throw new Error(`Setup Registry Export ${section.LABEL} is missing required header(s): ${gaps.missing.join(', ')}.`);
     checkExportFormulaCoverage_(sheet, section);
   });
 }
@@ -99,17 +83,20 @@ function checkOutcomeTrackerExport_(spreadsheet) {
       section.HEADERS_SOURCE === 'DISBURSEMENT_HEADERS' ? APFP.DISBURSEMENT_HEADERS :
       APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADERS[section.HEADERS_SOURCE];
     if (!headers) throw new Error(`Unknown Outcome export header source: ${section.HEADERS_SOURCE}.`);
-    const actual = sheet.getRange(section.HEADER_ROW, 1, 1, headers.length).getDisplayValues()[0];
-    headers.forEach((header, index) => {
-      if (clean_(actual[index]) !== header)
-        throw new Error(`Outcome, Support and Disbursement Tracker Export ${section.LABEL} column ${index + 1} should be "${header}".`);
-    });
+    const gaps = headerGaps_(sheet.getRange(section.HEADER_ROW, 1, 1, sheet.getLastColumn()).getDisplayValues()[0], headers);
+    if (gaps.missing.length) throw new Error(`Outcome, Support and Disbursement Tracker Export ${section.LABEL} is missing required header(s): ${gaps.missing.join(', ')}.`);
     checkExportFormulaCoverage_(sheet, section);
   });
 }
+// The grant identity block of a Workspace Creator row: from "Financial Year" through "Grant Title".
+function intakeIdentityColumns_() {
+  const start = intakeColumn_('Financial Year');
+  return { start, count: intakeColumn_('Grant Title') - start + 1 };
+}
 function protectCompletedIntakeRow_(rowNumber) {
   const s = sheet_(APFP.SHEETS.INTAKE),
-    range = s.getRange(rowNumber, APFP.INTAKE.IDENTITY_START_COLUMN, 1, APFP.INTAKE.IDENTITY_COLUMN_COUNT);
+    identity = intakeIdentityColumns_(),
+    range = s.getRange(rowNumber, identity.start, 1, identity.count);
   s.getProtections(SpreadsheetApp.ProtectionType.RANGE)
     .filter(p => p.canEdit() && completedIntakeProtection_(p, rowNumber)).forEach(p => p.remove());
   range.clearNote();
@@ -119,21 +106,19 @@ function completedIntakeProtection_(protection, rowNumber) {
     const range = protection.getRange(), description = clean_(protection.getDescription());
     return protection.isWarningOnly() && range.getSheet().getName() === APFP.SHEETS.INTAKE &&
       range.getRow() === rowNumber && range.getNumRows() === 1 &&
-      range.getColumn() === APFP.INTAKE.IDENTITY_START_COLUMN &&
-      range.getNumColumns() === APFP.INTAKE.IDENTITY_COLUMN_COUNT &&
+      range.getColumn() === intakeIdentityColumns_().start &&
+      range.getNumColumns() === intakeIdentityColumns_().count &&
       /completed grant identity row/i.test(description);
   } catch (e) {
     return false;
   }
 }
-function checkHeaders_(errors, sheetName, headerRow, expected) {
+// Required headers must exist by name; their order and extra columns are allowed (extras are not reported).
+function checkHeaders_(errors, sheetName, headerRow, expected, warnings) {
   const s = ss_().getSheetByName(sheetName);
   if (!s) { errors.push(`Missing sheet: ${sheetName}`); return; }
-  const actual = s.getRange(headerRow, 1, 1, expected.length).getDisplayValues()[0];
-  expected.forEach((h, i) => {
-    if (clean_(actual[i]) !== h)
-      errors.push(`${sheetName} header ${i + 1} should be "${h}"; found "${actual[i]}".`);
-  });
+  const gaps = headerGaps_(s.getRange(headerRow, 1, 1, s.getLastColumn()).getDisplayValues()[0], expected);
+  if (gaps.missing.length) errors.push(`${sheetName} is missing required header(s): ${gaps.missing.join(', ')}.`);
 }
 function preflightCentralHeaderSpecs_() {
   const rows = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS;
@@ -177,10 +162,10 @@ function runPreflightChecks() {
     });
     preflightCentralHeaderSpecs_().forEach(spec => {
       capture(`Header check — ${spec.sheetName}`, () =>
-        checkHeaders_(errors, spec.sheetName, spec.headerRow, spec.expected)
+        checkHeaders_(errors, spec.sheetName, spec.headerRow, spec.expected, warnings)
       );
     });
-    capture('Central Administration tables', () => checkAdminTables_(errors));
+    capture('Central Administration tables', () => checkAdminTables_(errors, warnings));
     capture('Phase 2 tracker tables', () => checkPhase2TrackerTables_(errors));
     capture('Disbursement tracker table', () => checkDisbursementTrackerTable_(errors));
     const setupContext = capture('Grant Setup template open/config', () => ({
@@ -211,10 +196,27 @@ function runPreflightChecks() {
     }
     capture('Restricted/Unrestricted email template', () => workspaceEmailTemplateBlock_(config, 'RESTRICTED_UNRESTRICTED'));
     capture('Transactional email template', () => workspaceEmailTemplateBlock_(config, 'TRANSACTIONAL'));
+    capture('Protection editors setting', () => {
+      const raw = clean_(config.PROTECTION_EDITORS);
+      const bad = raw ? raw.split(/[\s,;|]+/).map(clean_).filter(token => token && !validEmail_(token)) : [];
+      if (bad.length) warnings.push(`PROTECTION_EDITORS has entries that are not valid e-mail addresses and are ignored: ${bad.join(', ')}.`);
+      if (!raw) warnings.push('PROTECTION_EDITORS is empty: only the file owner and the running account can change protections.');
+    });
+    capture('Backup folder setting', () => {
+      const id = clean_(config.CENTRAL_ADMIN_FOLDER_ID);
+      if (!id) { warnings.push('CENTRAL_ADMIN_FOLDER_ID is empty: the Backup button cannot save a copy.'); return; }
+      DriveApp.getFolderById(id).getName();
+    });
+    capture('Configuration keys in use', () => {
+      const sheet = sheet_(APFP.SHEETS.CONFIG), last = sheet.getLastRow(), known = new Set(APFP.PREFLIGHT_SCHEMA.KNOWN_CONFIG_KEYS.map(key_)),
+        unused = last < 3 ? [] : sheet.getRange(3, 1, last - 2, 1).getValues().map(row => clean_(row[0]))
+          .filter(name => name && !known.has(key_(name)));
+      if (unused.length) warnings.push(`System - Configuration has row(s) the code never reads (safe to delete): ${unused.join(', ')}.`);
+    });
     if (key_(config.SEND_WORKSPACE_NOTIFICATION) !== 'yes')
       warnings.push('Workspace email notification is disabled.');
   }
-  const lines = [errors.length
+  const lines = [`Code version: ${APFP.CODE_VERSION}`, errors.length
     ? `FAIL — ${errors.length} blocking APFP issue(s).`
     : 'PASS — APFP preflight checks passed.'];
   errors.forEach((item, index) => lines.push(`${index + 1}. ${item}`));
@@ -224,4 +226,15 @@ function runPreflightChecks() {
   }
   notifyAdmin_(lines.join('\n'));
   return { ok: !errors.length, errors, warnings };
+}
+
+// Copies the whole Central Administration workbook into <CENTRAL_ADMIN_FOLDER_ID>/Backups with a timestamp.
+// Central sheets mirror the grantee workbooks (including blanks), so take a copy before any bulk operation.
+function backupCentralAdministration_() {
+  const config = config_();
+  requireConfig_(config, ['CENTRAL_ADMIN_FOLDER_ID']);
+  const folder = getOrCreateUniqueChildFolder_(DriveApp.getFolderById(clean_(config.CENTRAL_ADMIN_FOLDER_ID)), 'Backups'),
+    stamp = Utilities.formatDate(now_(), timeZone_(), 'yyyy-MM-dd HHmm'),
+    copy = DriveApp.getFileById(ss_().getId()).makeCopy(`${ss_().getName()} — backup ${stamp}`, folder);
+  return copy.getUrl();
 }
