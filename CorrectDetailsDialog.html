@@ -33,6 +33,8 @@
       .msg.ok { color: #137333; }
       .msg.warn { color: #b06000; }
       .lockreason { color: #b3261e; padding: 8px 0; }
+      .typewarn { display: none; margin-top: 10px; padding: 10px; border: 1px solid #f28b82; border-radius: 6px; background: #fce8e6; color: #b3261e; }
+      .typewarn label { display: block; margin-top: 6px; color: #202124; }
     </style>
   </head>
   <body>
@@ -47,6 +49,7 @@
     <script>
       const context = <?!= contextJson ?>;
       const FIELDS = [
+        { key: 'grantType', label: 'Grant Type', type: 'select', options: 'grantType' },
         { key: 'title', label: 'Grant Title', type: 'text' },
         { key: 'startDate', label: 'Grant Start Date', type: 'date' },
         { key: 'endDate', label: 'Grant End Date', type: 'date' },
@@ -57,6 +60,16 @@
         { key: 'organisationType', label: 'Organisation Type', type: 'select', options: 'organisationType' }
       ];
       const cards = [];
+      function kindOf(type) { return (context.kinds || {})[type] || 'full'; }
+      function typeMessage(from, to, email) {
+        const a = kindOf(from), b = kindOf(to);
+        if (a === b) return '';
+        const keep = 'Old workbooks are archived (read-only, never deleted).';
+        if (b === 'registry') return 'This grant becomes registry-only: ' + keep + ' The grantee loses access to the workspace and the grant becomes Complete.';
+        if (a === 'registry') return 'A workspace is created and shared with ' + (email || 'the grantee') + ', and the grant becomes Active.';
+        if (b === 'transactional') return 'The Setup and Outcome Progress workbooks are archived (read-only, never deleted) and a Disbursement Documents workbook is created. Disbursements are pushed again to it.';
+        return 'The Disbursement Documents workbook is archived (read-only, never deleted). A Setup workbook, an Outcome Progress workbook and the quarter folders are created. Disbursements are pushed again to the Outcome workbook.';
+      }
       function el(tag, attrs, text) {
         const node = document.createElement(tag);
         Object.keys(attrs || {}).forEach(k => { if (k === 'class') node.className = attrs[k]; else node.setAttribute(k, attrs[k]); });
@@ -112,11 +125,17 @@
             toggle.appendChild(box); toggle.appendChild(document.createTextNode('Change'));
             const oldBox = el('input', { type: 'text' }); oldBox.value = pretty(field, current); oldBox.disabled = true;
             const input = newInput(field, current);
-            box.onchange = () => { input.disabled = !box.checked; if (box.checked) input.focus(); };
+            box.onchange = () => { input.disabled = !box.checked; if (box.checked) input.focus(); card.confirmed = false; typeWarning(card); };
+            if (field.key === 'grantType') input.onchange = () => { card.confirmed = false; typeWarning(card); };
             grid.appendChild(toggle); grid.appendChild(el('div', {}, field.label)); grid.appendChild(oldBox); grid.appendChild(input);
             card.rows[field.key] = { box, input, oldBox, field };
           });
           body.appendChild(grid);
+          const warn = el('div', { class: 'typewarn' }), warnText = el('div'), notifyLabel = el('label'), notify = el('input', { type: 'checkbox' });
+          notify.checked = true; notify.style.width = 'auto';
+          notifyLabel.appendChild(notify); notifyLabel.appendChild(document.createTextNode(' Send the grantee the new workspace email'));
+          warn.appendChild(warnText); warn.appendChild(notifyLabel); body.appendChild(warn);
+          card.warn = warn; card.warnText = warnText; card.notify = notify;
           const actions = el('div', { class: 'actions' });
           const button = el('button', { class: 'primary' }, 'Update details');
           button.onclick = () => submit(card, button, status, badge, root);
@@ -128,8 +147,23 @@
         document.getElementById('cards').appendChild(root);
         return card;
       }
+      // Shows the red notice when the chosen Grant Type changes the workspace kind; returns true when it does.
+      function typeWarning(card) {
+        const r = card.rows.grantType;
+        const text = r && r.box.checked ? typeMessage(card.grant.values.grantType, r.input.value, card.grant.email) : '';
+        card.warn.style.display = text ? 'block' : 'none';
+        card.warnText.textContent = text;
+        if (card.button) card.button.textContent = 'Update details';
+        return !!text;
+      }
       function submit(card, button, status, badge, root) {
         const changes = {};
+        card.button = button;
+        if (typeWarning(card) && !card.confirmed) {
+          card.confirmed = true; button.textContent = 'Confirm and change Grant Type';
+          status.className = 'msg warn'; status.textContent = 'Read the notice above, then click again to confirm.';
+          return;
+        }
         Object.keys(card.rows).forEach(key => {
           const r = card.rows[key];
           if (r.box.checked) changes[key] = r.input.value;
@@ -144,7 +178,7 @@
               if (r.field.type === 'select' && r.input.tagName === 'SELECT' && value && !Array.from(r.input.options).some(o => o.value === value)) r.input.add(new Option(value, value));
               r.input.value = value == null ? '' : value; r.box.checked = false; r.input.disabled = true;
             });
-            card.done = true; root.classList.add('done', 'collapsed');
+            card.done = true; card.confirmed = false; card.grant.values.grantType = result.values.grantType; root.classList.add('done', 'collapsed'); typeWarning(card);
             badge.className = 'badge ok'; badge.textContent = '✓ Updated';
             status.className = 'msg ' + (result.warning ? 'warn' : 'ok');
             status.textContent = result.message + (result.warning ? ' ' + result.warning : '');
@@ -153,7 +187,7 @@
           .withFailureHandler(error => {
             button.disabled = false; status.className = 'msg err'; status.textContent = (error && error.message) || String(error);
           })
-          .submitCorrectWorkspaceGrant({ rowNumber: card.grant.rowNumber, requestId: card.grant.requestId, grantId: card.grant.grantId, changes });
+          .submitCorrectWorkspaceGrant({ rowNumber: card.grant.rowNumber, requestId: card.grant.requestId, grantId: card.grant.grantId, changes, notify: card.notify.checked });
       }
       function refresh() {
         const updated = cards.filter(c => c.done).length;

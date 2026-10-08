@@ -122,3 +122,9 @@ test('date helpers round-trip and reject impossible dates', () => {
   assert.equal(p.get('dateFromIso_')('2026-02-30'), null);
   assert.equal(p.get('dateFromIso_')('nope'), null);
 });
+
+test('the dialog context offers the Grant Type options and the workspace kind of each type', () => {
+  const ctx = plain(setup().p.get('correctWorkspaceContext_')());
+  assert.deepEqual(ctx.options.grantType, ['Restricted', 'Unrestricted', 'Transactional', 'Discretionary']);
+  assert.deepEqual(ctx.kinds, { Restricted: 'full', Unrestricted: 'full', Transactional: 'transactional', Discretionary: 'registry' });
+});

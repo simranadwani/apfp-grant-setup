@@ -2,7 +2,7 @@
 // Only the owner of a grant's workbook may correct that grant; the dialog shows other grants locked and the
 // server refuses them again on save.
 
-const CORRECT_DIALOG_FIELDS_ = ['title', 'startDate', 'endDate', 'amount', 'thematicArea', 'subArea', 'proximity', 'organisationType'];
+const CORRECT_DIALOG_FIELDS_ = ['grantType', 'title', 'startDate', 'endDate', 'amount', 'thematicArea', 'subArea', 'proximity', 'organisationType'];
 
 function isoDate_(value) {
   const d = dateValue_(value);
@@ -55,7 +55,9 @@ function correctWorkspaceOptions_() {
   try { snapshot = adminTablesSnapshot_(); } catch (error) { console.warn(`Dropdown options could not be read: ${error.message}`); }
   const pick = (sheetName, columnName) => tableDropdownOptions_(snapshot, sheetName, columnName);
   const orgType = pick(APFP.SHEETS.INTAKE, 'Organisation Type');
+  const grantTypes = pick(APFP.SHEETS.INTAKE, 'Grant Type');
   return {
+    grantType: grantTypes.length ? grantTypes : APFP.GRANT_TYPES.slice(),
     thematicArea: pick(APFP.SHEETS.INTAKE, 'Thematic Area'),
     subArea: pick(APFP.SHEETS.INTAKE, 'Thematic Sub-area'),
     proximity: pick(APFP.SHEETS.INTAKE, 'Proximity to Children / Beneficiary'),
@@ -79,7 +81,9 @@ function correctWorkspaceCard_(marked) {
     card.lockReason = access.reason;
     const g = grant.record, t = tech.record;
     card.grantTitle = clean_(g['Project Title']);
+    card.email = clean_(t['Primary Contact Email']);
     card.values = {
+      grantType: clean_(g['Grant Type']),
       title: clean_(g['Project Title']),
       startDate: isoDate_(t['Grant Start Date'] || g['Grant Start Date']),
       endDate: isoDate_(t['Grant End Date'] || g['Grant End Date']),
@@ -97,7 +101,9 @@ function correctWorkspaceCard_(marked) {
 }
 function correctWorkspaceContext_() {
   const marked = intakeRowsMarked_(APFP.INTAKE.CORRECT_ACTION);
-  return { grants: marked.map(correctWorkspaceCard_), options: correctWorkspaceOptions_() };
+  const kinds = {};
+  APFP.GRANT_TYPES.forEach(type => { kinds[type] = workspaceKindOf_(type); });
+  return { grants: marked.map(correctWorkspaceCard_), options: correctWorkspaceOptions_(), kinds };
 }
 // Called by the dialog for ONE card. Re-checks everything on the server: the row is still marked, the IDs match, the caller owns the grant.
 function submitCorrectWorkspaceGrant(payload) {
@@ -123,14 +129,14 @@ function submitCorrectWorkspaceGrant(payload) {
       } else changes[name] = input[name];
     });
     if (!Object.keys(changes).length) throw new Error('Switch on "Change" for at least one field first.');
-    const result = applyGrantCorrections_(clean_(payload.grantId), clean_(payload.requestId), rowNumber, changes);
+    const result = applyGrantCorrections_(clean_(payload.grantId), clean_(payload.requestId), rowNumber, changes, { notify: !(payload && payload.notify === false) });
     setIntake_(rowNumber, { 'Action': APFP.STATUS.COMPLETED, 'Last Updated': now_() });
     const grant = grantById_(payload.grantId), t = techByRequest_(payload.requestId).record, g = grant.record;
     return {
       message: result.applied.length ? `Updated: ${result.applied.join(', ')}.` : 'Nothing needed changing.',
       warning: result.warning,
       values: {
-        title: clean_(g['Project Title']), startDate: isoDate_(t['Grant Start Date'] || g['Grant Start Date']),
+        grantType: clean_(g['Grant Type']), title: clean_(g['Project Title']), startDate: isoDate_(t['Grant Start Date'] || g['Grant Start Date']),
         endDate: isoDate_(t['Grant End Date'] || g['Grant End Date']), amount: g['Amount Approved'] === '' ? '' : Number(g['Amount Approved']),
         thematicArea: clean_(g['Thematic Area']), subArea: clean_(g['Thematic Sub-area']),
         proximity: clean_(g['Proximity to Children / Beneficiary']), organisationType: clean_(t['Organisation Type'])
