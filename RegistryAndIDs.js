@@ -279,7 +279,7 @@ function correctedWorkspaceWorkbookTargets_(techRecord) {
 // Applies ONLY the fields in `changes` (title, startDate, endDate, amount, thematicArea, subArea, proximity,
 // organisationType) to one created grant: Grant Registry, Technical Registry, central references and the Workspace Creator row.
 // Values already equal to the stored ones write nothing. Returns { grantId, projectTitle, applied: [labels], warning }.
-function applyGrantCorrections_(grantId, requestId, rowNumber, changes) {
+function applyGrantCorrections_(grantId, requestId, rowNumber, changes, options) {
   if (!grantId || !requestId) throw new Error('The selected row has no Grant ID or Request ID.');
   const grant = grantById_(grantId), tech = techByRequest_(requestId);
   if (!grant || !tech || key_(tech.record['Grant ID']) !== key_(grantId))
@@ -291,6 +291,14 @@ function applyGrantCorrections_(grantId, requestId, rowNumber, changes) {
   const sameDate = (a, b) => { const x = dateValue_(a), y = dateValue_(b); return !!x && !!y && x.getTime() === y.getTime(); };
   const grantPatch = {}, techPatch = {}, rowPatch = {}, applied = [];
   let titleChanged = false;
+  // Grant Type is validated first, applied last (it can rebuild the workspace), so a bad value stops everything before any write.
+  let newGrantType = '';
+  if (has('grantType')) {
+    newGrantType = canonicalGrantType_(changes.grantType);
+    if (!newGrantType) throw new Error('Grant Type must be Restricted, Unrestricted, Transactional, or Discretionary.');
+    if (key_(newGrantType) === key_(g['Grant Type'])) newGrantType = '';
+  }
+  const typeStep = () => changeGrantType_(grantId, requestId, rowNumber, newGrantType, options);
 
   if (has('title')) {
     const title = clean_(changes.title);
@@ -339,7 +347,11 @@ function applyGrantCorrections_(grantId, requestId, rowNumber, changes) {
       if (endChanged) applied.push('Grant End Date');
     }
   }
-  if (!applied.length) return { grantId, projectTitle: clean_(g['Project Title']), applied, warning: '' };
+  if (!applied.length) {
+    if (!newGrantType) return { grantId, projectTitle: clean_(g['Project Title']), applied, warning: '' };
+    const only = typeStep();
+    return { grantId, projectTitle: clean_(g['Project Title']), applied: only.applied, warning: only.warning };
+  }
 
   const workbookTargets = titleChanged ? correctedWorkspaceWorkbookTargets_(t) : [];
   const projectTitle = titleChanged ? grantPatch['Project Title'] : clean_(g['Project Title']);
@@ -363,6 +375,10 @@ function applyGrantCorrections_(grantId, requestId, rowNumber, changes) {
     }
   });
   SpreadsheetApp.flush();
+  if (newGrantType) {
+    const typed = typeStep();
+    return { grantId, projectTitle, applied: applied.concat(typed.applied), warning: warnings.concat(typed.warning ? [typed.warning] : []).join(' ') };
+  }
   return { grantId, projectTitle, applied, warning: warnings.join(' ') };
 }
 

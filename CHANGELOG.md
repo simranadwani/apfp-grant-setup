@@ -4,6 +4,14 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round W — Grant Type can be changed in Correct Workspace Details
+
+**Date:** 2026-10-08 · new `GrantTypeChange.js`; `RegistryAndIDs.js` (`applyGrantCorrections_` takes `grantType` and an options object), `CorrectWorkspace.js`, `CorrectDetailsDialog.html`, `Config.js` (`FOLDERS.ARCHIVED`, round W). Grant Type is a new field in the dialog (owner-only like the others).
+- **Restricted ↔ Unrestricted:** label change in the Grant Registry, Technical Registry and the row. No Drive work.
+- **Any other change** alters the workspace kind. The dialog shows a red notice and asks for a second click (and an option to email the grantee). The old workbooks are **archived, never deleted** (moved to the FY-level `Archived Grant Workbooks` folder, renamed `ARCHIVED (was <type>) — …`, grantee read-only through a "— Read only" shortcut; for Discretionary the grantee loses access). The new kind is built by the normal workspace engine (find-or-create, checkpointed, shares, protects, emails once). Disbursed rows of the grant get Push Status reset so the next Push writes them into the new workbook; document links already synced are kept. Every conversion writes a resolved line to System - Exceptions Log with the archived file URLs.
+- **Guards:** Discretionary → other needs a valid Primary Contact Email; → Discretionary is refused while a Setup is Approved but not yet locked and migrated; if the build stops, the row stays on Retry Workspace and Create Workspace finishes it.
+- Tests: `tests/grant-type-change.test.js`, `tests/correct-workspace-dialog.test.js` (176 pass).
+
 ## Round V — Retry/Reshare Workspace: one dialog, one card per marked grant
 
 **Date:** 2026-10-08 · `UiActions.js` (`uiRetryOrReshareWorkspace`, new `retryReshareCard_`), `RetryReshareDialog.html` (rewritten), `Config.js` (`RETRY_SHARING_ACTION`, round V). Rows with Action = **Retry Sharing** each get a collapsible card (same style as Correct Workspace Details): *same email* or *change the email* (with the "send the workspace email" option) per grant, a **Retry / Reshare** button per card, **Expand all / Collapse all**, and **Reshare all ready grants (same email)** which runs the cards one after another and stops at the first failure. A marked row without a workspace shows as a locked card with the reason. With no row marked, the selected row still gets its single card as before; with nothing usable, the marked rows are run as before. `submitRetryReshareGrantFy` is unchanged. Tests: `tests/email-change.test.js`, `tests/actions.test.js` (163 pass).
