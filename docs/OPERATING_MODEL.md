@@ -24,7 +24,7 @@ Buttons are drawings assigned to these functions. A workspace button **never wri
 | Function | Purpose |
 |---|---|
 | `uiCreateWorkspace` | Create workspaces for all rows marked Create Workspace / Retry Workspace / Retry Sharing |
-| `uiRetryOrReshareWorkspace` | Opens the Retry / Reshare dialog for the selected row that already has a workspace, even if its Action is set ("same email" reshares; "change email" moves access, updates the registries, the Setup workbook contact cell and — for the latest grant — the organisation contact, optionally emails the new address, and writes an audit line). With no such row selected it runs the marked rows |
+| `uiRetryOrReshareWorkspace` | Opens one Retry / Reshare dialog with a collapsible card per row marked Action = Retry Sharing (with none marked: the selected row that already has a workspace; a marked row without a workspace is shown locked; "Reshare all ready grants" runs every card with its current choice). Per card ("same email" reshares; "change email" moves access, updates the registries, the Setup workbook contact cell and — for the latest grant — the organisation contact, optionally emails the new address, and writes an audit line). With no such row selected it runs the marked rows |
 | `uiLockAndMigrateApprovedSetups`, `uiReopenSetupForChanges` | Approve → lock and archive a Setup; reopen it for changes |
 | `uiRefreshOutcomeProgress`, `uiRefreshSupport`, `uiRefreshDecisions`, `uiRefreshDecisionDocuments` | Refresh the central trackers from Active grants' workbooks. Unchanged workbooks are skipped; a broken one is reported and skipped |
 | `uiRefreshReportingForce` | Forget "unchanged" memory and re-read every Active workbook |

@@ -3,7 +3,7 @@
 // old-access clean-up, optional email, audit line, and the dialog opening whenever the row already has a workspace.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadProject } = require('./harness');
+const { loadProject, plain } = require('./harness');
 
 function setup(techRecord, options) {
   const opts = options || {}, log = { tech: [], grant: [], org: [], intake: [], sharing: [], removed: [], audit: [], mail: 0, setup: [], rolledBack: 0 };
@@ -103,6 +103,7 @@ test('Retry/Reshare opens the dialog for a row with a workspace even when its Ac
     SpreadsheetApp: { getUi: () => ({ showModalDialog: (t, title) => dialogs.push(title) }) }
   });
   let ran = 0;
+  p.override('intakeRowsMarked_', () => []);
   p.override('selectedDataRow_', () => ({ rowNumber: 9 }));
   p.override('rowObject_', () => ({ 'Request ID': 'R1', 'Grant ID': 'G1', 'Action': 'Retry Sharing', 'Organisation Name': 'Org', 'Financial Year': '2026-27' }));
   p.override('techByRequest_', () => ({ record: { 'Grant ID': 'G1', 'Workspace Status': 'Workspace Created', 'Primary Contact Email': 'old@x.org', 'Grant Type': 'Restricted', 'Organisation Folder URL': 'https://x/y' } }));
@@ -118,6 +119,7 @@ function retryButton(rowFacts, tech, selectionError) {
     HtmlService: { createTemplateFromFile: () => ({ evaluate: () => ({ setWidth() { return this; }, setHeight() { return this; } }) }) },
     SpreadsheetApp: { getUi: () => ({ showModalDialog: (t, title) => dialogs.push(title) }) }
   });
+  p.override('intakeRowsMarked_', () => []);
   p.override('selectedDataRow_', () => { if (selectionError) throw new Error(selectionError); return { rowNumber: 9 }; });
   p.override('rowObject_', () => rowFacts);
   p.override('techByRequest_', () => tech);
@@ -156,4 +158,33 @@ test('no selection on the sheet just runs the marked rows without a message', ()
   const r = retryButton(null, null, 'Select one data row in 1. Workspace Creator, then run the action again.');
   assert.equal(r.ran.length, 1);
   assert.equal(r.toasts.length, 0);
+});
+
+test('rows marked Retry Sharing each get a card in one dialog; a row without a workspace is locked', () => {
+  let json = '';
+  const dialogs = [];
+  const p = loadProject({
+    HtmlService: { createTemplateFromFile: () => { const t = {}; return Object.assign(t, { evaluate: () => ({ setWidth() { return this; }, setHeight() { return this; } }) }); } },
+    SpreadsheetApp: { getUi: () => ({ showModalDialog: (t, title) => dialogs.push(title) }) }
+  });
+  const objects = {
+    5: { 'Request ID': 'R5', 'Grant ID': 'G5', 'Action': 'Retry Sharing', 'Organisation Name': 'A', 'Financial Year': '2026-27' },
+    6: { 'Request ID': 'R6', 'Grant ID': 'G6', 'Action': 'Retry Sharing', 'Organisation Name': 'B', 'Financial Year': '2026-27' },
+    7: { 'Request ID': 'R7', 'Grant ID': 'G7', 'Action': 'Retry Sharing', 'Organisation Name': 'C', 'Financial Year': '2026-27' }
+  };
+  p.override('intakeRowsMarked_', () => Object.keys(objects).map(n => ({ rowNumber: Number(n), object: objects[n] })));
+  p.override('techByRequest_', id => id === 'R7' ? { record: { 'Grant ID': 'G7', 'Primary Contact Email': 'c@x.org' } }
+    : { record: { 'Grant ID': 'G' + id.slice(1), 'Primary Contact Email': id + '@x.org', 'Organisation Folder URL': 'https://x/y' } });
+  let ran = 0;
+  p.override('processRequestedActions', () => { ran++; });
+  p.override('selectedDataRow_', () => { throw new Error('selection must not be needed'); });
+  const cards = p.get('retryReshareCard_');
+  const built = [5, 6, 7].map(n => plain(cards(n, objects[n])));
+  assert.equal(built[0].locked, false);
+  assert.equal(built[0].currentEmail, 'R5@x.org');
+  assert.equal(built[2].locked, true);
+  assert.match(built[2].lockReason, /no workspace folder yet/);
+  p.get('uiRetryOrReshareWorkspace')();
+  assert.equal(dialogs.length, 1);
+  assert.equal(ran, 0);
 });

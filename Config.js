@@ -2,7 +2,7 @@
 const APFP = Object.freeze({
  FONT_FAMILY: 'Arial',
  // Shown in the preflight result and at the end of each workspace run so anyone can see which code is deployed. Bump with every round.
- CODE_VERSION: '2026-10-07 round U',
+ CODE_VERSION: '2026-10-08 round V',
  // Fallback when System - Configuration has no TIME_ZONE row.
  TIME_ZONE: 'Asia/Kolkata',
  HIDDEN_SYSTEM_SHEETS: [
@@ -199,6 +199,8 @@ const APFP = Object.freeze({
    PROCESS_ACTIONS: ['Create Workspace', 'Retry Workspace', 'Retry Sharing'],
    // Opens the Correct Workspace Details dialog; never run by the Create Workspace / Retry buttons.
    CORRECT_ACTION: 'Correct Workspace',
+   // Rows with this Action are listed, one card each, by the Retry/Reshare Workspace dialog.
+   RETRY_SHARING_ACTION: 'Retry Sharing',
    ACTIONS: ['Create Workspace', 'Retry Workspace', 'Retry Sharing', 'Correct Workspace', 'Completed']
  },
  ORGANISATION_HEADERS: [
