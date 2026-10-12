@@ -3,9 +3,10 @@
  * Lets the grantee type exactly "NA" (capital N, capital A) in link, date, currency, number and percentage fields,
  * in addition to what the cell accepts today. Dates: any valid date (the cells are already formatted dd-mmm-yyyy).
  *
- * It (1) sets column L "Validation Rule" in Field Config for the 27 fields below, (2) sets the matching data validation on
+ * It (1) sets column L "Validation Rule" in Field Config for the 29 fields below, (2) sets the matching data validation on
  * each field's Value Cell(s), found from Field Config itself, and (3) sets "Required Rule" = YES for the single-cell fields that
- * were optional (they must now hold a value or NA; tables keep their rules: unused rows may stay empty). Nothing else is touched (phone, email, year, lists, budget,
+ * were optional or conditional (they must now hold a value or NA; tables keep their rules: unused rows may stay empty).
+ * If you already made the Field Config edits by hand, the script just finds them already set. Nothing else is touched (phone, email, year, lists, budget,
  * amount requested and project duration keep their rules). Safe to run twice.
  *
  * Steps: File > Make a copy (backup) first. Run previewNaValidation (read the log), then applyNaValidation, then verifyNaValidation.
@@ -23,15 +24,20 @@ const NA_RULES = {
   years_implemented: 'NONNEGATIVE_WHOLE_NUMBER_OR_NA', direct_beneficiary_count: 'NONNEGATIVE_WHOLE_NUMBER_OR_NA',
   team_size_previous_fy: 'NONNEGATIVE_WHOLE_NUMBER_OR_NA', team_size_current_fy: 'NONNEGATIVE_WHOLE_NUMBER_OR_NA',
   employee_attrition_previous_snapshot: 'PERCENT_0_100_OR_NA', employee_attrition_current_snapshot: 'PERCENT_0_100_OR_NA',
-  foreign_funding_percentage: 'PERCENT_0_100_OR_NA'
+  foreign_funding_percentage: 'PERCENT_0_100_OR_NA',
+  leadership_email: 'EMAIL_OR_NA', leadership_contact: 'PHONE_OR_NA'
 };
 const NA_REQUIRED = ['website_url', 'csr_uin', 'tan_number', 'fcra_link', 'csr_registration_link', 'policy_other', 'sop_other',
-  'attrition_context_previous_snapshot', 'attrition_context_current_snapshot'];
+  'attrition_context_previous_snapshot', 'attrition_context_current_snapshot',
+  // were conditional; now always a value or NA
+  'fcra_expiry_date', 'section_12a_expiry_date', 'section_80g_expiry_date', 'years_implemented', 'other_funding_details', 'other_funders_details'];
 // c = the first cell of the field's range (the rule is relative, so every cell of the range gets its own reference).
 const NA_BASES = {
   HTTPS_URL: { check: c => `REGEXMATCH(TO_TEXT(${c}),"^https://")`, help: 'Paste a link beginning with https://, or NA if not applicable.' },
   HTTP_URL: { check: c => `REGEXMATCH(TO_TEXT(${c}),"^https?://")`, help: 'Enter a complete link beginning with http:// or https://, or NA.' },
   // If a typed date is ever refused, replace ISDATE(c) with: NOT(ISERROR(DATEVALUE(TEXT(c,"dd-mmm-yyyy"))))
+  EMAIL: { check: c => `ISEMAIL(${c})`, help: 'Enter a valid email address, e.g. name@example.org, or NA.' },
+  PHONE: { check: c => `REGEXMATCH(IF(ISNUMBER(${c}),TEXT(${c},"0"),TO_TEXT(${c})),"^[6-9][0-9]{9}$")`, help: 'Enter a 10-digit Indian mobile number, e.g. 9876543210 (no 0 or +91), or NA.' },
   DATE: { check: c => `ISDATE(${c})`, help: 'Enter a valid date, e.g. 12-Oct-2026, or NA.' },
   NONNEGATIVE_WHOLE_NUMBER: { check: c => `AND(ISNUMBER(${c}),${c}>=0,MOD(${c},1)=0)`, help: 'Enter a whole number of 0 or more, or NA.' },
   NONNEGATIVE_CURRENCY: { check: c => `AND(ISNUMBER(${c}),${c}>=0)`, help: 'Enter a numeric amount of 0 or more, or NA. Do not type ₹ or commas.' },
