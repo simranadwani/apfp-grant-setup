@@ -12,7 +12,7 @@ Only the template's Field Config is read by the code (generated workbooks no lon
 |---|---|---|
 | fcra_link, section_12a_link, section_80g_link, pan_card_link, tan_card_link, annual_report_link, financial_audit_link, csr_registration_link, registration_certificate_link | A. Org Information E28, E30, E32, E34, E35, E36, E37, E38, E39 | `HTTPS_URL_OR_NA` |
 | itemised_budget_link | B. Grant & Funding E27 | `HTTPS_URL_OR_NA` |
-| website_url, leadership_linkedin | A. Org Information D9, F21:F26 | `HTTPS_URL_OR_NA` |
+| website_url, leadership_linkedin | A. Org Information D9, F21:F26 | `HTTP_URL_OR_NA` (http:// stays allowed, as today) |
 | fcra_expiry_date, section_12a_expiry_date, section_80g_expiry_date | A. Org Information D29, D31, D33 | `DATE_OR_NA` |
 | annual_budget_current_fy, annual_budget_previous_fy, annual_budget_two_fy_ago | E. Annexure D39, D40, D41 | `NONNEGATIVE_CURRENCY_OR_NA` |
 | cost_per_beneficiary, current_funder_amount | C. Project Design E24:E28; E. Annexure E45:E54 | `NONNEGATIVE_CURRENCY_OR_NA` |
@@ -42,3 +42,5 @@ The currency columns have no type, so they accept NA already.
 1. In a TEST Setup workbook type `NA` in a link, a date, a currency and a percentage field: accepted. Type `na`, `N/A`, `abc`: rejected.
 2. Set the FCRA link to `NA` and leave its expiry date blank: Approve → Lock & Migrate succeeds; the Organisation Registry shows `NA` in the link column.
 3. Check the hidden `System - Registry Export` sheet of that workbook shows `NA` and no error (if a cell there converts a number with VALUE(), tell me).
+
+To apply all of this with Cowork instead of by hand, use the ready prompt in `docs/COWORK_NA_VALIDATION_PROMPT.md` (it contains the exact current and new rule for every range).
