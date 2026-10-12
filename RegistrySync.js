@@ -179,15 +179,15 @@ function readTableConfiguredRaw_(ss, row) {
 function primaryBeneficiaryFromSetup_(ss, typeRow, countRow) {
  const types = readTableConfigured_(ss, typeRow), counts = readTableConfiguredRaw_(ss, countRow);
  for (let i = 0; i < Math.max(types.length, counts.length); i++) {
-   const group = clean_(types[i] && types[i][0]), rawCount = counts[i] && counts[i][0];
-   if (group || (rawCount !== '' && rawCount != null)) return { group, count: rawCount == null || setupValueIsNotApplicable_(rawCount) ? '' : rawCount };
+   const group = clean_(centralSetupValue_(clean_(types[i] && types[i][0]))), rawCount = centralSetupValue_(counts[i] && counts[i][0]);
+   if (group || (rawCount !== '' && rawCount != null)) return { group, count: rawCount == null ? '' : rawCount };
  }
  return { group: '', count: '' };
 }
 function pairTable_(ss, leftRow, rightRow) {
  const a = readTableConfigured_(ss, leftRow), b = readTableConfigured_(ss, rightRow), out = [];
  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-   const x = clean_(a[i] && a[i][0]), y = clean_(b[i] && b[i][0]);
+   const x = clean_(centralSetupValue_(clean_(a[i] && a[i][0]))), y = clean_(centralSetupValue_(clean_(b[i] && b[i][0])));
    if (x || y) out.push([x, y]);
  }
  return out.map(r => r.join(' | ')).join('\n');
@@ -195,7 +195,8 @@ function pairTable_(ss, leftRow, rightRow) {
 function tripleTable_(ss, firstRow, secondRow, thirdRow) {
  const a = readTableConfigured_(ss, firstRow), b = readTableConfigured_(ss, secondRow), c = readTableConfigured_(ss, thirdRow), out = [];
  for (let i = 0; i < Math.max(a.length, b.length, c.length); i++) {
-   const x = clean_(a[i] && a[i][0]), y = clean_(b[i] && b[i][0]), z = clean_(c[i] && c[i][0]);
+   const x = clean_(centralSetupValue_(clean_(a[i] && a[i][0]))), y = clean_(centralSetupValue_(clean_(b[i] && b[i][0]))),
+     z = clean_(centralSetupValue_(clean_(c[i] && c[i][0])));
    if (x || y || z) out.push([x, y, z]);
  }
  return out.map(r => r.join(' | ')).join('\n');
@@ -269,7 +270,9 @@ function validateCompletedSetup_(source, byCode) {
        used = [];
      for (let i = 0; i < left.length; i++) {
        const values = [clean_(left[i] && left[i][0])].concat(rights.map(r => clean_(r[i] && r[i][0])));
-       if (values.some(Boolean)) {
+       // A row is used when some cell holds a real value (blank and NA do not count); in a used row every cell must be
+       // filled, and NA counts as filled. Rows left empty, or holding only NA, are ignored.
+       if (values.some(setupValueProvided_)) {
          used.push(i);
          if (values.some(v => !v))
            missing.push(`${group.label} row ${i + 1} is incomplete`);
@@ -311,12 +314,10 @@ function setupValidationKind_(rule, input) {
  };
  return byRule[rule] || byInput[input] || '';
 }
-// Central registries keep NA only in text and link columns. A date, number, currency or percentage column stays blank for NA,
-// so typed Table columns never receive text and the central sheets need no change.
-function centralSetupValue_(value, row) {
- if (!setupValueIsNotApplicable_(value)) return value;
- const parts = setupRuleParts_(row['Validation Rule']), kind = setupValidationKind_(key_(parts.raw), key_(row['Input Type']));
- return ['date', 'year', 'whole', 'positive', 'percent', 'currency'].includes(kind) ? '' : value;
+// Central registries never hold "NA": the grantee types NA to say a single cell is not applicable, and the sync reads it as blank
+// (links, text, dates, numbers, currency and percentages alike). Required checks read the raw cell, so NA still counts as filled.
+function centralSetupValue_(value) {
+ return setupValueIsNotApplicable_(value) ? '' : value;
 }
 function configuredSetupValueIsValid_(value, row) {
  const parts = setupRuleParts_(row['Validation Rule']), rawRule = parts.raw, rule = key_(rawRule), input = key_(row['Input Type']);
@@ -442,7 +443,7 @@ function configuredScalarDestinationPatch_(source, byCode, destinationTable, opt
    const destinationField = clean_(row['Destination Field']);
    if (!destinationField || destinationField === '—') return;
    const useRaw = !!options.rawAll || rawInputs.has(key_(row['Input Type']));
-   out[destinationField] = centralSetupValue_(useRaw ? readSingleConfiguredRaw_(source, row) : readSingleConfigured_(source, row), row);
+   out[destinationField] = centralSetupValue_(useRaw ? readSingleConfiguredRaw_(source, row) : readSingleConfigured_(source, row));
  });
  return out;
 }
@@ -478,11 +479,8 @@ function syncLeadershipMaster_(source, byCode, organisationId, sourceUrl, synced
  }
  const seen = new Set();
  for (let i = 0; i < rowCount; i++) {
-   const name = clean_(names[i] && names[i][0]),
-     designation = clean_(designations[i] && designations[i][0]),
-     email = clean_(emails[i] && emails[i][0]),
-     contact = clean_(contacts[i] && contacts[i][0]),
-     linkedIn = clean_(linkedIns[i] && linkedIns[i][0]);
+   const cell = list => clean_(centralSetupValue_(clean_(list[i] && list[i][0]))),
+     name = cell(names), designation = cell(designations), email = cell(emails), contact = cell(contacts), linkedIn = cell(linkedIns);
    if (![name, designation, email, contact, linkedIn].some(Boolean)) continue;
    const slot = `Leadership ${i + 1}`,
      slotKey = key_(slot),

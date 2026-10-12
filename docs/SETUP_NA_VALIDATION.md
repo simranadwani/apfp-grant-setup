@@ -43,3 +43,8 @@ The central registries store `NA` only in text and link columns (for example FCR
 To apply all of this with Cowork instead of by hand, use the ready prompt in `docs/COWORK_NA_VALIDATION_PROMPT.md` (it contains the exact current and new rule for every range).
 
 To apply it all in one run instead, paste `docs/scripts/NaValidationTemplate.gs` into the template's Apps Script (backup copy first): `previewNaValidation`, `applyNaValidation`, `verifyNaValidation`, then delete the script.
+
+## Round Z: how NA works end to end
+- **Single cells (merged once):** every one must hold a value or `NA`. The one-time template script also sets Required Rule = YES for the fields that were optional (website, CSR/UIN, TAN, FCRA link, CSR registration link, Other Policy, Other SOP, the two attrition notes). The rules that depend on another answer (Years Implemented, the two "If Yes" details, the three expiry dates) stay conditional; an `NA` link means no expiry date is asked for.
+- **Tables (leadership, stakeholders, beneficiaries, outcomes, current funders):** rows left empty are fine, and need no NA. A row you start must have every cell filled (NA counts). A row holding only NA is ignored. The "at least one row" rules for leadership, stakeholders, beneficiaries and outcomes still apply.
+- **Central sheets:** `NA` is read as blank everywhere (links, text, dates, numbers, currency, percentages and the joined tables), so nothing downstream sees the text NA. The Outcome rows copied into the grantee's Outcome Progress workbook stay exactly as typed.
