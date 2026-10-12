@@ -147,5 +147,5 @@ test('the after-sharing check (email given) always does the full verification, e
 test('the run summary ends with the deployed code version', () => {
   const p = loadProject();
   const msg = p.get('runSummaryMessage_')(1, 1, 0, [], '');
-  assert.match(msg, /Code version: \d{4}-\d{2}-\d{2} round /);
+  assert.match(msg, /Code version: Version \d+\.\d+$/);
 });
