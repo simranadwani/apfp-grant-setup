@@ -223,7 +223,8 @@ function validateCompletedSetup_(source, byCode) {
    ['section_12a_link', 'section_12a_expiry_date', 'Section 12A Registration Expiry Date'],
    ['section_80g_link', 'section_80g_expiry_date', 'Section 80G Expiry Date']
  ].forEach(([linkCode, dateCode, label]) => {
-   if (byCode[linkCode] && clean_(readSingleConfigured_(source, byCode[linkCode])) &&
+   // A link that is "NA" counts as not provided, so no expiry date is asked for.
+   if (byCode[linkCode] && setupValueProvided_(readSingleConfigured_(source, byCode[linkCode])) &&
        (!byCode[dateCode] || !readSingleConfigured_(source, byCode[dateCode])))
      missing.push(label);
  });
@@ -281,32 +282,58 @@ function validateCompletedSetup_(source, byCode) {
  if (missing.length)
    throw new Error(`Approved Setup is incomplete. Complete: ${[...new Set(missing)].join(', ')}.`);
 }
+// A Validation Rule may end in _OR_NA (for example DRIVE_URL_OR_NA, DATE_OR_NA, NONNEGATIVE_CURRENCY_OR_NA): the field then accepts its
+// normal rule OR exactly "NA" (capital letters, nothing else), meaning not applicable. Which fields allow NA is therefore decided
+// in the template's Field Config, with no code change.
+function setupRuleParts_(rawRule) {
+ const raw = clean_(rawRule), naAllowed = !/^list:/i.test(raw) && /_or_na$/i.test(raw);
+ return { raw: naAllowed ? raw.replace(/_or_na$/i, '') : raw, naAllowed };
+}
+function setupValueIsNotApplicable_(value) {
+ return clean_(value) === 'NA';
+}
+// "Provided" for the if-provided rules: filled in and not "NA".
+function setupValueProvided_(value) {
+ const text = clean_(value);
+ return !!text && text !== 'NA';
+}
+// The kind of check for a field: an explicit Validation Rule wins; otherwise the Input Type decides.
+function setupValidationKind_(rule, input) {
+ const byRule = {
+   email: 'email', 'valid email': 'email', phone: 'phone', 'valid phone number': 'phone',
+   http_url: 'http', 'valid website url': 'http', https_url: 'https', drive_url: 'drive', 'drive link only': 'drive',
+   yes_no: 'yesno', 'yes/no': 'yesno', date: 'date', year_4_digit: 'year',
+   nonnegative_whole_number: 'whole', 'non-negative whole number': 'whole', positive_whole_number: 'positive',
+   percent_0_100: 'percent', '0 to 100': 'percent', nonnegative_currency: 'currency', 'non-negative currency': 'currency'
+ }, byInput = {
+   email: 'email', 'email address': 'email', phone: 'phone', 'phone number': 'phone', 'website url': 'http', 'google drive link': 'drive',
+   'yes / no': 'yesno', date: 'date', year: 'year', 'whole number': 'whole', percentage: 'percent', currency: 'currency'
+ };
+ return byRule[rule] || byInput[input] || '';
+}
 function configuredSetupValueIsValid_(value, row) {
- const rawRule = clean_(row['Validation Rule']), rule = key_(rawRule), input = key_(row['Input Type']);
+ const parts = setupRuleParts_(row['Validation Rule']), rawRule = parts.raw, rule = key_(rawRule), input = key_(row['Input Type']);
  if (value === '' || value == null || !rule || ['text', 'required_text', 'text_or_number', 'none'].includes(rule)) return true;
  const text = clean_(value);
+ if (parts.naAllowed && text === 'NA') return true;
  if (rule.indexOf('list:') === 0)
    return rawRule.slice(rawRule.indexOf(':') + 1).split('|').map(clean_).includes(text);
- if (input === 'email' || input === 'email address' || rule === 'email' || rule === 'valid email')
-   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
- if (input === 'phone' || input === 'phone number' || rule === 'phone' || rule === 'valid phone number')
-   return /^[6-9][0-9]{9}$/.test(text);
- if (input === 'website url' || rule === 'http_url' || rule === 'valid website url')
-   return /^https?:\/\//i.test(text);
- if (input === 'google drive link' || rule === 'drive_url' || rule === 'drive link only')
-   return /^https:\/\/(drive\.google\.com|docs\.google\.com)\//i.test(text);
- if (input === 'yes / no' || rule === 'yes_no' || rule === 'yes/no') return ['Yes', 'No'].includes(text);
- if (input === 'date' || rule === 'date') return !!dateValue_(value);
  const number = typeof value === 'number' ? value : Number(value);
- if (rule === 'year_4_digit' || input === 'year') return Number.isInteger(number) && number >= 1000 && number <= 9999;
- if (input === 'whole number' || rule === 'nonnegative_whole_number' || rule === 'non-negative whole number')
-   return Number.isInteger(number) && number >= 0;
- if (rule === 'positive_whole_number') return Number.isInteger(number) && number > 0;
- if (input === 'percentage' || rule === 'percent_0_100' || rule === '0 to 100')
-   return Number.isFinite(number) && number >= 0 && number <= 100;
- if (input === 'currency' || rule === 'nonnegative_currency' || rule === 'non-negative currency')
-   return Number.isFinite(number) && number >= 0;
- return true;
+ switch (setupValidationKind_(rule, input)) {
+   case 'email': return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
+   case 'phone': return /^[6-9][0-9]{9}$/.test(text);
+   case 'http': return /^https?:\/\//i.test(text);
+   case 'https': return /^https:\/\//i.test(text);
+   case 'drive': return /^https:\/\/(drive\.google\.com|docs\.google\.com)\//i.test(text);
+   case 'yesno': return ['Yes', 'No'].includes(text);
+   case 'date': return !!dateValue_(value);
+   case 'year': return Number.isInteger(number) && number >= 1000 && number <= 9999;
+   case 'whole': return Number.isInteger(number) && number >= 0;
+   case 'positive': return Number.isInteger(number) && number > 0;
+   case 'percent': return Number.isFinite(number) && number >= 0 && number <= 100;
+   case 'currency': return Number.isFinite(number) && number >= 0;
+   default: return true;
+ }
 }
 function validateConfiguredSetupValues_(source, fieldConfig) {
  const invalid = [];

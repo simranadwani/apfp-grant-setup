@@ -2,7 +2,7 @@
 const APFP = Object.freeze({
  FONT_FAMILY: 'Arial',
  // Shown in the preflight result and at the end of each workspace run so anyone can see which code is deployed. Bump with every round.
- CODE_VERSION: '2026-10-08 round W',
+ CODE_VERSION: '2026-10-12 round X',
  // Fallback when System - Configuration has no TIME_ZONE row.
  TIME_ZONE: 'Asia/Kolkata',
  HIDDEN_SYSTEM_SHEETS: [
@@ -340,9 +340,9 @@ const APFP = Object.freeze({
        { NAME: 'Registration Certificate Link', TYPE: 'TEXT' }, { NAME: 'Record Status', TYPE: 'TEXT' },
        { NAME: 'Source Setup Workbook URL', TYPE: 'TEXT' }, { NAME: 'Master Data Synced At', TYPE: 'DATE_TIME' },
        { NAME: 'Template Schema Version', TYPE: 'TEXT' },
-       { NAME: 'FCRA Registration Expiry Date', TYPE: 'DATE' },
-       { NAME: 'Section 12A Registration Expiry Date', TYPE: 'DATE' },
-       { NAME: 'Section 80G Expiry Date', TYPE: 'DATE' },
+       { NAME: 'FCRA Registration Expiry Date', TYPE: 'DATE', ANY_TYPE: true },
+       { NAME: 'Section 12A Registration Expiry Date', TYPE: 'DATE', ANY_TYPE: true },
+       { NAME: 'Section 80G Expiry Date', TYPE: 'DATE', ANY_TYPE: true },
        // Required. Live Table type/dropdown may differ from TEXT, so the preflight only checks the column exists.
        { NAME: 'FCRA Registration Status', TYPE: 'TEXT', ANY_TYPE: true }
      ]
@@ -362,7 +362,7 @@ const APFP = Object.freeze({
        { NAME: 'Amount Approved', TYPE: 'COLUMN_TYPE_UNSPECIFIED', FORMAT: 'INDIAN_CURRENCY' },
        { NAME: 'Grant Status', TYPE: 'DROPDOWN', VALUES: ['Active', 'Discontinued', 'Complete'] },
        { NAME: 'Programme Status', TYPE: 'DROPDOWN', FREE: true },
-       { NAME: 'Years Implemented', TYPE: 'DOUBLE' }, { NAME: 'Project Duration (Months)', TYPE: 'DOUBLE' },
+       { NAME: 'Years Implemented', TYPE: 'DOUBLE', ANY_TYPE: true }, { NAME: 'Project Duration (Months)', TYPE: 'DOUBLE' },
        { NAME: 'Total Project Budget', TYPE: 'COLUMN_TYPE_UNSPECIFIED', FORMAT: 'INDIAN_CURRENCY' }, { NAME: 'States Covered', TYPE: 'TEXT' },
        { NAME: 'Districts Covered', TYPE: 'TEXT' }, { NAME: 'Amount Requested', TYPE: 'COLUMN_TYPE_UNSPECIFIED', FORMAT: 'INDIAN_CURRENCY' },
        { NAME: 'Funds Raised from Other Sources?', TYPE: 'DROPDOWN', VALUES: ['Yes', 'No'] },
@@ -377,8 +377,8 @@ const APFP = Object.freeze({
        { NAME: 'Stakeholders', TYPE: 'TEXT' }, { NAME: 'Beneficiaries', TYPE: 'TEXT' },
        { NAME: 'Stakeholder / Community Consultation', TYPE: 'TEXT' },
        { NAME: 'Critical Partnerships / Relationships', TYPE: 'TEXT' },
-       { NAME: 'Approach to Learning', TYPE: 'TEXT' }, { NAME: 'Team Size — Current FY', TYPE: 'DOUBLE' },
-       { NAME: 'Employee Attrition — Current Snapshot', TYPE: 'DOUBLE' },
+       { NAME: 'Approach to Learning', TYPE: 'TEXT' }, { NAME: 'Team Size — Current FY', TYPE: 'DOUBLE', ANY_TYPE: true },
+       { NAME: 'Employee Attrition — Current Snapshot', TYPE: 'DOUBLE', ANY_TYPE: true },
        { NAME: 'Attrition Context / Notes — Current Snapshot', TYPE: 'TEXT' },
        { NAME: 'Pending Cases / Complaints', TYPE: 'TEXT' },
        { NAME: 'Annual Budget — Current FY', TYPE: 'COLUMN_TYPE_UNSPECIFIED', FORMAT: 'INDIAN_CURRENCY' },
@@ -388,11 +388,11 @@ const APFP = Object.freeze({
        { NAME: 'Record Status', TYPE: 'TEXT' }, { NAME: 'Setup Created At', TYPE: 'DATE_TIME' },
        { NAME: 'Last Updated At', TYPE: 'DATE_TIME' }, { NAME: 'Source Setup Workbook URL', TYPE: 'TEXT' },
        { NAME: 'Master Data Synced At', TYPE: 'DATE_TIME' }, { NAME: 'Template Schema Version', TYPE: 'TEXT' },
-       { NAME: 'Team Size — Previous FY', TYPE: 'DOUBLE' },
-       { NAME: 'Employee Attrition — Previous Snapshot', TYPE: 'DOUBLE' },
+       { NAME: 'Team Size — Previous FY', TYPE: 'DOUBLE', ANY_TYPE: true },
+       { NAME: 'Employee Attrition — Previous Snapshot', TYPE: 'DOUBLE', ANY_TYPE: true },
        { NAME: 'Attrition Context / Notes — Previous Snapshot', TYPE: 'TEXT' },
        { NAME: 'Primary Beneficiary Group', TYPE: 'TEXT' },
-       { NAME: 'Primary Beneficiary Count', TYPE: 'DOUBLE' },
+       { NAME: 'Primary Beneficiary Count', TYPE: 'DOUBLE', ANY_TYPE: true },
        { NAME: 'Foreign Funding — Percentage of Total Annual Funding', TYPE: 'TEXT', ANY_TYPE: true }
      ]
    }
