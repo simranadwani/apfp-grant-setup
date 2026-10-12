@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Version 1.3 — no organisation-maturity rows for Discretionary grants
+
+**Date:** 2026-10-12 · `RegistryAndIDs.js` (`ensureOrganisationMaturityRowsForGrant_`), `Config.js`. A Discretionary grant has no Setup, so creating it (or correcting its title) no longer adds rows to `7. Organisation Maturity`. Rows created earlier are kept (nothing is deleted); a grant changed from Discretionary to another type gets its rows when the workspace is built. Test: `tests/maturity-by-header.test.js` (209 pass).
+
 ## Version 1.2 — Lock & Migrate and Reopen run every row marked in the sheet
 
 **Date:** 2026-10-12 · `ApprovalsAndAccess.js` (`handleTrackerReviewEdit_`, `applyReviewStatusEditForRow_`, `intakeRowsByReviewStatus_`, `reconcileSetupReviewRows_`, `reopenSelectedSetup`), `RegistrySync.js` (`updateApprovedSetupData`, `syncOneMasterDataRow_`), `Config.js`. Bug in Version 1.1 and earlier: the buttons only looked at the Technical Registry, which is filled by an edit trigger that handled one cell at a time. A status that was pasted, filled down over several rows, or whose trigger did not run left the sheet showing "Approved" while the registry did not, so those rows were silently ignored and nothing changed.
