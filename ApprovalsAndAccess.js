@@ -33,50 +33,110 @@ function handleOrganisationInputEdit_(e) {
   }
 }
 
+// A review status typed (or pasted / filled down) in 1. Workspace Creator is applied to the Technical Registry straight away. The
+// Lock & Migrate and Reopen buttons also read the statuses shown in the sheet (reconcileSetupReviewRows_), so a missed or multi-cell
+// edit never leaves a marked row ignored.
 function handleTrackerReviewEdit_(e) {
  const range = e.range;
- if (range.getRow() < APFP.INTAKE.START_ROW || range.getNumRows() !== 1 || range.getNumColumns() !== 1)
-   return;
+ if (range.getRow() < APFP.INTAKE.START_ROW) return;
  const col = intakeColumn_('Setup Review Status');
- if (col < range.getColumn() || col > range.getLastColumn())
+ if (col < range.getColumn() || col > range.getLastColumn()) return;
+ const sheet = range.getSheet(), single = range.getNumRows() === 1 && range.getNumColumns() === 1, errors = [];
+ for (let row = Math.max(range.getRow(), APFP.INTAKE.START_ROW); row <= range.getLastRow(); row++) {
+   try {
+     applyReviewStatusEditForRow_(sheet, row, col, single ? e.oldValue : undefined);
+   } catch (error) {
+     if (single) throw error;
+     errors.push(`Row ${row}: ${error.message}`);
+   }
+ }
+ if (errors.length) throw new Error(errors.join('\n'));
+}
+function applyReviewStatusEditForRow_(sheet, rowNumber, col, oldValue) {
+ const cell = sheet.getRange(rowNumber, col), rawStatus = clean_(cell.getDisplayValue());
+ if (!Object.values(APFP.REVIEW_STATUS).includes(rawStatus) || oldValue != null && key_(oldValue) === key_(rawStatus))
    return;
- const rawStatus = clean_(range.getSheet().getRange(range.getRow(), col).getDisplayValue());
- if (!Object.values(APFP.REVIEW_STATUS).includes(rawStatus) || e.oldValue != null && key_(e.oldValue) === key_(rawStatus))
-   return;
- const map = headerMap_(range.getSheet(), APFP.INTAKE.HEADER_ROW),
-   grantId = clean_(range.getSheet().getRange(range.getRow(), map[key_('Grant ID')] + 1).getDisplayValue());
+ const revert = () => { oldValue != null ? cell.setValue(oldValue) : cell.clearContent(); };
+ const map = headerMap_(sheet, APFP.INTAKE.HEADER_ROW),
+   grantId = clean_(sheet.getRange(rowNumber, map[key_('Grant ID')] + 1).getDisplayValue());
  if (!grantId) return;
- const grant = grantById_(grantId);
- if (grant && isTransactionalGrantType_(grant.record['Grant Type'])) {
-   range.getSheet().getRange(range.getRow(), col).clearContent();
+ const grant = grantById_(grantId), grantType = grant ? clean_(grant.record['Grant Type']) : '';
+ if (isTransactionalGrantType_(grantType) || isDiscretionaryGrantType_(grantType)) {
+   showToast_(`Row ${rowNumber}: ${grantType} grants have no Setup to review, so they cannot be set to ${rawStatus}.`);
+   cell.clearContent();
+   refreshWorkspaceCreatorRow_(grantId);
    return;
  }
- // Changes Required on a locked Setup means "reopen it": the cell becomes Reopen Setup and the Reopen button does the work.
  let status = rawStatus;
- const syncNow = masterSyncByGrantId_(grantId);
- if (key_(status) === key_(APFP.REVIEW_STATUS.CHANGES) && syncNow && key_(syncNow.record['Setup Review Status']) === key_(APFP.REVIEW_STATUS.LOCKED)) {
-   status = APFP.REVIEW_STATUS.REOPEN;
-   range.getSheet().getRange(range.getRow(), col).setValue(status);
-   showToast_('This Setup is locked, so Changes Required was changed to Reopen Setup. Click Reopen Setup for Changes to reopen it.');
+ const syncNow = masterSyncByGrantId_(grantId), techStatus = syncNow ? key_(syncNow.record['Setup Review Status']) : '';
+ if (techStatus === key_(APFP.REVIEW_STATUS.LOCKED)) {
+   if (key_(status) === key_(APFP.REVIEW_STATUS.CHANGES)) {
+     // Changes Required on a locked Setup means "reopen it": the cell becomes Reopen Setup and the Reopen button does the work.
+     status = APFP.REVIEW_STATUS.REOPEN;
+     cell.setValue(status);
+     showToast_('This Setup is locked, so Changes Required was changed to Reopen Setup. Click Reopen Setup for Changes to reopen it.');
+   } else if ([APFP.REVIEW_STATUS.APPROVED, APFP.REVIEW_STATUS.RETRY].some(item => key_(item) === key_(status))) {
+     showToast_(`Row ${rowNumber}: this Setup is already Locked & Migrated. To change it, set Reopen Setup.`);
+     cell.setValue(APFP.REVIEW_STATUS.LOCKED);
+     return;
+   }
  }
  const lock = LockService.getScriptLock();
  if (!lock.tryLock(30000)) {
-   const cell = range.getSheet().getRange(range.getRow(), col);
-   e.oldValue != null ? cell.setValue(e.oldValue) : cell.clearContent();
+   revert();
    throw new Error('Another APFP automation run is active. The Setup Review Status change was reverted; try again after the current run finishes.');
  }
  try {
    try {
      applyReviewStatus_(grantId, status, actorEmail_());
    } catch (error) {
-     const cell = range.getSheet().getRange(range.getRow(), col);
-     e.oldValue != null ? cell.setValue(e.oldValue) : cell.clearContent();
+     revert();
      throw error;
    }
    refreshWorkspaceCreatorRow_(grantId);
  } finally {
    lock.releaseLock();
  }
+}
+// Rows of 1. Workspace Creator whose Setup Review Status cell currently shows one of `statuses`.
+function intakeRowsByReviewStatus_(statuses) {
+ const wanted = statuses.map(key_), sheet = sheet_(APFP.SHEETS.INTAKE),
+   lastRow = Math.min(APFP.INTAKE.MAX_ROW, Math.max(APFP.INTAKE.HEADER_ROW, sheet.getLastRow()));
+ if (lastRow < APFP.INTAKE.START_ROW) return [];
+ const width = sheet.getLastColumn(),
+   headers = sheet.getRange(APFP.INTAKE.HEADER_ROW, 1, 1, width).getDisplayValues()[0],
+   rows = sheet.getRange(APFP.INTAKE.START_ROW, 1, lastRow - APFP.INTAKE.HEADER_ROW, width).getValues();
+ return rows.map((values, i) => ({ rowNumber: i + APFP.INTAKE.START_ROW, object: rowObjectFromArrays_(headers, values) }))
+   .filter(item => wanted.includes(key_(item.object['Setup Review Status'])));
+}
+// Brings the Technical Registry in line with the statuses shown in the sheet, for the rows marked with one of `statuses`, and returns
+// a note for every marked row that cannot be used (so the button can say why). `verb` is "approved" or "reopened".
+function reconcileSetupReviewRows_(statuses, verb) {
+ const notes = [];
+ intakeRowsByReviewStatus_(statuses).forEach(item => {
+   const o = item.object, grantId = clean_(o['Grant ID']), status = clean_(o['Setup Review Status']),
+     name = `${clean_(o['Organisation Name']) || 'Row ' + item.rowNumber}`;
+   if (!grantId) { notes.push(`• ${name}: no workspace has been created yet, so there is no Setup to ${verb === 'approved' ? 'approve' : 'reopen'}.`); return; }
+   const grant = grantById_(grantId), type = clean_(o['Grant Type']) || (grant ? clean_(grant.record['Grant Type']) : '');
+   if (isTransactionalGrantType_(type) || isDiscretionaryGrantType_(type)) {
+     notes.push(`• ${name}: this is a ${type} grant. It has no Setup, so it cannot be ${verb}.`);
+     refreshWorkspaceCreatorRow_(grantId);
+     return;
+   }
+   const sync = masterSyncByGrantId_(grantId);
+   if (!sync) { notes.push(`• ${name}: no Setup workbook was found for this grant.`); return; }
+   const current = key_(sync.record['Setup Review Status']);
+   if (verb === 'approved' && current === key_(APFP.REVIEW_STATUS.LOCKED)) {
+     notes.push(`• ${name}: already Locked & Migrated. To change it, set Reopen Setup.`);
+     refreshWorkspaceCreatorRow_(grantId);
+     return;
+   }
+   if (current !== key_(status)) {
+     try { applyReviewStatus_(grantId, status, actorEmail_()); }
+     catch (error) { notes.push(`• ${name}: ${clean_(error.message)}`); }
+   }
+ });
+ return notes;
 }
 function applyReviewStatus_(grantId, status, actor) {
  const grant = grantById_(grantId);
@@ -128,16 +188,18 @@ function reopenSelectedSetup() {
    SpreadsheetApp.getUi().alert('Another APFP automation run is active. Run this action again after it finishes.');
    return;
  }
- let reopened = 0, processed = 0, stopped = false;
+ let reopened = 0, processed = 0, stopped = false, skipped = [];
  const failures = [], startedAt = Date.now();
  try {
+   skipped = reconcileSetupReviewRows_([APFP.REVIEW_STATUS.REOPEN], 'reopened');
    const marked = technicalRegistryRows_().filter(item => {
      const record = item.record;
      return key_(record['Record Status']) === 'active' && !isTransactionalGrantType_(record['Grant Type']) &&
        key_(record['Setup Review Status']) === key_(APFP.REVIEW_STATUS.REOPEN) && clean_(record['Grant ID']);
    });
    if (!marked.length) {
-     SpreadsheetApp.getUi().alert('Set Setup Review Status to "Reopen Setup" on the rows to reopen, then click Reopen Setup for Changes again.');
+     SpreadsheetApp.getUi().alert('No Setup is waiting to be reopened. Set Setup Review Status to "Reopen Setup" on the rows to reopen, then click Reopen Setup for Changes again.' +
+       (skipped.length ? `\n\nNot reopened:\n${skipped.slice(0, 8).join('\n')}` : ''));
      return;
    }
    for (const item of marked) {
@@ -158,7 +220,8 @@ function reopenSelectedSetup() {
    lock.releaseLock();
  }
  const more = stopped ? ' Remaining rows were left untouched; click the button again to continue.' : '';
- const detail = failures.length ? `\n\nNeeds attention (still on Reopen Setup):\n${failures.slice(0, 5).join('\n')}` : '';
+ const detail = (failures.length ? `\n\nNeeds attention (still on Reopen Setup):\n${failures.slice(0, 5).join('\n')}` : '') +
+   (skipped.length ? `\n\nNot reopened:\n${skipped.slice(0, 8).join('\n')}` : '');
  SpreadsheetApp.getUi().alert(`Reopened ${reopened} Setup(s) for changes; ${failures.length} need attention.${more}${detail}`);
 }
 function handleGrantStatusEdit_(e) {

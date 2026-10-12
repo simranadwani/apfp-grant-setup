@@ -74,3 +74,5 @@ Every status drives one batch action; nothing depends on which row is selected.
 | Reopened - Changes Required | system, after a successful reopen | the grantee can edit again; set Approved when ready |
 | Not Applicable | system | Transactional / Discretionary |
 Typing Changes Required on a Locked & Migrated row turns into Reopen Setup. A row that fails to reopen stays on Reopen Setup with the reason; the others still run. A locked Setup counts as approved for returning-organisation prefill and the older-year guard (it did not before).
+
+Both buttons first read the Setup Review Status shown in 1. Workspace Creator (not only the Technical Registry), so every marked row runs even after a paste or fill-down. The button message lists the marked rows it could not use and why (no workspace, Transactional or Discretionary grant, no Setup workbook, already locked). Typing Approved on a Transactional or Discretionary row is refused with the reason.
