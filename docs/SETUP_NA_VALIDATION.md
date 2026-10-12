@@ -50,3 +50,10 @@ To apply it all in one run instead, paste `docs/scripts/NaValidationTemplate.gs`
 - **Central sheets:** `NA` is read as blank everywhere (links, text, dates, numbers, currency, percentages and the joined tables), so nothing downstream sees the text NA. The Outcome rows copied into the grantee's Outcome Progress workbook stay exactly as typed.
 
 Round Z follow-up: project_total_budget and amount_requested are in the script's list (31 fields) and use the same currency formula: `=OR(D9="",EXACT(D9,"NA"),AND(ISNUMBER(D9),D9>=0))`. `NA` is stored as blank in the central Grant Registry.
+
+## Existing grant Setup workbooks (same script, one workbook at a time)
+1. In the template, right-click the `Field Config` tab → Copy to → Existing spreadsheet → pick the grantee's Setup workbook. In that workbook rename `Copy of Field Config` to exactly `Field Config`.
+2. In that workbook: Extensions → Apps Script, paste `docs/scripts/NaValidationTemplate.gs`, save. Run as the workbook's owner.
+3. Run `previewNaValidation`, `applyNaValidation`, `verifyNaValidation` (expect OK for all 31 fields).
+4. Run `removeFieldConfigCopy` (it deletes the pasted Field Config; it refuses to run in the template), then clear the script file.
+Entries already typed are not changed; only the rules on the cells are. An entry typed earlier that breaks a rule stays as it is.
