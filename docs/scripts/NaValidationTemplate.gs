@@ -1,5 +1,12 @@
 /**
- * ONE-TIME script for the "APFP Grant Setup Template" (paste into Extensions > Apps Script of THE TEMPLATE, run, then delete).
+ * ONE-TIME script for the "APFP Grant Setup Template" AND for existing grant Setup workbooks made from it.
+ * (Paste into Extensions > Apps Script of the file you are fixing, run, then delete.)
+ *
+ * FOR AN EXISTING SETUP WORKBOOK: first copy the template's "Field Config" sheet into it (right-click the tab > Copy to > Existing
+ * spreadsheet, then rename "Copy of Field Config" to exactly Field Config). Run previewNaValidation, applyNaValidation,
+ * verifyNaValidation. Then run removeFieldConfigCopy (deletes that copy; it refuses to run in the template) and clear the script.
+ * Run it as the workbook's owner. Existing entries are never changed, only the rules on the cells.
+
  * Lets the grantee type exactly "NA" (capital N, capital A) in link, date, currency, number and percentage fields,
  * in addition to what the cell accepts today. Dates: any valid date (the cells are already formatted dd-mmm-yyyy).
  *
@@ -46,6 +53,16 @@ const NA_BASES = {
 };
 
 function previewNaValidation() { runNaValidation_(true); }
+// Existing Setup workbooks only: removes the Field Config copy you pasted in. Refuses to run in the template.
+function removeFieldConfigCopy() {
+  const ss = SpreadsheetApp.getActive(), ui = SpreadsheetApp.getUi();
+  if (ss.getSheetByName('_Validation_Master')) { ui.alert('This looks like the template (it has _Validation_Master). Nothing was deleted.'); return; }
+  const sheet = ss.getSheetByName('Field Config');
+  if (!sheet) { ui.alert('There is no Field Config sheet here. Nothing to remove.'); return; }
+  if (ui.alert('Delete the Field Config sheet from this workbook?', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+  ss.deleteSheet(sheet);
+  ui.alert('Field Config removed.');
+}
 function applyNaValidation() { runNaValidation_(false); }
 
 function naFieldRows_() {
