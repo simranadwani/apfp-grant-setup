@@ -21,7 +21,7 @@ Only the template's Field Config is read by the code (generated workbooks no lon
 | team_size_previous_fy, team_size_current_fy | E. Annexure D23, D28 | `NONNEGATIVE_WHOLE_NUMBER_OR_NA` |
 | employee_attrition_previous_snapshot, employee_attrition_current_snapshot, foreign_funding_percentage | E. Annexure D24, D29, D35 | `PERCENT_0_100_OR_NA` |
 
-Left strict on purpose (core facts; tell me if you want NA there too): project_total_budget, amount_requested, project_duration_months, registration_year, phone, email, Yes/No and dropdown fields.
+Total Project Budget (D9) and Amount Requested (D12) on `B. Grant & Funding` also accept NA (`NONNEGATIVE_CURRENCY_OR_NA`). Left strict on purpose: project_duration_months, registration_year, the primary contact phone and email, Yes/No and dropdown fields.
 
 ## 2. The cells themselves (Data → Data validation, in the template AND in every existing Setup workbook)
 For each range choose **Custom formula is**, *Reject the input*, help text "Enter a value, or NA". The formula refers to the **first cell** of the range you are applying it to.
@@ -48,3 +48,5 @@ To apply it all in one run instead, paste `docs/scripts/NaValidationTemplate.gs`
 - **Single cells (merged once):** every one must hold a value or `NA`. The one-time template script also sets Required Rule = YES for the fields that were optional (website, CSR/UIN, TAN, FCRA link, CSR registration link, Other Policy, Other SOP, the two attrition notes). The six that depended on another answer (Years Implemented, the two "If Yes" details, the three expiry dates) are now mandatory too, so the grantee types a value or `NA` there (15 fields in all). Leadership email and contact number accept `NA` (`EMAIL_OR_NA`, `PHONE_OR_NA`).
 - **Tables (leadership, stakeholders, beneficiaries, outcomes, current funders):** rows left empty are fine, and need no NA. A row you start must have every cell filled (NA counts). A row holding only NA is ignored. The "at least one row" rules for leadership, stakeholders, beneficiaries and outcomes still apply.
 - **Central sheets:** `NA` is read as blank everywhere (links, text, dates, numbers, currency, percentages and the joined tables), so nothing downstream sees the text NA. The Outcome rows copied into the grantee's Outcome Progress workbook stay exactly as typed.
+
+Round Z follow-up: project_total_budget and amount_requested are in the script's list (31 fields) and use the same currency formula: `=OR(D9="",EXACT(D9,"NA"),AND(ISNUMBER(D9),D9>=0))`. `NA` is stored as blank in the central Grant Registry.
