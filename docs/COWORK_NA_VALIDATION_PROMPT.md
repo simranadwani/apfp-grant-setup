@@ -21,7 +21,7 @@ You are editing ONE Google Sheet: **APFP Grant Setup Template** (https://docs.go
 |---|---|---|---|
 | `D9` and `F21:F26` (split into two rules if the panel requires) | `OR(D9="",REGEXMATCH(TO_TEXT(D9),"^https?://"))` | `=OR(D9="",EXACT(D9,"NA"),REGEXMATCH(TO_TEXT(D9),"^https?://"))` | Enter a complete link beginning with http:// or https://, or NA. |
 | `E28`, `E30`, `E32`, `E34`, `E35`, `E36:E39` (one rule for all, or per range as they appear today: `E30 E35` and `E28 E32 E34 E36:E39`) | `OR(E28="",REGEXMATCH(TO_TEXT(E28),"^https://(drive\\.google\\.com|docs\\.google\\.com)/"))` and, for E30/E35, the same without the `E28=""` part | `=OR(E28="",EXACT(E28,"NA"),REGEXMATCH(TO_TEXT(E28),"^https://"))` | Paste a link beginning with https://, or NA if not applicable. |
-| `D29`, `D31`, `D33` | `OR(NOT(ISERROR(DATEVALUE(D29))), AND(ISNUMBER(D29), LEFT(CELL("format", D29))="D"))` | `=OR(D29="",EXACT(D29,"NA"),NOT(ISERROR(DATEVALUE(D29))),AND(ISNUMBER(D29),LEFT(CELL("format",D29))="D"))` | Enter a valid calendar date, or NA. |
+| `D29`, `D31`, `D33` | `OR(NOT(ISERROR(DATEVALUE(D29))), AND(ISNUMBER(D29), LEFT(CELL("format", D29))="D"))` | `=OR(D29="",EXACT(D29,"NA"),ISDATE(D29))` | Enter a valid date, e.g. 12-Oct-2026, or NA. |
 
 ### Sheet `B. Grant & Funding`
 | Apply to range | Current rule | New custom formula | Help text |

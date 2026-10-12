@@ -26,7 +26,7 @@ Left strict on purpose (core facts; tell me if you want NA there too): project_t
 ## 2. The cells themselves (Data → Data validation, in the template AND in every existing Setup workbook)
 For each range choose **Custom formula is**, *Reject the input*, help text "Enter a value, or NA". The formula refers to the **first cell** of the range you are applying it to.
 - Links (first cell E28 shown): `=OR(EXACT(E28,"NA"),REGEXMATCH(TO_TEXT(E28),"^https://"))`
-- Dates (D29): `=OR(EXACT(D29,"NA"),ISDATE(D29))`
+- Dates (D29): `=OR(D29="",EXACT(D29,"NA"),ISDATE(D29))` (any valid date; the cells are already formatted dd-mmm-yyyy)
 - Currency (D39): `=OR(EXACT(D39,"NA"),AND(ISNUMBER(D39),D39>=0))`
 - Whole number (D7): `=OR(EXACT(D7,"NA"),AND(ISNUMBER(D7),D7>=0,D7=INT(D7)))`
 - Percentage (D24): `=OR(EXACT(D24,"NA"),AND(ISNUMBER(D24),D24>=0,D24<=100))`
@@ -44,3 +44,5 @@ The currency columns have no type, so they accept NA already.
 3. Check the hidden `System - Registry Export` sheet of that workbook shows `NA` and no error (if a cell there converts a number with VALUE(), tell me).
 
 To apply all of this with Cowork instead of by hand, use the ready prompt in `docs/COWORK_NA_VALIDATION_PROMPT.md` (it contains the exact current and new rule for every range).
+
+To apply it all in one run instead, paste `docs/scripts/NaValidationTemplate.gs` into the template's Apps Script (backup copy first): `previewNaValidation`, `applyNaValidation`, `verifyNaValidation`, then delete the script.
