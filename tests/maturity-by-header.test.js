@@ -31,3 +31,10 @@ test('a missing required column is reported by name', () => {
   const { p } = setup(['Financial Year', 'Grant ID', 'Organisation Name', 'Grant Title', 'Aspect', 'Status']);
   assert.throws(() => p.get('ensureOrganisationMaturityRowsForGrant_')('G1'), /missing the column "Indicator"/);
 });
+
+test('a Discretionary grant gets no maturity rows (nothing is read or written)', () => {
+  const p = loadProject();
+  p.override('grantById_', () => ({ rowNumber: 3, record: { 'Grant ID': 'G1', 'Grant Type': 'Discretionary' } }));
+  p.override('sheet_', () => { throw new Error('the maturity sheet must not be touched'); });
+  assert.doesNotThrow(() => p.get('ensureOrganisationMaturityRowsForGrant_')('G1'));
+});
