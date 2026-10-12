@@ -2,7 +2,7 @@
 const APFP = Object.freeze({
  FONT_FAMILY: 'Arial',
  // Shown in the preflight result and at the end of each workspace run so anyone can see which code is deployed. Bump with every round.
- CODE_VERSION: 'Version 1.0',
+ CODE_VERSION: 'Version 1.1',
  // Fallback when System - Configuration has no TIME_ZONE row.
  TIME_ZONE: 'Asia/Kolkata',
  HIDDEN_SYSTEM_SHEETS: [
@@ -286,7 +286,7 @@ const APFP = Object.freeze({
        { NAME: 'Outcome, Support and Disbursement Tracker', TYPE: 'TEXT' },
        { NAME: 'Supporting & Compliance', TYPE: 'TEXT' },
        { NAME: 'Budget Allocation & Fund Utilisation', TYPE: 'TEXT' },
-       { NAME: 'Setup Review Status', TYPE: 'DROPDOWN', VALUES: ['Awaiting Review', 'Changes Required', 'Approved', 'Retry Approval', 'Locked & Migrated', 'Not Applicable'] },
+       { NAME: 'Setup Review Status', TYPE: 'DROPDOWN', VALUES: ['Awaiting Review', 'Changes Required', 'Approved', 'Retry Approval', 'Locked & Migrated', 'Reopen Setup', 'Reopened - Changes Required', 'Not Applicable'] },
        { NAME: 'Progress Report Q1', TYPE: 'TEXT' },
        { NAME: 'Progress Report Q2', TYPE: 'TEXT' },
        { NAME: 'Progress Report Q3', TYPE: 'TEXT' },
@@ -397,7 +397,11 @@ const APFP = Object.freeze({
      ]
    }
  ],
- REVIEW_STATUS: { AWAITING: 'Awaiting Review', CHANGES: 'Changes Required', APPROVED: 'Approved', RETRY: 'Retry Approval', LOCKED: 'Locked & Migrated' },
+ REVIEW_STATUS: {
+   AWAITING: 'Awaiting Review', CHANGES: 'Changes Required', APPROVED: 'Approved', RETRY: 'Retry Approval', LOCKED: 'Locked & Migrated',
+   // Set by the reviewer on a locked Setup; the Reopen Setup for Changes button reopens every row marked so, then sets REOPENED.
+   REOPEN: 'Reopen Setup', REOPENED: 'Reopened - Changes Required'
+ },
  DATA_UPDATE_STATUS: {
    NOT_READY: 'Not Ready', READY: 'Ready', UPDATING: 'Updating', UPDATED: 'Updated',
    FAILED: 'Failed', REOPEN_REQUIRED: 'Reopen Required'

@@ -4,6 +4,14 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Version 1.1 — Setup Review Status end to end
+
+**Date:** 2026-10-12 · `Config.js` (new statuses `Reopen Setup`, `Reopened - Changes Required`, `Version 1.1`), `RegistrySync.js` (`setupNeedsChangesError_`, `markMasterSyncFailed_`, `updateApprovedSetupData`, `syncRecordIsApprovedCompleted_`), `ApprovalsAndAccess.js` (`handleTrackerReviewEdit_`, `applyReviewStatus_`, `reopenSelectedSetup`), `SharingAndEmail.js` (`reopenSetup_`).
+- **Failed approval:** an incomplete or invalid Setup now goes back to **Changes Required** (it used to become Retry Approval + Needs Attention + a High exception). One Medium "Setup Needs Changes" line is logged; the run summary says "sent back as Changes Required". Technical failures are unchanged (Retry Approval).
+- **Reopen by status:** set Setup Review Status to **Reopen Setup** on any number of locked rows and click Reopen Setup for Changes: every marked row is reopened and shows **Reopened - Changes Required**. The button no longer needs the row to be selected. A failing row stays on Reopen Setup with the reason. Typing Changes Required on a locked row becomes Reopen Setup. Hand-typing statuses is otherwise unchanged.
+- **Fix:** `syncRecordIsApprovedCompleted_` required `Approved`, but a successful Lock & Migrate stores `Locked & Migrated`, so the returning-organisation prefill from the prior Setup and the older-year guard never matched; both now accept a locked Setup (a bug in the original code as well).
+- **Production:** add `Reopen Setup` and `Reopened - Changes Required` to the Setup Review Status dropdown BEFORE pushing. Tests: `tests/setup-review.test.js` (200 pass).
+
 ## Version 1.0
 
 **Date:** 2026-10-12 · `Config.js` (`CODE_VERSION`). The code that was labelled "round Z" is now **Version 1.0**. Preflight and the run summary show `Code version: Version 1.0`. The lettered rounds below (F to Z) stay as the history of how it was built; later changes are numbered 1.1, 1.2 and so on. No behaviour changed.

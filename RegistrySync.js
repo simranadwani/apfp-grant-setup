@@ -10,7 +10,8 @@ function masterSyncByGrantId_(grantId) {
 function syncRecordIsApprovedCompleted_(record) {
  return key_(record['Record Status']) === 'active' &&
    !isTransactionalGrantType_(record['Grant Type']) &&
-   key_(record['Setup Review Status']) === 'approved' &&
+   // A successful Lock & Migrate stores Locked & Migrated, so both count as an approved, completed Setup.
+   ['approved', 'locked & migrated'].includes(key_(record['Setup Review Status'])) &&
    key_(record['Data Update Status']) === 'updated' &&
    key_(record['Data Sync Status']) === 'completed';
 }
@@ -58,7 +59,7 @@ function updateApprovedSetupData() {
    SpreadsheetApp.getUi().alert('Another APFP automation run is active. Run this action again after it finishes.');
    return;
  }
- let completed = 0, failed = 0, processed = 0, stopped = false;
+ let completed = 0, failed = 0, sentBack = 0, processed = 0, stopped = false;
  const failures = [];
  const start = Date.now();
  try {
@@ -78,8 +79,9 @@ function updateApprovedSetupData() {
        syncOneMasterDataRow_(rowNumber);
        completed++;
      } catch (error) {
-       failed++;
-       failures.push(markMasterSyncFailed_(rowNumber, error));
+       const item = markMasterSyncFailed_(rowNumber, error);
+       item.needsChanges ? sentBack++ : failed++;
+       failures.push(item);
      }
      processed++;
    }
@@ -88,10 +90,10 @@ function updateApprovedSetupData() {
  }
  const suffix = stopped ? ' Remaining approved records were left untouched; run this menu action again to continue.' : '';
  const failureLines = failures.filter(Boolean).slice(0, 5)
-   .map(item => `• ${item.organisationName || item.grantId}: ${item.summary}`);
+   .map(item => `• ${item.organisationName || item.grantId}${item.needsChanges ? ' (Changes Required)' : ''}: ${item.summary}`);
  const detail = failureLines.length ? `\n\nNeeds attention:\n${failureLines.join('\n')}` : '';
  SpreadsheetApp.getUi().alert(
-   `Locked and updated ${completed} approved Setup(s); ${failed} need attention.${suffix}${detail}`
+   `Locked and updated ${completed} approved Setup(s); ${sentBack} sent back as Changes Required; ${failed} need attention.${suffix}${detail}`
  );
 }
 function setupRangeKey_(row) {
@@ -201,6 +203,12 @@ function tripleTable_(ss, firstRow, secondRow, thirdRow) {
  }
  return out.map(r => r.join(' | ')).join('\n');
 }
+// An approval that fails because the grantee's Setup is incomplete or invalid is not a technical failure: it is sent back as Changes Required.
+function setupNeedsChangesError_(message) {
+ const error = new Error(message);
+ error.setupNeedsChanges = true;
+ return error;
+}
 function validateCompletedSetup_(source, byCode) {
  const missing = [];
  Object.keys(byCode).forEach(
@@ -282,8 +290,7 @@ function validateCompletedSetup_(source, byCode) {
        missing.push(`At least one complete ${group.label.toLowerCase()} row`);
    }
  );
- if (missing.length)
-   throw new Error(`Approved Setup is incomplete. Complete: ${[...new Set(missing)].join(', ')}.`);
+ if (missing.length) throw setupNeedsChangesError_(`Approved Setup is incomplete. Complete: ${[...new Set(missing)].join(', ')}.`);
 }
 // A Validation Rule may end in _OR_NA (for example DRIVE_URL_OR_NA, DATE_OR_NA, NONNEGATIVE_CURRENCY_OR_NA): the field then accepts its
 // normal rule OR exactly "NA" (capital letters, nothing else), meaning not applicable. Which fields allow NA is therefore decided
@@ -353,8 +360,7 @@ function validateConfiguredSetupValues_(source, fieldConfig) {
        invalid.push(`${row['Field Label'] || row['Field Code']}${values.length > 1 || matrix.length > 1 ? ` (row ${rowOffset + 1})` : ''}`);
    }));
  });
- if (invalid.length)
-   throw new Error(`Approved Setup contains invalid values. Correct: ${[...new Set(invalid)].join(', ')}.`);
+ if (invalid.length) throw setupNeedsChangesError_(`Approved Setup contains invalid values. Correct: ${[...new Set(invalid)].join(', ')}.`);
 }
 function setupRegistryExportRecords_(source) {
   const sheet = source.getSheetByName(APFP.TEMPLATE_SHEETS.REGISTRY_EXPORT);
@@ -539,17 +545,30 @@ function syncGrantMaster_(source, byCode, grantId, organisationId, organisationN
 }
 function markMasterSyncFailed_(rowNumber, error) {
  const record = rowObject_(APFP.SHEETS.TECHNICAL, 2, rowNumber), retry = Number(record['Retry Count'] || 0) + 1,
-   requestId = clean_(record['Request ID']);
+   requestId = clean_(record['Request ID']), needsChanges = !!(error && error.setupNeedsChanges);
  if (requestId) {
-   saveTech_(requestId, {
-     'Data Sync Status': 'Failed', 'Data Update Status': APFP.DATA_UPDATE_STATUS.FAILED,
-     'Setup Review Status': APFP.REVIEW_STATUS.RETRY,
-     'Workspace Status': APFP.STATUS.NEEDS_ATTENTION,
-     'Data Sync Attempt At': now_(), 'Last Error Code': 'MASTER_SYNC_FAILED',
-     'Last Error Message': error.message, 'Retry Count': retry
-   });
+   if (needsChanges) {
+     // The grantee's Setup is incomplete or invalid: back to Changes Required (the workbook is still editable), no technical failure.
+     saveTech_(requestId, {
+       'Setup Review Status': APFP.REVIEW_STATUS.CHANGES, 'Data Update Status': APFP.DATA_UPDATE_STATUS.NOT_READY,
+       'Data Sync Status': 'Not Eligible', 'Data Sync Attempt At': now_(),
+       'Last Error Code': 'SETUP_INCOMPLETE', 'Last Error Message': error.message
+     });
+   } else {
+     saveTech_(requestId, {
+       'Data Sync Status': 'Failed', 'Data Update Status': APFP.DATA_UPDATE_STATUS.FAILED,
+       'Setup Review Status': APFP.REVIEW_STATUS.RETRY,
+       'Workspace Status': APFP.STATUS.NEEDS_ATTENTION,
+       'Data Sync Attempt At': now_(), 'Last Error Code': 'MASTER_SYNC_FAILED',
+       'Last Error Message': error.message, 'Retry Count': retry
+     });
+   }
  }
- writeException_({
+ writeException_(needsChanges ? {
+   type: 'Setup Needs Changes', severity: 'Medium', organisationId: record['Organisation ID'],
+   grantId: record['Grant ID'], location: APFP.SHEETS.TECHNICAL, field: record['Setup Workbook URL'],
+   message: error.message, recommendedAction: 'Ask the grantee to complete the listed fields, then set Setup Review Status to Approved again.', runId: record['Run ID']
+ } : {
    type: 'Approved Setup Data Update Failure', severity: 'High', organisationId: record['Organisation ID'],
    grantId: record['Grant ID'], location: APFP.SHEETS.TECHNICAL, field: record['Setup Workbook URL'],
    message: error.message, recommendedAction: friendlyErrorMessage_('MASTER_SYNC_FAILED', error), runId: record['Run ID']
@@ -560,6 +579,6 @@ function markMasterSyncFailed_(rowNumber, error) {
  return {
    grantId: clean_(record['Grant ID']),
    organisationName: clean_(record['Organisation Name']),
-   summary
+   summary, needsChanges
  };
 }

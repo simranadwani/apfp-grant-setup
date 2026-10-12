@@ -399,7 +399,7 @@ function reopenSetup_(grantId) {
  setByHeaders_(APFP.SHEETS.TECHNICAL, 2, sync.rowNumber, {
    'Approved Setup Archive URL': '',
    'Setup Shortcut URL': '',
-   'Setup Review Status': APFP.REVIEW_STATUS.CHANGES,
+   'Setup Review Status': APFP.REVIEW_STATUS.REOPENED,
    'Data Update Status': APFP.DATA_UPDATE_STATUS.NOT_READY,
    'Data Sync Status': 'Not Eligible',
    'Reviewed At': now_(),
