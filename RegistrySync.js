@@ -59,18 +59,22 @@ function updateApprovedSetupData() {
    SpreadsheetApp.getUi().alert('Another APFP automation run is active. Run this action again after it finishes.');
    return;
  }
- let completed = 0, failed = 0, sentBack = 0, processed = 0, stopped = false;
+ let completed = 0, failed = 0, sentBack = 0, processed = 0, stopped = false, skipped = [];
  const failures = [];
  const start = Date.now();
  try {
+   // First bring the Technical Registry in line with the statuses shown in the sheet (a paste, fill-down or missed edit must not
+   // leave a marked row ignored), and collect why any marked row cannot be used.
+   skipped = reconcileSetupReviewRows_([APFP.REVIEW_STATUS.APPROVED, APFP.REVIEW_STATUS.RETRY], 'approved');
    const eligible = technicalRegistryRows_().filter(item => {
      const record = item.record;
      return key_(record['Record Status']) === 'active' && !isTransactionalGrantType_(record['Grant Type']) &&
        ['approved', 'retry approval'].includes(key_(record['Setup Review Status'])) &&
-       !['updated', 'updating'].includes(key_(record['Data Update Status'])) && clean_(record['Setup Workbook URL']);
+       key_(record['Data Update Status']) !== 'updated' && clean_(record['Setup Workbook URL']);
    }).map(item => item.rowNumber);
    if (!eligible.length) {
-     SpreadsheetApp.getUi().alert('No Approved Setup is waiting to be locked and updated.');
+     SpreadsheetApp.getUi().alert('No Approved Setup is waiting to be locked and updated. Set Setup Review Status to Approved on the rows to lock, then click Lock & Migrate again.' +
+       (skipped.length ? `\n\nNot processed:\n${skipped.slice(0, 8).join('\n')}` : ''));
      return;
    }
    for (const rowNumber of eligible) {
@@ -91,7 +95,8 @@ function updateApprovedSetupData() {
  const suffix = stopped ? ' Remaining approved records were left untouched; run this menu action again to continue.' : '';
  const failureLines = failures.filter(Boolean).slice(0, 5)
    .map(item => `• ${item.organisationName || item.grantId}${item.needsChanges ? ' (Changes Required)' : ''}: ${item.summary}`);
- const detail = failureLines.length ? `\n\nNeeds attention:\n${failureLines.join('\n')}` : '';
+ const detail = (failureLines.length ? `\n\nNeeds attention:\n${failureLines.join('\n')}` : '') +
+   (skipped.length ? `\n\nNot processed:\n${skipped.slice(0, 8).join('\n')}` : '');
  SpreadsheetApp.getUi().alert(
    `Locked and updated ${completed} approved Setup(s); ${sentBack} sent back as Changes Required; ${failed} need attention.${suffix}${detail}`
  );
@@ -396,8 +401,9 @@ function syncOneMasterDataRow_(rowNumber) {
  if (isTransactionalGrantType_(record['Grant Type'])) throw new Error('Setup data update does not apply to Transactional grants.');
  if (!['approved', 'retry approval'].includes(key_(record['Setup Review Status'])))
    throw new Error('Only Approved or Retry Approval Setup workbooks can update master data.');
- if (['updated', 'updating'].includes(key_(record['Data Update Status'])))
-   throw new Error('Approved Setup is already updated or currently updating.');
+ // "Updating" left behind by a run that was cut off is retried: the script lock guarantees no other run is active.
+ if (key_(record['Data Update Status']) === 'updated')
+   throw new Error('Approved Setup is already updated.');
  const config = config_();
  requireConfig_(config, ['SETUP_TEMPLATE_ID']);
  const sourceUrl = clean_(record['Setup Workbook URL']), sourceId = sourceUrl ? urlId_(sourceUrl) : '',

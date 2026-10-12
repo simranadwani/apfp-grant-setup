@@ -4,6 +4,14 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Version 1.2 — Lock & Migrate and Reopen run every row marked in the sheet
+
+**Date:** 2026-10-12 · `ApprovalsAndAccess.js` (`handleTrackerReviewEdit_`, `applyReviewStatusEditForRow_`, `intakeRowsByReviewStatus_`, `reconcileSetupReviewRows_`, `reopenSelectedSetup`), `RegistrySync.js` (`updateApprovedSetupData`, `syncOneMasterDataRow_`), `Config.js`. Bug in Version 1.1 and earlier: the buttons only looked at the Technical Registry, which is filled by an edit trigger that handled one cell at a time. A status that was pasted, filled down over several rows, or whose trigger did not run left the sheet showing "Approved" while the registry did not, so those rows were silently ignored and nothing changed.
+- **Both buttons now read the statuses shown in the sheet first** and bring the registry in line, so every marked row runs. The edit handler also handles pasted / filled-down blocks row by row.
+- **Rows that cannot run are explained in the button's message** instead of being skipped silently: no workspace yet; Transactional / Discretionary ("this is a Transactional grant. It has no Setup, so it cannot be approved", and the cell goes back to Not Applicable); no Setup workbook; already Locked & Migrated ("set Reopen Setup"). Typing Approved on a locked row is put back with the same explanation.
+- A Setup left on "Updating" by a run that was cut off is now retried instead of being skipped for ever.
+- Tests: `tests/setup-review.test.js` (208 pass).
+
 ## Version 1.1 — Setup Review Status end to end
 
 **Date:** 2026-10-12 · `Config.js` (new statuses `Reopen Setup`, `Reopened - Changes Required`, `Version 1.1`), `RegistrySync.js` (`setupNeedsChangesError_`, `markMasterSyncFailed_`, `updateApprovedSetupData`, `syncRecordIsApprovedCompleted_`), `ApprovalsAndAccess.js` (`handleTrackerReviewEdit_`, `applyReviewStatus_`, `reopenSelectedSetup`), `SharingAndEmail.js` (`reopenSetup_`).
