@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Version 1.0
+
+**Date:** 2026-10-12 · `Config.js` (`CODE_VERSION`). The code that was labelled "round Z" is now **Version 1.0**. Preflight and the run summary show `Code version: Version 1.0`. The lettered rounds below (F to Z) stay as the history of how it was built; later changes are numbered 1.1, 1.2 and so on. No behaviour changed.
+
 ## Round Z — NA in every single cell, empty table rows allowed, NA read as blank
 
 **Date:** 2026-10-12 · `RegistrySync.js` (`centralSetupValue_`, group checks in `validateCompletedSetup_`, `pairTable_`, `tripleTable_`, `syncLeadershipMaster_`, `primaryBeneficiaryFromSetup_`), `Config.js` (round Z), `docs/scripts/NaValidationTemplate.gs`. Central registries never store the text `NA` (it replaces round Y's "keep NA in links"): links, text, dates, numbers, currency, percentages, joined tables, leadership and the primary beneficiary all read it as blank. Required checks still count NA as filled. In repeating tables a row is "used" only when some cell holds a real value; a used row needs every cell (NA counts); rows left empty or holding only NA are ignored; the at-least-one rules stay. The template script now also sets Required Rule = YES for the optional and conditional single-cell fields (15) and allows NA in leadership email/contact (`EMAIL_OR_NA`, `PHONE_OR_NA`). Outcome rows are untouched. Tests: `tests/setup-na.test.js` (189 pass).
