@@ -72,3 +72,37 @@ test('an NA link counts as not provided, so no expiry date is demanded; a real l
   cells.gDate = 'NA';
   assert.doesNotThrow(() => validate({}, byCode));
 });
+
+test('central registries get a blank for NA in date, number, currency and percent columns, and keep NA in link and text columns', () => {
+  const rows = {
+    fcra_link: { 'Field Shape': 'SCALAR', 'Destination Table': 'Organisation Registry', 'Destination Field': 'FCRA Registration Link', 'Input Type': 'Google Drive Link', 'Validation Rule': 'HTTPS_URL_OR_NA', v: 'NA' },
+    fcra_expiry_date: { 'Field Shape': 'SCALAR', 'Destination Table': 'Organisation Registry', 'Destination Field': 'FCRA Registration Expiry Date', 'Input Type': 'Date', 'Validation Rule': 'DATE_OR_NA', v: 'NA' },
+    years_implemented: { 'Field Shape': 'SCALAR', 'Destination Table': 'Organisation Registry', 'Destination Field': 'Years Implemented', 'Input Type': 'Whole Number', 'Validation Rule': 'NONNEGATIVE_WHOLE_NUMBER_OR_NA', v: 'NA' },
+    annual_budget: { 'Field Shape': 'SCALAR', 'Destination Table': 'Organisation Registry', 'Destination Field': 'Annual Budget', 'Input Type': 'Currency', 'Validation Rule': 'NONNEGATIVE_CURRENCY_OR_NA', v: 'NA' },
+    attrition: { 'Field Shape': 'SCALAR', 'Destination Table': 'Organisation Registry', 'Destination Field': 'Attrition', 'Input Type': 'Percentage', 'Validation Rule': 'PERCENT_0_100_OR_NA', v: 'NA' },
+    team_size: { 'Field Shape': 'SCALAR', 'Destination Table': 'Organisation Registry', 'Destination Field': 'Team Size', 'Input Type': 'Whole Number', 'Validation Rule': 'NONNEGATIVE_WHOLE_NUMBER_OR_NA', v: 12 },
+    mission: { 'Field Shape': 'SCALAR', 'Destination Table': 'Organisation Registry', 'Destination Field': 'Mission', 'Input Type': 'Long Text', 'Validation Rule': 'REQUIRED_TEXT', v: 'NA' },
+    expiry_real: { 'Field Shape': 'SCALAR', 'Destination Table': 'Organisation Registry', 'Destination Field': 'Other Expiry', 'Input Type': 'Date', 'Validation Rule': 'DATE_OR_NA', v: 'real-date' }
+  };
+  const q = loadProject();
+  q.override('readSingleConfigured_', (s, r) => String(r.v));
+  q.override('readSingleConfiguredRaw_', (s, r) => r.v);
+  const patch = JSON.parse(JSON.stringify(q.get('configuredScalarDestinationPatch_')({}, rows, 'Organisation Registry', { rawAll: true })));
+  assert.equal(patch['FCRA Registration Link'], 'NA');
+  assert.equal(patch['FCRA Registration Expiry Date'], '');
+  assert.equal(patch['Years Implemented'], '');
+  assert.equal(patch['Annual Budget'], '');
+  assert.equal(patch['Attrition'], '');
+  assert.equal(patch['Team Size'], 12);
+  assert.equal(patch['Mission'], 'NA', 'a text column keeps whatever was typed');
+  assert.equal(patch['Other Expiry'], 'real-date');
+});
+
+test('the primary beneficiary count is blank when the Setup says NA', () => {
+  const q = loadProject();
+  q.override('readTableConfigured_', () => [['Children']]);
+  q.override('readTableConfiguredRaw_', () => [['NA']]);
+  assert.deepEqual(JSON.parse(JSON.stringify(q.get('primaryBeneficiaryFromSetup_')({}, {}, {}))), { group: 'Children', count: '' });
+  q.override('readTableConfiguredRaw_', () => [[250]]);
+  assert.equal(q.get('primaryBeneficiaryFromSetup_')({}, {}, {}).count, 250);
+});
