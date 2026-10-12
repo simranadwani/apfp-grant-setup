@@ -3,8 +3,9 @@
  * Lets the grantee type exactly "NA" (capital N, capital A) in link, date, currency, number and percentage fields,
  * in addition to what the cell accepts today. Dates: any valid date (the cells are already formatted dd-mmm-yyyy).
  *
- * It (1) sets column L "Validation Rule" in Field Config for the 27 fields below and (2) sets the matching data validation on
- * each field's Value Cell(s), found from Field Config itself. Nothing else is touched (phone, email, year, lists, budget,
+ * It (1) sets column L "Validation Rule" in Field Config for the 27 fields below, (2) sets the matching data validation on
+ * each field's Value Cell(s), found from Field Config itself, and (3) sets "Required Rule" = YES for the single-cell fields that
+ * were optional (they must now hold a value or NA; tables keep their rules: unused rows may stay empty). Nothing else is touched (phone, email, year, lists, budget,
  * amount requested and project duration keep their rules). Safe to run twice.
  *
  * Steps: File > Make a copy (backup) first. Run previewNaValidation (read the log), then applyNaValidation, then verifyNaValidation.
@@ -24,6 +25,8 @@ const NA_RULES = {
   employee_attrition_previous_snapshot: 'PERCENT_0_100_OR_NA', employee_attrition_current_snapshot: 'PERCENT_0_100_OR_NA',
   foreign_funding_percentage: 'PERCENT_0_100_OR_NA'
 };
+const NA_REQUIRED = ['website_url', 'csr_uin', 'tan_number', 'fcra_link', 'csr_registration_link', 'policy_other', 'sop_other',
+  'attrition_context_previous_snapshot', 'attrition_context_current_snapshot'];
 // c = the first cell of the field's range (the rule is relative, so every cell of the range gets its own reference).
 const NA_BASES = {
   HTTPS_URL: { check: c => `REGEXMATCH(TO_TEXT(${c}),"^https://")`, help: 'Paste a link beginning with https://, or NA if not applicable.' },
@@ -43,15 +46,16 @@ function naFieldRows_() {
   if (!fc) throw new Error('This spreadsheet has no "Field Config" sheet. Run the script in the Grant Setup Template.');
   const data = fc.getDataRange().getValues(), head = data[0].map(h => String(h).trim());
   const col = name => { const i = head.indexOf(name); if (i < 0) throw new Error(`Field Config has no column "${name}".`); return i; };
-  const c = { sheet: col('Sheet Name'), code: col('Field Code'), cells: col('Value Cell(s)'), rule: col('Validation Rule') };
-  const rows = [];
+  const c = { sheet: col('Sheet Name'), code: col('Field Code'), cells: col('Value Cell(s)'), rule: col('Validation Rule'), required: col('Required Rule') };
+  const rows = [], requiredRows = [];
   data.forEach((r, i) => {
     const code = String(r[c.code]).trim();
     if (i > 0 && NA_RULES[code]) rows.push({ line: i + 1, code, sheet: String(r[c.sheet]).trim(), a1: String(r[c.cells]).trim(), rule: String(r[c.rule]).trim() });
+    if (i > 0 && NA_REQUIRED.indexOf(code) >= 0) requiredRows.push({ line: i + 1, code, required: String(r[c.required]).trim() });
   });
-  const missing = Object.keys(NA_RULES).filter(code => !rows.some(r => r.code === code));
+  const missing = Object.keys(NA_RULES).concat(NA_REQUIRED).filter(code => !rows.some(r => r.code === code) && !requiredRows.some(r => r.code === code));
   if (missing.length) throw new Error(`Field Codes not found in Field Config: ${missing.join(', ')}. Nothing was changed.`);
-  return { ss, fc, ruleColumn: c.rule + 1, rows };
+  return { ss, fc, ruleColumn: c.rule + 1, requiredColumn: c.required + 1, rows, requiredRows };
 }
 function naFormula_(newRule, a1) {
   const base = NA_BASES[newRule.replace(/_OR_NA$/, '')];
@@ -60,7 +64,7 @@ function naFormula_(newRule, a1) {
   return { formula: `=OR(${first}="",EXACT(${first},"NA"),${base.check(first)})`, help: base.help };
 }
 function runNaValidation_(dryRun) {
-  const { ss, fc, ruleColumn, rows } = naFieldRows_(), log = [];
+  const { ss, fc, ruleColumn, requiredColumn, rows, requiredRows } = naFieldRows_(), log = [];
   rows.forEach(r => {   // check everything first so a problem stops the run before any change
     if (!ss.getSheetByName(r.sheet)) throw new Error(`${r.code}: sheet "${r.sheet}" not found.`);
     ss.getSheetByName(r.sheet).getRange(r.a1);
@@ -78,12 +82,18 @@ function runNaValidation_(dryRun) {
       ss.getSheetByName(r.sheet).getRange(r.a1).setDataValidation(validation);
     }
   });
+  requiredRows.forEach(r => {
+    if (r.required.toUpperCase() !== 'YES') {
+      log.push(`Field Config row ${r.line} (${r.code}): Required Rule ${r.required || '(blank)'} -> YES`);
+      if (!dryRun) fc.getRange(r.line, requiredColumn).setValue('YES');
+    }
+  });
   console.log(log.join('\n'));
-  SpreadsheetApp.getUi().alert(`${dryRun ? 'PREVIEW (nothing changed)' : 'DONE'}: ${rows.length} fields.\nOpen View > Logs (or Executions) to read the list.\n` +
+  SpreadsheetApp.getUi().alert(`${dryRun ? 'PREVIEW (nothing changed)' : 'DONE'}: ${rows.length} fields (+ ${requiredRows.length} made required).\nOpen View > Logs (or Executions) to read the list.\n` +
     (dryRun ? 'Run applyNaValidation to apply.' : 'Run verifyNaValidation to check.'));
 }
 function verifyNaValidation() {
-  const { ss, rows } = naFieldRows_(), problems = [];
+  const { ss, rows, requiredRows } = naFieldRows_(), problems = [];
   rows.forEach(r => {
     const first = ss.getSheetByName(r.sheet).getRange(r.a1.split(':')[0]), dv = first.getDataValidation();
     const criteria = dv ? dv.getCriteriaType() : null, args = dv ? dv.getCriteriaValues() : [];
@@ -91,5 +101,6 @@ function verifyNaValidation() {
     if (!dv || String(criteria) !== 'CUSTOM_FORMULA' || formula.indexOf('EXACT(') < 0) problems.push(`${r.sheet}!${r.a1} (${r.code}) has no NA rule.`);
     if (r.rule !== NA_RULES[r.code]) problems.push(`Field Config ${r.code} is ${r.rule}, expected ${NA_RULES[r.code]}.`);
   });
+  requiredRows.forEach(r => { if (r.required.toUpperCase() !== 'YES') problems.push(`Field Config ${r.code} Required Rule is ${r.required}, expected YES.`); });
   SpreadsheetApp.getUi().alert(problems.length ? `Problems:\n${problems.join('\n')}` : `OK: all ${rows.length} fields have the NA rule and their Field Config value.`);
 }
