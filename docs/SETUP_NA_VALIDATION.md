@@ -32,15 +32,12 @@ For each range choose **Custom formula is**, *Reject the input*, help text "Ente
 - Percentage (D24): `=OR(EXACT(D24,"NA"),AND(ISNUMBER(D24),D24>=0,D24<=100))`
 If a value cell is merged (for example E28:F28), apply the rule to the merged cell.
 
-## 3. Central Administration (once, by hand)
-`NA` is written as text, so table columns typed DATE or number will flag it. Change these Table column types to **Plain text** (the code no longer checks their type):
-- `9. Organisation Registry`: FCRA Registration Expiry Date, Section 12A Registration Expiry Date, Section 80G Expiry Date.
-- `8. Grant Registry`: Years Implemented, Team Size — Current FY, Team Size — Previous FY, Employee Attrition — Current Snapshot, Employee Attrition — Previous Snapshot, Primary Beneficiary Count.
-The currency columns have no type, so they accept NA already.
+## 3. Central Administration: nothing to change (round Y)
+The central registries store `NA` only in text and link columns (for example FCRA Registration Link shows `NA`). For date, number, currency and percentage columns the sync writes a **blank** instead of `NA`, so the typed Table columns never receive text and no column type has to be changed. (If you already switched some columns to plain text, that is fine too: preflight accepts either.)
 
 ## 4. Check
 1. In a TEST Setup workbook type `NA` in a link, a date, a currency and a percentage field: accepted. Type `na`, `N/A`, `abc`: rejected.
-2. Set the FCRA link to `NA` and leave its expiry date blank: Approve → Lock & Migrate succeeds; the Organisation Registry shows `NA` in the link column.
+2. Set the FCRA link to `NA` and leave its expiry date blank: Approve → Lock & Migrate succeeds; the Organisation Registry shows `NA` in the link column and a blank expiry date.
 3. Check the hidden `System - Registry Export` sheet of that workbook shows `NA` and no error (if a cell there converts a number with VALUE(), tell me).
 
 To apply all of this with Cowork instead of by hand, use the ready prompt in `docs/COWORK_NA_VALIDATION_PROMPT.md` (it contains the exact current and new rule for every range).

@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round Y — NA is stored as a blank in central date, number, currency and percent columns
+
+**Date:** 2026-10-12 · `RegistrySync.js` (`centralSetupValue_`, `configuredScalarDestinationPatch_`, `primaryBeneficiaryFromSetup_`), `Config.js` (round Y). No central-sheet change is needed: an `NA` entered in a Setup date, number, currency or percentage field is written as a blank to the central registries; link and text columns keep `NA`. The `ANY_TYPE` flags from round X stay, so preflight accepts the typed columns either way. Tests: `tests/setup-na.test.js` (184 pass).
+
 ## Round X — "NA" accepted in link, date, currency, number and percentage fields
 
 **Date:** 2026-10-12 · `RegistrySync.js` (`setupRuleParts_`, `setupValidationKind_`, `configuredSetupValueIsValid_`, `validateCompletedSetup_`), `TemplateProtection.js`, `Config.js` (round X; registry columns that may now hold NA are `ANY_TYPE`). A Field Config Validation Rule ending in `_OR_NA` accepts its normal rule or exactly `NA`; an `NA` link counts as not provided (no expiry date demanded); new rule `HTTPS_URL`; an explicit rule now wins over the Input Type. Existing rules behave as before. Owner steps (Field Config values, cell validation formulas, registry column types): `docs/SETUP_NA_VALIDATION.md`. Tests: `tests/setup-na.test.js` (182 pass).

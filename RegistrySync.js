@@ -180,7 +180,7 @@ function primaryBeneficiaryFromSetup_(ss, typeRow, countRow) {
  const types = readTableConfigured_(ss, typeRow), counts = readTableConfiguredRaw_(ss, countRow);
  for (let i = 0; i < Math.max(types.length, counts.length); i++) {
    const group = clean_(types[i] && types[i][0]), rawCount = counts[i] && counts[i][0];
-   if (group || (rawCount !== '' && rawCount != null)) return { group, count: rawCount == null ? '' : rawCount };
+   if (group || (rawCount !== '' && rawCount != null)) return { group, count: rawCount == null || setupValueIsNotApplicable_(rawCount) ? '' : rawCount };
  }
  return { group: '', count: '' };
 }
@@ -311,6 +311,13 @@ function setupValidationKind_(rule, input) {
  };
  return byRule[rule] || byInput[input] || '';
 }
+// Central registries keep NA only in text and link columns. A date, number, currency or percentage column stays blank for NA,
+// so typed Table columns never receive text and the central sheets need no change.
+function centralSetupValue_(value, row) {
+ if (!setupValueIsNotApplicable_(value)) return value;
+ const parts = setupRuleParts_(row['Validation Rule']), kind = setupValidationKind_(key_(parts.raw), key_(row['Input Type']));
+ return ['date', 'year', 'whole', 'positive', 'percent', 'currency'].includes(kind) ? '' : value;
+}
 function configuredSetupValueIsValid_(value, row) {
  const parts = setupRuleParts_(row['Validation Rule']), rawRule = parts.raw, rule = key_(rawRule), input = key_(row['Input Type']);
  if (value === '' || value == null || !rule || ['text', 'required_text', 'text_or_number', 'none'].includes(rule)) return true;
@@ -435,7 +442,7 @@ function configuredScalarDestinationPatch_(source, byCode, destinationTable, opt
    const destinationField = clean_(row['Destination Field']);
    if (!destinationField || destinationField === '—') return;
    const useRaw = !!options.rawAll || rawInputs.has(key_(row['Input Type']));
-   out[destinationField] = useRaw ? readSingleConfiguredRaw_(source, row) : readSingleConfigured_(source, row);
+   out[destinationField] = centralSetupValue_(useRaw ? readSingleConfiguredRaw_(source, row) : readSingleConfigured_(source, row), row);
  });
  return out;
 }
