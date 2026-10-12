@@ -25,7 +25,7 @@ Buttons are drawings assigned to these functions. A workspace button **never wri
 |---|---|
 | `uiCreateWorkspace` | Create workspaces for all rows marked Create Workspace / Retry Workspace / Retry Sharing |
 | `uiRetryOrReshareWorkspace` | Opens one Retry / Reshare dialog with a collapsible card per row marked Action = Retry Sharing (with none marked: the selected row that already has a workspace; a marked row without a workspace is shown locked; "Reshare all ready grants" runs every card with its current choice). Per card ("same email" reshares; "change email" moves access, updates the registries, the Setup workbook contact cell and — for the latest grant — the organisation contact, optionally emails the new address, and writes an audit line). With no such row selected it runs the marked rows |
-| `uiLockAndMigrateApprovedSetups`, `uiReopenSetupForChanges` | Approve → lock and archive a Setup; reopen it for changes |
+| `uiLockAndMigrateApprovedSetups`, `uiReopenSetupForChanges` | **Lock & Migrate** locks and archives every row whose Setup Review Status is Approved or Retry Approval. **Reopen Setup for Changes** reopens every row marked Reopen Setup (no row selection). See the status table below |
 | `uiRefreshOutcomeProgress`, `uiRefreshSupport`, `uiRefreshDecisions`, `uiRefreshDecisionDocuments` | Refresh the central trackers from Active grants' workbooks. Unchanged workbooks are skipped; a broken one is reported and skipped |
 | `uiRefreshReportingForce` | Forget "unchanged" memory and re-read every Active workbook |
 | `uiPushGrantStatus` | Mark the selected Decision Tracker grant Complete |
@@ -58,3 +58,19 @@ Two script-controlled columns at the end of `6. Committed & Spent Tracker` (nobo
 
 ## 7. History is never deleted
 Refreshes only add or update rows (tables grow automatically instead of failing). Completed / Discontinued grants are frozen at completion (Outcome/Support/Decision refresh covers Active grants only) but their rows and disbursement records stay. Central sheets mirror the grantee workbooks, including blanks. Outcome IDs stay attached to their indicator when the Setup is re-approved with a different order. Use **Backup Central Administration** before bulk operations; Version history restores data.
+
+
+## Setup Review Status (Version 1.1)
+Every status drives one batch action; nothing depends on which row is selected.
+
+| Status | Set by | Meaning / what runs |
+|---|---|---|
+| Awaiting Review | system, at creation | the grantee is filling the Setup in |
+| Changes Required | reviewer; **system when an approval finds the Setup incomplete or invalid** | the grantee must edit; the workbook stays editable. The missing fields are in the run summary, the Technical Registry (Last Error Message) and one Medium line in System - Exceptions Log |
+| Approved | reviewer | **Lock & Migrate** processes every Approved and Retry Approval row |
+| Retry Approval | system, only after a technical failure (Drive/Sheets/sync error) | Lock & Migrate retries it, exactly like Approved; it only tells you the last attempt failed technically (High exception, Workspace Status Needs Attention) |
+| Locked & Migrated | system | the Setup is archived read-only and the central registries are updated |
+| Reopen Setup | reviewer, on a Locked & Migrated row | **Reopen Setup for Changes** reopens every marked row |
+| Reopened - Changes Required | system, after a successful reopen | the grantee can edit again; set Approved when ready |
+| Not Applicable | system | Transactional / Discretionary |
+Typing Changes Required on a Locked & Migrated row turns into Reopen Setup. A row that fails to reopen stays on Reopen Setup with the reason; the others still run. A locked Setup counts as approved for returning-organisation prefill and the older-year guard (it did not before).

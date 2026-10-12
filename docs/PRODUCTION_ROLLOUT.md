@@ -47,7 +47,7 @@ Do **not** run `clasp pull` in this folder right before updating: it overwrites 
 Leave the `DATA_SYNC_SCHEMA_VERSION` row in place for now (see step 0b); nothing reads it in the new code, and preflight only warns about it. Delete it after sign-off, together with any V14.1 / V15.0 description text.
 
 ## 4. One-time sheet changes in production (in this order)
-1. **Dropdowns in `1. Workspace Creator`** (Table column → dropdown): *Setup Review Status* → add `Not Applicable`; *Action* → add `Correct Workspace`. Do this BEFORE the push, or preflight reports the missing options.
+1. **Dropdowns in `1. Workspace Creator`** (Table column → dropdown): *Setup Review Status* → add `Not Applicable`, `Reopen Setup` and `Reopened - Changes Required`; *Action* → add `Correct Workspace`. Do this BEFORE the push, or preflight reports the missing options.
 2. **Tracker status columns:** in `6. Committed & Spent Tracker` add two columns at the far right (inside the Table): `Push Status` and `Document Sync Status`. Nobody types in them. (Optional: warning-only protection and grey shading.)
 3. **System - Configuration:** add rows (Active = Yes) `PROTECTION_EDITORS` = `team@goalkeep.net, <Anagha's email>`; check `CENTRAL_ADMIN_FOLDER_ID` is the production Admin folder id.
 4. Optional, by hand: delete the settings rows the code never reads (`WORKSPACE_FOLDER_PATTERN`, `ORGANISATION_ID_PATTERN`, `GRANT_ID_PATTERN`, `SHARING_METHOD`, `TECHNICAL_REGISTRY_SHEET`, `OUTCOME_PROGRESS_SCHEMA_VERSION`, `SUPPORT_CATEGORY_OPTIONS`, `SUPPORT_STATUS_OPTIONS`; `DATA_SYNC_SCHEMA_VERSION` only after sign-off). Also delete any `LIST_…`, `FIRST_FY` or `FY_YEARS_AHEAD` rows if you added them; nothing reads them any more. `TIME_ZONE` is only needed to override the default.
