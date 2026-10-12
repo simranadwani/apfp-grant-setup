@@ -1,13 +1,13 @@
 // TemplateProtection.gs — field-map checks and inherited workbook protections.
 function templateValidationRuleSupported_(row) {
- const inputType = key_(row['Input Type']), rawRule = clean_(row['Validation Rule']),
+ const inputType = key_(row['Input Type']), rawRule = setupRuleParts_(row['Validation Rule']).raw,
    rule = key_(rawRule);
  if (!rule || ['text', 'required_text', 'text_or_number', 'none'].includes(rule)) return true;
  if (rule.indexOf('list:') === 0)
    return rawRule.slice(rawRule.indexOf(':') + 1).split('|').map(clean_).filter(Boolean).length > 0;
  return inputType === 'email' || inputType === 'email address' || rule === 'email' || rule === 'valid email' ||
    inputType === 'phone' || inputType === 'phone number' || rule === 'phone' || rule === 'valid phone number' ||
-   inputType === 'website url' || rule === 'http_url' || rule === 'valid website url' ||
+   inputType === 'website url' || rule === 'http_url' || rule === 'https_url' || rule === 'valid website url' ||
    inputType === 'google drive link' || rule === 'drive_url' || rule === 'drive link only' ||
    inputType === 'yes / no' || rule === 'yes_no' || rule === 'yes/no' ||
    inputType === 'date' || rule === 'date' || inputType === 'year' || rule === 'year_4_digit' ||

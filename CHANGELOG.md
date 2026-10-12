@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Round X — "NA" accepted in link, date, currency, number and percentage fields
+
+**Date:** 2026-10-12 · `RegistrySync.js` (`setupRuleParts_`, `setupValidationKind_`, `configuredSetupValueIsValid_`, `validateCompletedSetup_`), `TemplateProtection.js`, `Config.js` (round X; registry columns that may now hold NA are `ANY_TYPE`). A Field Config Validation Rule ending in `_OR_NA` accepts its normal rule or exactly `NA`; an `NA` link counts as not provided (no expiry date demanded); new rule `HTTPS_URL`; an explicit rule now wins over the Input Type. Existing rules behave as before. Owner steps (Field Config values, cell validation formulas, registry column types): `docs/SETUP_NA_VALIDATION.md`. Tests: `tests/setup-na.test.js` (182 pass).
+
 ## Round W — Grant Type can be changed in Correct Workspace Details
 
 **Date:** 2026-10-08 · new `GrantTypeChange.js`; `RegistryAndIDs.js` (`applyGrantCorrections_` takes `grantType` and an options object), `CorrectWorkspace.js`, `CorrectDetailsDialog.html`, `Config.js` (`FOLDERS.ARCHIVED`, round W). Grant Type is a new field in the dialog (owner-only like the others).
