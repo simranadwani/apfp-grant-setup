@@ -2,7 +2,7 @@
 const APFP = Object.freeze({
  FONT_FAMILY: 'Arial',
  // Shown in the preflight result and at the end of each workspace run so anyone can see which code is deployed. Bump with every round.
- CODE_VERSION: 'Version 1.3',
+ CODE_VERSION: 'Version 1.4',
  // Fallback when System - Configuration has no TIME_ZONE row.
  TIME_ZONE: 'Asia/Kolkata',
  HIDDEN_SYSTEM_SHEETS: [

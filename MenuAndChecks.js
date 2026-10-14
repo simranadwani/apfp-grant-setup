@@ -2,6 +2,8 @@
 function handleCentralAdminOpen() {
   // No custom menu is added: actions run from assigned sheet buttons. Keep the Organisation Name dropdown live.
   applyWorkspaceOrganisationDropdown_();
+  // Never lets a repair problem stop the sheet from opening.
+  try { normaliseAmountApprovedEverywhere_(); } catch (error) { console.warn(`Amount clean-up skipped: ${error.message}`); }
 }
 
 function notifyAdmin_(message) {

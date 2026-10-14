@@ -185,7 +185,7 @@ function validateIntakeRequest_(row) {
  const amountApproved = parseAdminTableNumber_(row.amountApproved);
  if (!existingGrant && (amountApproved === '' || amountApproved == null || amountApproved < 0))
    errors.push('Amount Approved is required and must be a non-negative amount.');
- else if (!existingGrant) row.amountApproved = amountApproved;
+ else if (typeof amountApproved === 'number') row.amountApproved = amountApproved; // always carried on as a number, never as pasted text
  const discretionary = isDiscretionaryGrantType_(row.grantType);
  if ((!discretionary || row.granteeEmail) && !validEmail_(row.granteeEmail))
    errors.push(discretionary ? 'Primary Contact Email is optional for Discretionary grants, but must be valid when entered.' : 'Enter a valid Primary Contact Email.');
