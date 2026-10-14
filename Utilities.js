@@ -550,11 +550,32 @@ function ensureUserRole_(fileId, email, role, config) {
      supportsAllDrives: true, fields: 'id,type,role,emailAddress,view'
    });
  }
- const sendNotification = key_(config && config.SEND_SHARING_NOTIFICATION) === 'yes', options = {
-   supportsAllDrives: true, sendNotificationEmail: sendNotification, fields: 'id,type,role,emailAddress,view'
+ const sendNotification = key_(config && config.SEND_SHARING_NOTIFICATION) === 'yes';
+ const create = notify => {
+   const options = { supportsAllDrives: true, sendNotificationEmail: notify, fields: 'id,type,role,emailAddress,view' };
+   if (notify && role !== 'reader') options.emailMessage = 'Your APFP grant workspace is ready.';
+   return Drive.Permissions.create({ type: 'user', role, emailAddress: email }, fileId, options);
  };
- if (sendNotification && role !== 'reader') options.emailMessage = 'Your APFP grant workspace is ready.';
- return Drive.Permissions.create({ type: 'user', role, emailAddress: email }, fileId, options);
+ try { return create(sendNotification); }
+ catch (error) {
+   // An address without a Google Account can only be invited with Drive's own email. Share silently first; only that address gets it.
+   if (sendNotification || !driveNeedsInviteEmail_(error)) throw error;
+   const permission = create(true);
+   noteInviteEmailSent_(email);
+   return permission;
+ }
+}
+function driveNeedsInviteEmail_(error) {
+ return /no Google Account associated|tick the .?Notify people/i.test(String(error && error.message || error));
+}
+function noteInviteEmailSent_(email) {
+ try {
+   writeException_({
+     type: 'Drive Invite Email Sent', severity: 'Low', status: 'Resolved', location: 'Sharing', field: 'Primary Contact Email',
+     message: `${email} has no Google Account, so Drive sent its own invitation email (required by Google for such addresses).`,
+     recommendedAction: 'None.'
+   });
+ } catch (ignored) { /* the share already succeeded; the log line is only a courtesy */ }
 }
 function restoreUserPermission_(fileId, email, snapshot, config) {
  const current = permissionForUser_(fileId, email);

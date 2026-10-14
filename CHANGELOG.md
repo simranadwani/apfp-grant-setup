@@ -4,6 +4,12 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Version 1.5 — grantees without a Google Account can be shared with, without turning notifications on for everyone
+
+**Date:** 2026-10-14 · `Utilities.js` (`ensureUserRole_`, `driveNeedsInviteEmail_`, `noteInviteEmailSent_`), `Config.js`. Cause of rows stuck on Retry Sharing: with `SEND_SHARING_NOTIFICATION = No`, Drive refuses to invite an address that has no Google Account ("you must tick the Notify people box"); the workspaces owned by a personal Gmail account hit this, the earlier Workspace-owned ones did not.
+- Every share is still tried silently first. Only when Drive gives exactly that error is that one share repeated with Drive's invitation email, and a Low "Drive Invite Email Sent" line is written to the Exceptions Log. Google-account grantees still get no Drive email, and `SEND_SHARING_NOTIFICATION` can stay `No`. Other errors are not retried.
+- Tests: `tests/invite-email.test.js` (219 pass).
+
 ## Version 1.4 — amounts pasted as text are turned into numbers
 
 **Date:** 2026-10-14 · `ApprovalsAndAccess.js` (`normaliseAmountColumn_`, `normaliseAmountApprovedEdit_`, `normaliseAmountApprovedEverywhere_`), `MenuAndChecks.js` (`handleCentralAdminOpen`), `IntakeValidation.js`, `Config.js`. Cause of "the amount is in the formula bar but not visible": 12 Amount Approved cells held the TEXT "₹7,50,000.00" (pasted from another file; Indian lakh grouping is not recognised as a number in some locales, while "₹90,000.00" is), and the column's currency format ends in `;""`, which shows text as blank. The same text had reached the Grant Registry (11 rows) and the Technical Registry (2 rows).
