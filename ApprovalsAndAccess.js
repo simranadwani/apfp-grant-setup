@@ -9,10 +9,44 @@ function handleEdit(e) {
  const name = e.range.getSheet().getName();
  if (name !== APFP.SHEETS.INTAKE) return;
  // Workspace Creator carries both intake and review fields.
+ normaliseAmountApprovedEdit_(e);
  handleTrackerReviewEdit_(e);
  handleGrantStatusEdit_(e);
  handleOrganisationInputEdit_(e);
  guardCompletedIntakeIdentityEdit_(e);
+}
+// Amount Approved must be a NUMBER. A value pasted from another file as "₹7,50,000.00" stays text in some spreadsheet locales
+// (Indian grouping is not recognised), and the column's currency format shows text as blank, so the amount looked empty.
+// Cells that hold text which reads as an amount are rewritten as numbers; text that is not an amount is left as it is.
+function normaliseAmountColumn_(sheetName, headerRow, startRow, endRow) {
+ const sheet = sheet_(sheetName), map = headerMap_(sheet, headerRow), index = map[key_('Amount Approved')];
+ if (index == null) return 0;
+ const last = Math.min(endRow || sheet.getLastRow(), sheet.getLastRow());
+ if (last < startRow) return 0;
+ const values = sheet.getRange(startRow, index + 1, last - startRow + 1, 1).getValues();
+ let changed = 0;
+ values.forEach((row, offset) => {
+   const value = row[0];
+   if (typeof value !== 'string' || !clean_(value)) return;
+   const number = parseAdminTableNumber_(value);
+   if (typeof number !== 'number') return;
+   sheet.getRange(startRow + offset, index + 1, 1, 1).setValues([[number]]);
+   changed++;
+ });
+ if (changed) invalidateRegistryCacheForSheet_(sheetName);
+ return changed;
+}
+function normaliseAmountApprovedEdit_(e) {
+ const range = e.range;
+ if (range.getRow() < APFP.INTAKE.START_ROW) return;
+ const column = intakeColumn_('Amount Approved');
+ if (column < range.getColumn() || column > range.getLastColumn()) return;
+ normaliseAmountColumn_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, Math.max(range.getRow(), APFP.INTAKE.START_ROW), range.getLastRow());
+}
+// Runs when the sheet is opened: repairs amounts already stored as text in the three places that hold them.
+function normaliseAmountApprovedEverywhere_() {
+ return normaliseAmountColumn_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, APFP.INTAKE.START_ROW, APFP.INTAKE.MAX_ROW) +
+   normaliseAmountColumn_(APFP.SHEETS.GRANTS, 1, 2) + normaliseAmountColumn_(APFP.SHEETS.TECHNICAL, 2, 3);
 }
 function handleOrganisationInputEdit_(e) {
   const range = e.range;

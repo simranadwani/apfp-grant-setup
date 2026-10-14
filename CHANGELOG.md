@@ -4,6 +4,13 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Version 1.4 — amounts pasted as text are turned into numbers
+
+**Date:** 2026-10-14 · `ApprovalsAndAccess.js` (`normaliseAmountColumn_`, `normaliseAmountApprovedEdit_`, `normaliseAmountApprovedEverywhere_`), `MenuAndChecks.js` (`handleCentralAdminOpen`), `IntakeValidation.js`, `Config.js`. Cause of "the amount is in the formula bar but not visible": 12 Amount Approved cells held the TEXT "₹7,50,000.00" (pasted from another file; Indian lakh grouping is not recognised as a number in some locales, while "₹90,000.00" is), and the column's currency format ends in `;""`, which shows text as blank. The same text had reached the Grant Registry (11 rows) and the Technical Registry (2 rows).
+- Opening the sheet now rewrites text amounts as numbers in `1. Workspace Creator`, `8. Grant Registry` and `System - Technical Registry` (text that is not an amount is left alone). An edit or paste in the Amount Approved column is repaired straight away.
+- `validateIntakeRequest_` now always carries a readable amount on as a number, also for a grant that already exists (before, a retry copied the pasted text into the registries).
+- Optional, by hand: remove the trailing `;""` from the column's number format so text can never look blank. Tests: `tests/amount-text.test.js` (214 pass).
+
 ## Version 1.3 — no organisation-maturity rows for Discretionary grants
 
 **Date:** 2026-10-12 · `RegistryAndIDs.js` (`ensureOrganisationMaturityRowsForGrant_`), `Config.js`. A Discretionary grant has no Setup, so creating it (or correcting its title) no longer adds rows to `7. Organisation Maturity`. Rows created earlier are kept (nothing is deleted); a grant changed from Discretionary to another type gets its rows when the workspace is built. Test: `tests/maturity-by-header.test.js` (209 pass).
