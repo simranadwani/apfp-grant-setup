@@ -268,6 +268,32 @@ function updateGrantTitleReferences_(grantId, projectTitle) {
   });
 }
 
+// Renames one organisation in every place the name is stored: Organisation Registry, all its grants (Grant Registry, Technical Registry,
+// Workspace Creator rows) and the central trackers. Drive names are not touched. Returns warnings for any tracker that could not be updated.
+function renameOrganisationEverywhere_(organisationId, newName) {
+  const id = key_(organisationId), warnings = [], grantIds = [];
+  const organisation = organisationById_(organisationId);
+  if (organisation) setByHeaders_(APFP.SHEETS.ORGANISATIONS, 1, organisation.rowNumber, { 'Organisation Name': newName });
+  grantRegistryRows_().filter(item => key_(item.record['Organisation ID']) === id).forEach(item => {
+    grantIds.push(clean_(item.record['Grant ID']));
+    setByHeaders_(APFP.SHEETS.GRANTS, 1, item.rowNumber, { 'Organisation Name': newName, 'Last Updated At': now_() });
+  });
+  technicalRegistryRows_().filter(item => key_(item.record['Organisation ID']) === id).forEach(item =>
+    setByHeaders_(APFP.SHEETS.TECHNICAL, 2, item.rowNumber, { 'Organisation Name': newName }));
+  findRows_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, 'Organisation ID', organisationId).forEach(rowNumber =>
+    setIntake_(rowNumber, { 'Organisation Name': newName, 'Last Updated': now_() }));
+  const rows = APFP.PREFLIGHT_SCHEMA.CENTRAL_HEADER_ROWS;
+  [[APFP.SHEETS.OUTCOMES, rows.OUTCOMES], [APFP.SHEETS.SUPPORT, rows.SUPPORT], [APFP.SHEETS.DECISIONS, rows.DECISIONS],
+   [APFP.SHEETS.DISBURSEMENTS, rows.DISBURSEMENTS], [APFP.SHEETS.MATURITY, rows.MATURITY]].forEach(([sheetName, headerRow]) => {
+    try {
+      grantIds.filter(Boolean).forEach(grantId => findRows_(sheetName, headerRow, 'Grant ID', grantId).forEach(rowNumber =>
+        setByHeaders_(sheetName, headerRow, rowNumber, { 'Organisation Name': newName })));
+    } catch (error) {
+      warnings.push(`${sheetName} could not be updated with the new name (${clean_(error.message)}).`);
+    }
+  });
+  return warnings;
+}
 function correctedWorkspaceWorkbookTargets_(techRecord) {
   const targets = [];
   const setupId = clean_(techRecord['Setup Workbook URL'])
@@ -319,6 +345,18 @@ function applyGrantCorrections_(grantId, requestId, rowNumber, changes, options)
   }
   const typeStep = () => changeGrantType_(grantId, requestId, rowNumber, newGrantType, options);
 
+  // The organisation name belongs to the whole organisation: a correction renames it for every one of its grants.
+  let newOrganisationName = '';
+  if (has('organisationName')) {
+    const name = clean_(changes.organisationName), organisationId = clean_(g['Organisation ID']);
+    if (!name) throw new Error('Organisation Name cannot be blank.');
+    if (!organisationId) throw new Error('This grant has no Organisation ID, so the organisation cannot be renamed.');
+    if (name !== clean_(g['Organisation Name'])) {
+      if (organisationRecordsByName_(name).some(x => key_(x.record['Organisation ID']) !== key_(organisationId)))
+        throw new Error(`Another organisation is already called "${name}". Use that organisation's exact name, or choose a different one.`);
+      newOrganisationName = name; applied.push('Organisation Name');
+    }
+  }
   if (has('title')) {
     const title = clean_(changes.title);
     if (!title) throw new Error('Grant Title cannot be blank.');
@@ -381,10 +419,14 @@ function applyGrantCorrections_(grantId, requestId, rowNumber, changes, options)
     ensureOrganisationMaturityRowsForGrant_(grantId);
   }
   if (rowNumber) setIntake_(rowNumber, Object.assign({}, rowPatch, { 'Last Updated': now_() }));
+  const warnings = [];
+  if (newOrganisationName) {
+    warnings.push.apply(warnings, renameOrganisationEverywhere_(clean_(g['Organisation ID']), newOrganisationName));
+    warnings.push('The organisation folder, the workbook file names and the organisation cell inside the Setup workbook keep the old name.');
+  }
 
   // Workbook title cells are written LAST and only when they differ: they are protected (owner only), and a correction that
   // does not change the title must not touch the grantee workbooks. A protected cell becomes a warning, never a half-finished correction.
-  const warnings = [];
   workbookTargets.forEach(target => {
     try {
       if (clean_(target.range.getDisplayValue()) !== projectTitle) target.range.setValue(projectTitle);

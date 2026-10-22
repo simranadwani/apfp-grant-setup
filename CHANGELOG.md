@@ -4,6 +4,13 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Version 1.8 — Correct Workspace Details can correct the organisation name
+
+**Date:** 2026-10-22 · `RegistryAndIDs.js` (`applyGrantCorrections_`, `renameOrganisationEverywhere_`), `CorrectWorkspace.js`, `CorrectDetailsDialog.html`, `Config.js`. New field **Organisation Name** in the dialog (switch on Change, type the right name). The name belongs to the organisation, so it is renamed for **every grant of that organisation**: Organisation Registry, Grant Registry, Technical Registry, the Workspace Creator rows and the Outcome Progress, Support, Decision, Committed & Spent and Organisation Maturity trackers. A tracker that cannot be updated is named in the result and the rest still changes.
+- Refused before anything is written: a blank name, or a name that already belongs to **another** organisation (use that one's exact name instead). A change of capitals in its own name is allowed.
+- Not changed (the dialog says so): Drive folder and workbook file names, and the organisation cell inside the Setup workbook. IDs never change.
+- Tests: `tests/organisation-rename.test.js` (232 pass).
+
 ## Version 1.7 — no row ceiling in Workspace Creator
 
 **Date:** 2026-10-22 · `Config.js`, `IntakeValidation.js`, `RegistryAndIDs.js`, `ApprovalsAndAccess.js`. The Workspace Creator was read only down to row 501 (`INTAKE.MAX_ROW`), so grants entered below that row were silently ignored by Create Workspace, the duplicate check, the organisation dropdown and the amount repair. The constant is removed: every row of the sheet is read (the dropdown covers the sheet's real row count). When the table fills up, insert rows at the bottom as usual; nothing in the code needs changing. Test: `tests/backfill-organisation.test.js` (227 pass).

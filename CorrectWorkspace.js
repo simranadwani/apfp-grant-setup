@@ -2,7 +2,7 @@
 // Only the owner of a grant's workbook may correct that grant; the dialog shows other grants locked and the
 // server refuses them again on save.
 
-const CORRECT_DIALOG_FIELDS_ = ['grantType', 'title', 'startDate', 'endDate', 'amount', 'thematicArea', 'subArea', 'proximity', 'organisationType'];
+const CORRECT_DIALOG_FIELDS_ = ['grantType', 'organisationName', 'title', 'startDate', 'endDate', 'amount', 'thematicArea', 'subArea', 'proximity', 'organisationType'];
 
 function isoDate_(value) {
   const d = dateValue_(value);
@@ -84,6 +84,7 @@ function correctWorkspaceCard_(marked) {
     card.email = clean_(t['Primary Contact Email']);
     card.values = {
       grantType: clean_(g['Grant Type']),
+      organisationName: clean_(g['Organisation Name']),
       title: clean_(g['Project Title']),
       startDate: isoDate_(t['Grant Start Date'] || g['Grant Start Date']),
       endDate: isoDate_(t['Grant End Date'] || g['Grant End Date']),
@@ -136,7 +137,7 @@ function submitCorrectWorkspaceGrant(payload) {
       message: result.applied.length ? `Updated: ${result.applied.join(', ')}.` : 'Nothing needed changing.',
       warning: result.warning,
       values: {
-        grantType: clean_(g['Grant Type']), title: clean_(g['Project Title']), startDate: isoDate_(t['Grant Start Date'] || g['Grant Start Date']),
+        grantType: clean_(g['Grant Type']), organisationName: clean_(g['Organisation Name']), title: clean_(g['Project Title']), startDate: isoDate_(t['Grant Start Date'] || g['Grant Start Date']),
         endDate: isoDate_(t['Grant End Date'] || g['Grant End Date']), amount: g['Amount Approved'] === '' ? '' : Number(g['Amount Approved']),
         thematicArea: clean_(g['Thematic Area']), subArea: clean_(g['Thematic Sub-area']),
         proximity: clean_(g['Proximity to Children / Beneficiary']), organisationType: clean_(t['Organisation Type'])
