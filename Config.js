@@ -2,7 +2,7 @@
 const APFP = Object.freeze({
  FONT_FAMILY: 'Arial',
  // Shown in the preflight result and at the end of each workspace run so anyone can see which code is deployed. Bump with every round.
- CODE_VERSION: 'Version 1.6',
+ CODE_VERSION: 'Version 1.7',
  // Fallback when System - Configuration has no TIME_ZONE row.
  TIME_ZONE: 'Asia/Kolkata',
  HIDDEN_SYSTEM_SHEETS: [
@@ -185,7 +185,7 @@ const APFP = Object.freeze({
    ]
  },
  INTAKE: {
-   HEADER_ROW: 2, START_ROW: 3, MAX_ROW: 501,
+   HEADER_ROW: 2, START_ROW: 3, // no upper limit: every row of the sheet is read
    HEADERS: [
      'Financial Year', 'Grant Start Date', 'Grant End Date', 'Organisation Type',
      'Organisation Name', 'Thematic Area', 'Thematic Sub-area', 'Proximity to Children / Beneficiary',

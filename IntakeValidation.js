@@ -12,7 +12,7 @@ function grantQuarterFromDate_(value) {
 }
 function intakeRowsWithActions_() {
  const sheet = sheet_(APFP.SHEETS.INTAKE),
-   lastRow = Math.min(APFP.INTAKE.MAX_ROW, Math.max(APFP.INTAKE.HEADER_ROW, sheet.getLastRow()));
+   lastRow = Math.max(APFP.INTAKE.HEADER_ROW, sheet.getLastRow());
  if (lastRow < APFP.INTAKE.START_ROW) return [];
  const width = sheet.getLastColumn(),
    headers = sheet.getRange(APFP.INTAKE.HEADER_ROW, 1, 1, width).getDisplayValues()[0],
@@ -37,7 +37,7 @@ function intakeRowsWithActions_() {
 // Rows whose Action equals `action` (used for Correct Workspace, which the Create Workspace / Retry buttons never run).
 function intakeRowsMarked_(action) {
  const sheet = sheet_(APFP.SHEETS.INTAKE),
-   lastRow = Math.min(APFP.INTAKE.MAX_ROW, Math.max(APFP.INTAKE.HEADER_ROW, sheet.getLastRow()));
+   lastRow = Math.max(APFP.INTAKE.HEADER_ROW, sheet.getLastRow());
  if (lastRow < APFP.INTAKE.START_ROW) return [];
  const width = sheet.getLastColumn(),
    headers = sheet.getRange(APFP.INTAKE.HEADER_ROW, 1, 1, width).getDisplayValues()[0],
@@ -76,7 +76,7 @@ function ensureRequestIdForRow_(row) {
  return requestId;
 }
 function intakeDuplicateState_() {
- const sheet = sheet_(APFP.SHEETS.INTAKE), last = Math.min(APFP.INTAKE.MAX_ROW, sheet.getLastRow()), counts = {};
+ const sheet = sheet_(APFP.SHEETS.INTAKE), last = sheet.getLastRow(), counts = {};
  if (last < APFP.INTAKE.START_ROW) return { last, counts };
  const fyIndex = intakeColumn_('Financial Year') - 1, orgIndex = intakeColumn_('Organisation Name') - 1,
    values = sheet.getRange(APFP.INTAKE.START_ROW, 1, last - APFP.INTAKE.START_ROW + 1, Math.max(fyIndex, orgIndex) + 1).getDisplayValues();
@@ -87,7 +87,7 @@ function intakeDuplicateState_() {
  return { last, counts };
 }
 function refreshDuplicateFlagsForRows_(rowNumbers) {
- const uniqueRows = [...new Set((rowNumbers || []).filter(r => r >= APFP.INTAKE.START_ROW && r <= APFP.INTAKE.MAX_ROW))];
+ const uniqueRows = [...new Set((rowNumbers || []).filter(r => r >= APFP.INTAKE.START_ROW))];
  if (!uniqueRows.length) return;
  const sheet = sheet_(APFP.SHEETS.INTAKE), state = intakeDuplicateState_(),
    fyColumn = intakeColumn_('Financial Year'), orgColumn = intakeColumn_('Organisation Name');

@@ -62,3 +62,14 @@ test('an unknown name still creates a new organisation', () => {
   assert.equal(record['Organisation ID'], 'NEW_ID');
   assert.equal(s.appended.length, 1);
 });
+
+test('rows beyond 501 are read: there is no fixed row ceiling in Workspace Creator', () => {
+  const { p } = setup([]);
+  assert.equal(p.get('APFP').INTAKE.MAX_ROW, undefined);
+  const rows = Array.from({ length: 650 }, (_, i) => (i === 649 ? ['Create Workspace'] : ['']));
+  const sheet = { getLastRow: () => 652, getLastColumn: () => 1, getRange: (r, c, n) => ({
+    getDisplayValues: () => [['Action']], getValues: () => rows.slice(0, n) }) };
+  p.override('sheet_', () => sheet);
+  assert.equal(p.get('intakeRowsWithActions_')().length, 1);
+  assert.equal(p.get('intakeRowsWithActions_')()[0].rowNumber, 652);
+});
