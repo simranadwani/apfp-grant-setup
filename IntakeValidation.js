@@ -200,10 +200,10 @@ function validateIntakeRequest_(row) {
      errors.push('Returning Organisation must exactly match one active Organisation Name with an Organisation ID in 9. Organisation Registry.');
  }
  if (row.organisationName && row.organisationType === 'New Organisation') {
-   const exact = organisationRecordsByName_(row.organisationName),
-     owns = exact.some(x => ownOrgId && key_(x.record['Organisation ID']) === key_(ownOrgId));
-   if (exact.length && !owns)
-     errors.push('This organisation already exists. Choose Returning Organisation and enter the exact Organisation Name shown in 9. Organisation Registry.');
+   // An organisation is New in one financial year only; entry order does not matter (a later year may already exist as Returning).
+   const newInYear = organisationRecordsByName_(row.organisationName)
+     .map(x => otherNewGrantFy_(x.record['Organisation ID'], row.requestId)).find(Boolean);
+   if (newInYear) errors.push(newOrganisationConflictMessage_(newInYear));
  }
  if (row.organisationName && row.financialYear &&
      findDuplicateGrant_(row.requestId, ownGrantId, row.organisationName, row.financialYear, resolvedOrgId))

@@ -4,6 +4,13 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Version 1.6 — back-filling earlier years: an organisation is New in one year only, in any entry order
+
+**Date:** 2026-10-22 · `IntakeValidation.js` (`validateIntakeRequest_`), `RegistryAndIDs.js` (`resolveOrganisation_`, `otherNewGrantFy_`, `newOrganisationConflictMessage_`), `Config.js`. Cause: after all 2026-27 grants were created, back-filled 2024-25 rows typed as New Organisation failed with "This organisation already exists. Choose Returning Organisation…", because the rule only asked whether the name was in the registry. The organisation was there only because its later year had been entered first.
+- New Organisation is now refused only when the organisation is already marked New in **another** year; the message names that year ("An organisation can be new in only one year; choose Returning Organisation for this year"). A name that exists only through Returning grants is accepted and the existing organisation is reused (no second Organisation Registry row, ID and name unchanged).
+- Unchanged: the dropdown (Returning picks from the registry, New is free text), Returning rules and prefill, and one grant per organisation per financial year. Later years left as New are corrected with Correct Workspace.
+- Tests: `tests/backfill-organisation.test.js` (226 pass).
+
 ## Version 1.5 — grantees without a Google Account can be shared with, without turning notifications on for everyone
 
 **Date:** 2026-10-14 · `Utilities.js` (`ensureUserRole_`, `driveNeedsInviteEmail_`, `noteInviteEmailSent_`), `Config.js`. Cause of rows stuck on Retry Sharing: with `SEND_SHARING_NOTIFICATION = No`, Drive refuses to invite an address that has no Google Account ("you must tick the Notify people box"); the workspaces owned by a personal Gmail account hit this, the earlier Workspace-owned ones did not.
