@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Version 1.7 — no row ceiling in Workspace Creator
+
+**Date:** 2026-10-22 · `Config.js`, `IntakeValidation.js`, `RegistryAndIDs.js`, `ApprovalsAndAccess.js`. The Workspace Creator was read only down to row 501 (`INTAKE.MAX_ROW`), so grants entered below that row were silently ignored by Create Workspace, the duplicate check, the organisation dropdown and the amount repair. The constant is removed: every row of the sheet is read (the dropdown covers the sheet's real row count). When the table fills up, insert rows at the bottom as usual; nothing in the code needs changing. Test: `tests/backfill-organisation.test.js` (227 pass).
+
 ## Version 1.6 — back-filling earlier years: an organisation is New in one year only, in any entry order
 
 **Date:** 2026-10-22 · `IntakeValidation.js` (`validateIntakeRequest_`), `RegistryAndIDs.js` (`resolveOrganisation_`, `otherNewGrantFy_`, `newOrganisationConflictMessage_`), `Config.js`. Cause: after all 2026-27 grants were created, back-filled 2024-25 rows typed as New Organisation failed with "This organisation already exists. Choose Returning Organisation…", because the rule only asked whether the name was in the registry. The organisation was there only because its later year had been entered first.

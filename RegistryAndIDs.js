@@ -155,7 +155,7 @@ function organisationNameOptions_() {
 // and would show a red "Input must fall within specified range" flag.
 function applyWorkspaceOrganisationDropdown_() {
   const intake = sheet_(APFP.SHEETS.INTAKE), organisations = sheet_(APFP.SHEETS.ORGANISATIONS),
-    first = APFP.INTAKE.START_ROW, count = APFP.INTAKE.MAX_ROW - APFP.INTAKE.START_ROW + 1,
+    first = APFP.INTAKE.START_ROW, count = Math.max(1, intake.getMaxRows() - APFP.INTAKE.START_ROW + 1),
     nameColumn = intakeColumn_('Organisation Name'),
     source = organisations.getRange(2, 2, Math.max(1, organisations.getMaxRows() - 1), 1),
     types = intake.getRange(first, intakeColumn_('Organisation Type'), count, 1).getDisplayValues().map(row => key_(row[0])),
@@ -174,7 +174,7 @@ function returningOrganisationValidation_(options) {
    .build();
 }
 function applyOrganisationValidationForRow_(rowNumber) {
-  if (rowNumber < APFP.INTAKE.START_ROW || rowNumber > APFP.INTAKE.MAX_ROW) return;
+  if (rowNumber < APFP.INTAKE.START_ROW) return;
   const intake = sheet_(APFP.SHEETS.INTAKE);
   const type = clean_(intake.getRange(rowNumber, intakeColumn_('Organisation Type')).getDisplayValue());
   const cell = intake.getRange(rowNumber, intakeColumn_('Organisation Name'));
@@ -204,7 +204,7 @@ function latestGrantForOrganisation_(organisationId, organisationName) {
   }) || rows[0] || null;
 }
 function prefillReturningGrantClassificationForRow_(rowNumber) {
-  if (rowNumber < APFP.INTAKE.START_ROW || rowNumber > APFP.INTAKE.MAX_ROW) return false;
+  if (rowNumber < APFP.INTAKE.START_ROW) return false;
   const intake = sheet_(APFP.SHEETS.INTAKE);
   const type = clean_(
     intake.getRange(rowNumber, intakeColumn_('Organisation Type')).getDisplayValue()

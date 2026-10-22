@@ -12,7 +12,7 @@ test('New Organisation rows are cleared; Returning and untyped rows get the regi
   });
   const A = plain(p.get('APFP'));
   p.override('intakeColumn_', name => (name === 'Organisation Type' ? 4 : 5));
-  const intake = { getRange: (row, col, n) => ({
+  const intake = { getMaxRows: () => 700, getRange: (row, col, n) => ({
     getDisplayValues: () => Array.from({ length: n }, (_, i) => [types[row + i] || '']),
     setDataValidation: rule => applied.push([row, col, n, rule]),
     clearDataValidations: () => cleared.push([row, col, n])
@@ -23,5 +23,5 @@ test('New Organisation rows are cleared; Returning and untyped rows get the regi
   assert.deepEqual(rows(cleared).filter(r => r <= 7), [3, 4, 7]);
   assert.deepEqual(rows(applied).filter(r => r <= 7), [5, 6]);
   assert.equal(applied.every(item => item[3] === 'RULE'), true);
-  assert.equal(rows(applied).length + rows(cleared).length, A.INTAKE.MAX_ROW - A.INTAKE.START_ROW + 1, 'every row is covered exactly once');
+  assert.equal(rows(applied).length + rows(cleared).length, 700 - A.INTAKE.START_ROW + 1, 'every row of the sheet (not a fixed 501) is covered exactly once');
 });

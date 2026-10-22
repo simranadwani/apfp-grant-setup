@@ -45,7 +45,7 @@ function normaliseAmountApprovedEdit_(e) {
 }
 // Runs when the sheet is opened: repairs amounts already stored as text in the three places that hold them.
 function normaliseAmountApprovedEverywhere_() {
- return normaliseAmountColumn_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, APFP.INTAKE.START_ROW, APFP.INTAKE.MAX_ROW) +
+ return normaliseAmountColumn_(APFP.SHEETS.INTAKE, APFP.INTAKE.HEADER_ROW, APFP.INTAKE.START_ROW) +
    normaliseAmountColumn_(APFP.SHEETS.GRANTS, 1, 2) + normaliseAmountColumn_(APFP.SHEETS.TECHNICAL, 2, 3);
 }
 function handleOrganisationInputEdit_(e) {
@@ -135,7 +135,7 @@ function applyReviewStatusEditForRow_(sheet, rowNumber, col, oldValue) {
 // Rows of 1. Workspace Creator whose Setup Review Status cell currently shows one of `statuses`.
 function intakeRowsByReviewStatus_(statuses) {
  const wanted = statuses.map(key_), sheet = sheet_(APFP.SHEETS.INTAKE),
-   lastRow = Math.min(APFP.INTAKE.MAX_ROW, Math.max(APFP.INTAKE.HEADER_ROW, sheet.getLastRow()));
+   lastRow = Math.max(APFP.INTAKE.HEADER_ROW, sheet.getLastRow());
  if (lastRow < APFP.INTAKE.START_ROW) return [];
  const width = sheet.getLastColumn(),
    headers = sheet.getRange(APFP.INTAKE.HEADER_ROW, 1, 1, width).getDisplayValues()[0],
