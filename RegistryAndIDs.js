@@ -55,6 +55,17 @@ function organisationRecordsByName_(organisationName) {
  if (!wanted) return [];
  return organisationRegistryRows_().filter(x => key_(x.record['Organisation Name']) === wanted);
 }
+// The financial year in which this organisation is already marked New Organisation by ANOTHER request ('' when none).
+function otherNewGrantFy_(organisationId, requestId) {
+ const id = key_(organisationId), own = key_(requestId);
+ if (!id) return '';
+ const found = technicalRegistryRows_().find(x => key_(x.record['Organisation ID']) === id &&
+   key_(x.record['Request ID']) !== own && key_(x.record['Organisation Type']) === 'new organisation');
+ return found ? (clean_(found.record['Financial Year']) || 'another year') : '';
+}
+function newOrganisationConflictMessage_(fy) {
+ return `This organisation is already marked as a New Organisation in ${fy}. An organisation can be new in only one year; choose Returning Organisation for this year.`;
+}
 function uniqueOrganisationId_(organisationName, firstFy) {
   const existing = new Set(
     organisationRegistryRows_().map(item => key_(item.record['Organisation ID'])).filter(Boolean)
@@ -106,8 +117,16 @@ function resolveOrganisation_(request, existingTechRecord) {
     setByHeaders_(APFP.SHEETS.ORGANISATIONS, 1, row.rowNumber, patch);
     return Object.assign({}, row.record, patch);
   }
-  if (matches.length)
-    throw new Error('This organisation already exists. Choose Returning Organisation and use the exact Organisation Registry name.');
+  if (matches.length > 1)
+    throw new Error(`New Organisation matches ${matches.length} Organisation Registry rows. Resolve the duplicate first.`);
+  if (matches.length) {
+    // The organisation was first created by a later year (a back-fill): reuse it, as long as it is not already New in another year.
+    const newInYear = otherNewGrantFy_(matches[0].record['Organisation ID'], request.requestId);
+    if (newInYear) throw new Error(newOrganisationConflictMessage_(newInYear));
+    const row = matches[0], patch = { 'Record Status': APFP.ACTIVE };
+    setByHeaders_(APFP.SHEETS.ORGANISATIONS, 1, row.rowNumber, patch);
+    return Object.assign({}, row.record, patch);
+  }
   const patch = {
     'Organisation ID': uniqueOrganisationId_(request.organisationName, request.financialYear),
     'Organisation Name': request.organisationName,
