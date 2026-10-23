@@ -321,6 +321,14 @@ function correctedWorkspaceWorkbookTargets_(techRecord) {
   return targets;
 }
 
+// A grant can be corrected once its workspace (or registry entry) exists. A record left on "Needs Attention" by an old failure
+// (for example an approval that failed) still counts when its workspace folder is there, so it is not stuck behind "create the workspace first".
+function grantWorkspaceExists_(techRecord) {
+  const status = key_(techRecord['Workspace Status']);
+  if (['workspace created', 'registry only'].includes(status)) return true;
+  return status === 'needs attention' && !!clean_(techRecord['Grant ID']) &&
+    !!clean_(techRecord['Organisation Folder URL'] || techRecord['Grant Workspace URL']);
+}
 // Applies ONLY the fields in `changes` (title, startDate, endDate, amount, thematicArea, subArea, proximity,
 // organisationType) to one created grant: Grant Registry, Technical Registry, central references and the Workspace Creator row.
 // Values already equal to the stored ones write nothing. Returns { grantId, projectTitle, applied: [labels], warning }.
@@ -329,7 +337,7 @@ function applyGrantCorrections_(grantId, requestId, rowNumber, changes, options)
   const grant = grantById_(grantId), tech = techByRequest_(requestId);
   if (!grant || !tech || key_(tech.record['Grant ID']) !== key_(grantId))
     throw new Error('The selected row is not linked to one unambiguous created grant.');
-  if (!['workspace created', 'registry only'].includes(key_(tech.record['Workspace Status'])))
+  if (!grantWorkspaceExists_(tech.record))
     throw new Error('A grant can be corrected only after its workspace or registry entry was created.');
   const has = name => Object.prototype.hasOwnProperty.call(changes || {}, name);
   const g = grant.record, t = tech.record;

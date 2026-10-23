@@ -294,8 +294,7 @@ function completedWorkspaceIntakeContext_(sheet, map, rowNumber) {
   );
   if (!requestId) return null;
   const tech = techByRequest_(requestId);
-  if (!tech ||
-      !['workspace created', 'registry only'].includes(key_(tech.record['Workspace Status'])))
+  if (!tech || !grantWorkspaceExists_(tech.record))
     return null;
   const grantId = clean_(tech.record['Grant ID']);
   const grant = grantId ? grantById_(grantId) : null;

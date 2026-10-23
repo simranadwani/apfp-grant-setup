@@ -144,3 +144,20 @@ test('typing in a correctable cell on a completed row is put back from the regis
     assert.equal(restored[0]['Organisation Type'], 'New Organisation');
   });
 });
+
+test('a grant left on Needs Attention by an old failure is correctable when its workspace folder exists', () => {
+  const p = loadProject(), exists = rec => p.get('grantWorkspaceExists_')(rec);
+  assert.equal(exists({ 'Workspace Status': 'Needs Attention', 'Grant ID': 'G1', 'Organisation Folder URL': 'https://drive/x' }), true);
+  assert.equal(exists({ 'Workspace Status': 'Needs Attention', 'Grant ID': 'G1', 'Grant Workspace URL': 'https://drive/x' }), true);
+  assert.equal(exists({ 'Workspace Status': 'Needs Attention', 'Grant ID': 'G1' }), false);            // nothing was created
+  assert.equal(exists({ 'Workspace Status': 'Needs Attention', 'Organisation Folder URL': 'https://drive/x' }), false);
+  assert.equal(exists({ 'Workspace Status': 'In Progress', 'Grant ID': 'G1', 'Organisation Folder URL': 'https://drive/x' }), false);
+  assert.equal(exists({ 'Workspace Status': 'Workspace Created' }), true);
+  assert.equal(exists({ 'Workspace Status': 'Registry Only' }), true);
+});
+
+test('Correct Workspace applies to a Needs Attention grant that has a workspace', () => {
+  const { apply, calls } = setup({ tech: { 'Workspace Status': 'Needs Attention', 'Organisation Folder URL': 'https://drive/x' } });
+  assert.deepEqual(plain(apply({ amount: 500 }).applied), ['Amount Approved']);
+  assert.equal(calls.grant[0]['Amount Approved'], 500);
+});
