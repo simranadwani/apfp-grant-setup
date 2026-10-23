@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Release label reset to Version 1.0
+
+**Date:** 2026-10-23 · `Config.js`. The label shown in preflight (`Code version: …`) and at the end of each run is now **Version 1.0**. The code is unchanged: it contains everything listed below, up to the entry formerly labelled Version 1.9. The entries below keep their old numbers as history.
+
 ## Version 1.9 — a grant left on "Needs Attention" can still be corrected
 
 **Date:** 2026-10-23 · `RegistryAndIDs.js` (`grantWorkspaceExists_`, `applyGrantCorrections_`), `CorrectWorkspace.js`, `ApprovalsAndAccess.js`, `Config.js`. Correct Workspace Details answered "The workspace has not been created yet. Use Create Workspace first." for a grant whose workspace existed: its Technical Registry Workspace Status had been left on Needs Attention by an old failed approval (September) and nothing cleared it. A grant now counts as created when its status is Workspace Created / Registry Only, or Needs Attention with a Grant ID and a workspace folder. A record with no folder is still refused. Tests: `tests/correct-details.test.js` (234 pass).
