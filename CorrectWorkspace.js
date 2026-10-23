@@ -72,7 +72,7 @@ function correctWorkspaceCard_(marked) {
   try {
     const grant = grantId ? grantById_(grantId) : null, tech = requestId ? techByRequest_(requestId) : null;
     if (!grant || !tech || key_(tech.record['Grant ID']) !== key_(grantId)) { card.lockReason = 'This row is not linked to one created grant yet.'; return card; }
-    if (!['workspace created', 'registry only'].includes(key_(tech.record['Workspace Status']))) {
+    if (!grantWorkspaceExists_(tech.record)) {
       card.lockReason = 'The workspace has not been created yet. Use Create Workspace first.'; return card;
     }
     const access = grantCorrectionAccess_(tech.record);

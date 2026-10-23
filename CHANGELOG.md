@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Version 1.9 — a grant left on "Needs Attention" can still be corrected
+
+**Date:** 2026-10-23 · `RegistryAndIDs.js` (`grantWorkspaceExists_`, `applyGrantCorrections_`), `CorrectWorkspace.js`, `ApprovalsAndAccess.js`, `Config.js`. Correct Workspace Details answered "The workspace has not been created yet. Use Create Workspace first." for a grant whose workspace existed: its Technical Registry Workspace Status had been left on Needs Attention by an old failed approval (September) and nothing cleared it. A grant now counts as created when its status is Workspace Created / Registry Only, or Needs Attention with a Grant ID and a workspace folder. A record with no folder is still refused. Tests: `tests/correct-details.test.js` (234 pass).
+
 ## Version 1.8 — Correct Workspace Details can correct the organisation name
 
 **Date:** 2026-10-22 · `RegistryAndIDs.js` (`applyGrantCorrections_`, `renameOrganisationEverywhere_`), `CorrectWorkspace.js`, `CorrectDetailsDialog.html`, `Config.js`. New field **Organisation Name** in the dialog (switch on Change, type the right name). The name belongs to the organisation, so it is renamed for **every grant of that organisation**: Organisation Registry, Grant Registry, Technical Registry, the Workspace Creator rows and the Outcome Progress, Support, Decision, Committed & Spent and Organisation Maturity trackers. A tracker that cannot be updated is named in the result and the rest still changes.
