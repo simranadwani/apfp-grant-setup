@@ -4,6 +4,10 @@ Every change to this project is recorded here: **what** changed, **which files**
 Newest first. Apps Script (`clasp push`) only receives the `.js`, `.html` and `appsscript.json` files;
 everything else listed under "Repo only" stays in git (see `.claspignore`).
 
+## Transactional grants no longer get Organisation Maturity rows
+
+**Date:** 2026-10-27 · `RegistryAndIDs.js` (`ensureOrganisationMaturityRowsForGrant_`). Create Workspace added a full set of indicator rows to `7. Organisation Maturity` for Transactional grants, as for Restricted and Unrestricted. Transactional grants now behave like Discretionary: no rows are created. Rows already on the sheet are kept. Test: `tests/maturity-by-header.test.js`.
+
 ## Release label reset to Version 1.0
 
 **Date:** 2026-10-23 · `Config.js`. The label shown in preflight (`Code version: …`) and at the end of each run is now **Version 1.0**. The code is unchanged: it contains everything listed below, up to the entry formerly labelled Version 1.9. The entries below keep their old numbers as history.

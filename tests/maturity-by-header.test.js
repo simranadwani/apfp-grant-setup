@@ -38,3 +38,10 @@ test('a Discretionary grant gets no maturity rows (nothing is read or written)',
   p.override('sheet_', () => { throw new Error('the maturity sheet must not be touched'); });
   assert.doesNotThrow(() => p.get('ensureOrganisationMaturityRowsForGrant_')('G1'));
 });
+
+test('a Transactional grant gets no maturity rows (nothing is read or written)', () => {
+  const p = loadProject();
+  p.override('grantById_', () => ({ rowNumber: 3, record: { 'Grant ID': 'G1', 'Grant Type': 'Transactional' } }));
+  p.override('sheet_', () => { throw new Error('the maturity sheet must not be touched'); });
+  assert.doesNotThrow(() => p.get('ensureOrganisationMaturityRowsForGrant_')('G1'));
+});

@@ -517,8 +517,8 @@ function maturityIndicatorOptions_() {
 function ensureOrganisationMaturityRowsForGrant_(grantId) {
  const grant = grantById_(grantId);
  if (!grant) throw new Error(`Cannot create maturity rows because Grant ID was not found: ${grantId}`);
- // Discretionary grants have no Setup and no organisation-maturity assessment: no rows are created (rows made earlier are kept).
- if (isDiscretionaryGrantType_(grant.record['Grant Type'])) return;
+ // Transactional and Discretionary grants have no organisation-maturity assessment: no rows are created (rows made earlier are kept).
+ if (isTransactionalGrantType_(grant.record['Grant Type']) || isDiscretionaryGrantType_(grant.record['Grant Type'])) return;
  const sheet = sheet_(APFP.SHEETS.MATURITY), headerRow = APFP.MATURITY.HEADER_ROW,
    required = APFP.MATURITY.HEADERS, width = sheet.getLastColumn(),
    headers = sheet.getRange(headerRow, 1, 1, width).getDisplayValues()[0].map(clean_),
